@@ -83,7 +83,7 @@ src/workers/           重计算(二期日志解析预留)
 ## 7. 固件更新链路
 
 - **manifest**:`flight_controller/scripts/release.sh` 生成 `manifest.json` 随 GitHub Release 发布。字段:`boardName, boardId, mcuFamily, vehicle, version, gitHash, files[{kind(apj|with_bl_hex), url, sha256, size}], method, softwareDfuAllowed, dfuRecoveryAllowed`。
-- **获取**:浏览器直接 fetch GitHub Releases(实现时先验证 CORS 重定向链路;若不可行,回退方案为 manifest 镜像到本站点 public/,固件文件仍指向 Releases)。
+- **获取**:manifest.json 与固件二进制文件均镜像到本站点 `public/firmware/`,由 GitHub Pages 同源提供(2026-07-02 spike 已证实:`release-assets.githubusercontent.com` 对所有 release asset——含 `.apj`/`.hex`/`manifest.json`——均不带 `Access-Control-Allow-Origin`,浏览器 `fetch()` 直连不可行;WebUSB/PX4 serial 刷写又需要固件字节进内存 `ArrayBuffer`,原"固件文件仍指向 Releases"的 fallback 表述不成立。详见 `docs/notes/releases-cors-spike.md` 与 `docs/notes/decisions-m1.md` 决策 4/5)。同步机制:`scripts/sync-firmware.sh`(Task 1.2 相邻工作)用 gh CLI 从 `flight_controller` Releases 拉取资产写入 `public/firmware/`。
 - **防刷错板硬门**:bootloader identify 返回的 board_id 必须等于 `.apj` 内 board_id 才允许擦除;`AUTOPILOT_VERSION` 仅作展示(novaX 自有固件 AF-F4_T10 已证明不能依赖该消息)。sha256 校验在下载后、擦除前完成。
 - **正常更新**:MAVLink reboot-to-bootloader → PX4 serial bootloader 协议(GET_DEVICE 必须先查 INFO_BL_REV 再擦除——parts-catalog 真机验证的坑)→ 烧写 → CRC → 重启。
 - **DFU 救砖**:WebUSB 连 STM32 ROM DFU(0483:DF11),刷 `_with_bl.hex` 全镜像;Windows 提示 Zadig/WinUSB。
@@ -112,7 +112,7 @@ src/workers/           重计算(二期日志解析预留)
 ## 11. 风险清单
 
 1. H7/F7 软件进 DFU 变砖(硅级)——保持禁用,逐板真机验证后开放
-2. GitHub Releases 浏览器 CORS 未验证——M1 第一周验证,有回退方案(§7)
+2. ~~GitHub Releases 浏览器 CORS 未验证~~——**已于 2026-07-02 spike 验证并 RESOLVED**:asset 字节直连不可行,策略锁定为镜像到 `public/firmware/`(见 §7、`docs/notes/releases-cors-spike.md`、`docs/notes/decisions-m1.md` 决策 4/5)
 3. MAVLink FTP 复杂度高——已整体移出首期
 4. AP-RTK dual 走 CAN,浏览器无原生 CAN——不承诺其 web 更新
 5. 数据源漂移(catalog/README/hwdef 规格不一致)——固件事实源统一为 flight_controller manifest;产品规格漂移另行修正,不阻塞本项目
