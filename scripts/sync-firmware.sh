@@ -6,10 +6,12 @@
 # cannot fetch() GitHub Releases assets directly (no CORS headers, see
 # docs/notes/releases-cors-spike.md), so the configurator serves its own
 # same-origin mirror. This script is how that mirror gets populated: it
-# downloads manifest.json for a given tag plus every file it lists, verifies
-# each file's sha256 against the manifest, and fails loudly on any mismatch
-# rather than publishing a mirror that doesn't match what the manifest
-# promises.
+# downloads manifest.json for a given tag plus every file it lists into a
+# staging directory, verifies each file's sha256 against the manifest there,
+# and only on full success replaces public/firmware/'s contents. A bad tag,
+# network failure, or sha256 mismatch leaves the existing mirror untouched
+# and exits nonzero, rather than either publishing a mismatched mirror or
+# destroying a working one.
 #
 # Requires: gh CLI, authenticated (`gh auth login`) with read access to the
 # public novaX-ALUX/flight_controller repo (works today — the repo is public).
@@ -30,17 +32,17 @@ command -v gh >/dev/null 2>&1 || { echo "error: gh CLI not found (https://cli.gi
 command -v node >/dev/null 2>&1 || { echo "error: node not found" >&2; exit 1; }
 command -v sha256sum >/dev/null 2>&1 || { echo "error: sha256sum not found" >&2; exit 1; }
 
-echo "==> Cleaning ${DEST_DIR} (keeping .gitkeep)"
-mkdir -p "${DEST_DIR}"
-find "${DEST_DIR}" -mindepth 1 ! -name '.gitkeep' -exec rm -rf {} +
+# Insurance against a future DEST_DIR derivation edit accidentally pointing
+# the destructive replace step below at the wrong directory.
+[[ "${DEST_DIR}" == */public/firmware ]] || { echo "error: refusing to touch DEST_DIR=${DEST_DIR} (must end in public/firmware)" >&2; exit 1; }
 
-WORKDIR="$(mktemp -d)"
-trap 'rm -rf "${WORKDIR}"' EXIT
+STAGING="$(mktemp -d "${REPO_ROOT}/.sync-firmware-staging.XXXXXX")"
+trap 'rm -rf "${STAGING}"' EXIT
 
-echo "==> Fetching manifest.json for ${TAG} from ${UPSTREAM_REPO}"
-gh release download "${TAG}" -R "${UPSTREAM_REPO}" -p 'manifest.json' -D "${WORKDIR}"
+echo "==> Fetching manifest.json for ${TAG} from ${UPSTREAM_REPO} (staging: ${STAGING})"
+gh release download "${TAG}" -R "${UPSTREAM_REPO}" -p 'manifest.json' -D "${STAGING}"
 
-MANIFEST="${WORKDIR}/manifest.json"
+MANIFEST="${STAGING}/manifest.json"
 [[ -s "${MANIFEST}" ]] || { echo "error: manifest.json missing or empty after download" >&2; exit 1; }
 
 # One "name<TAB>sha256<TAB>size" row per file across all boards. Uses node
@@ -67,17 +69,15 @@ while IFS=$'\t' read -r name _sha256 _size; do
   ASSET_PATTERNS+=("-p" "${name}")
 done <<< "${FILE_ROWS}"
 
-echo "==> Downloading $(( ${#ASSET_PATTERNS[@]} / 2 )) firmware asset(s) into ${DEST_DIR}"
-gh release download "${TAG}" -R "${UPSTREAM_REPO}" -D "${DEST_DIR}" "${ASSET_PATTERNS[@]}"
+echo "==> Downloading $(( ${#ASSET_PATTERNS[@]} / 2 )) firmware asset(s) into staging"
+gh release download "${TAG}" -R "${UPSTREAM_REPO}" -D "${STAGING}" "${ASSET_PATTERNS[@]}"
 
-cp "${MANIFEST}" "${DEST_DIR}/manifest.json"
-
-echo "==> Verifying sha256 against manifest.json"
+echo "==> Verifying sha256 against manifest.json (staging, existing mirror untouched so far)"
 FAILED=0
 COUNT=0
 TOTAL_BYTES=0
 while IFS=$'\t' read -r name sha256 size; do
-  path="${DEST_DIR}/${name}"
+  path="${STAGING}/${name}"
   if [[ ! -f "${path}" ]]; then
     echo "  MISSING: ${name}" >&2
     FAILED=1
@@ -95,8 +95,14 @@ while IFS=$'\t' read -r name sha256 size; do
 done <<< "${FILE_ROWS}"
 
 if [[ "${FAILED}" -ne 0 ]]; then
-  echo "==> FAILED: sha256 verification failed for one or more files; ${DEST_DIR} is left in a partial/untrusted state, do not deploy." >&2
+  echo "==> FAILED: sha256 verification failed for one or more files; ${DEST_DIR} was NOT touched (existing mirror, if any, is left intact)." >&2
   exit 1
 fi
+
+echo "==> Verification passed; replacing ${DEST_DIR} with the staged, verified set"
+[[ "${DEST_DIR}" == */public/firmware ]] || { echo "error: refusing to touch DEST_DIR=${DEST_DIR} (must end in public/firmware)" >&2; exit 1; }
+mkdir -p "${DEST_DIR}"
+find "${DEST_DIR}" -mindepth 1 ! -name '.gitkeep' -exec rm -rf {} +
+cp "${STAGING}"/* "${DEST_DIR}/"
 
 echo "==> OK: ${TAG} mirrored — ${COUNT} file(s), $((TOTAL_BYTES / 1024)) KiB total, manifest.json + assets written to ${DEST_DIR}"

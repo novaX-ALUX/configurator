@@ -26,3 +26,7 @@ coverage
 # content, not source. See docs/notes/decisions-m1.md decision 4.
 public/firmware/*
 !public/firmware/.gitkeep
+
+# sync-firmware.sh staging dir; normally removed by its own EXIT trap, but
+# ignored defensively in case a run gets killed before the trap fires.
+.sync-firmware-staging.*
