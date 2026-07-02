@@ -9,10 +9,12 @@ the site's own `public/`.
 **Verdict: 视资源类型而定 (mixed) — 需镜像 for the parts that matter.**
 `api.github.com` (release/asset *metadata*) sends `Access-Control-Allow-Origin: *`
 and is directly fetchable. **`release-assets.githubusercontent.com` — the
-actual byte payload of every release asset, regardless of file type (`.apj`,
-`.hex`, or a `manifest.json` uploaded as a release asset) — never sends any
-`Access-Control-Allow-Origin` header**, confirmed on two independent public
-repos. A browser `fetch()` in default `cors` mode against that host will
+actual byte payload of every release asset, regardless of file type (tested
+directly on `.apj` and `.hex`, corroborated on a `.txt` from an unrelated
+repo; a `manifest.json` release asset would land on the same CDN and is
+expected to behave identically) — never sends any `Access-Control-Allow-Origin`
+header**, confirmed on two independent public repos. A browser `fetch()` in
+default `cors` mode against that host will
 reject with a network error; the bytes cannot be read into JS. This is a
 bigger finding than the task brief's framing suggests: it doesn't just
 block a mirrored-metadata fallback, it blocks **reading firmware bytes into
@@ -21,7 +23,7 @@ memory for WebUSB/serial flashing**, which §7 of the design doc requires
 browser-native download). See "Correction to the existing design
 assumption" below.
 
-## Repo visibility (checked first, brief anticipated PRIVATE)
+## Repo visibility (checked first)
 
 ```
 $ gh repo view novaX-ALUX/flight_controller --json visibility,url
@@ -66,6 +68,12 @@ Fetch spec, cross-origin redirects don't require CORS headers on the
 redirect hop — the check that matters is on the final response — so this by
 itself isn't disqualifying.)
 
+(`$LOCATION_FROM_HOP_1` in the next command was captured by piping the Hop 1
+response through `grep -i '^location:'` and stripping the prefix — not
+pasted as a literal URL in this note because it's a signed Azure Blob URL
+with a `se=` expiry param good for roughly 15 minutes from issuance; a
+pasted copy would 403 by the time anyone reads this doc.)
+
 ### Hop 2: `release-assets.githubusercontent.com` (the actual asset bytes) — **no CORS header**
 
 ```
@@ -85,6 +93,33 @@ headers for arbitrary origins. **A browser `fetch()` against this URL, in
 default `cors` mode, resolves to a network error (`TypeError: Failed to
 fetch`) — the response is not readable by JS**, regardless of which repo,
 which asset, or which content-type.
+
+### Hop 1+2 repeated for the `.hex` asset (same release, second file)
+
+The `.apj` above is one of two assets on `AF-F4_T10_nano-v0.3.4`; the other
+is `AF-F4_T10_nano-v0.3.4_with_bl.hex` (the WebUSB-DFU full-image target).
+Ran the identical two-hop check against it rather than assuming the result
+carries over from the `.apj`:
+
+```
+$ curl -sD - -o /dev/null -H "Origin: https://novax-alux.github.io" \
+  "https://github.com/novaX-ALUX/flight_controller/releases/download/AF-F4_T10_nano-v0.3.4/AF-F4_T10_nano-v0.3.4_with_bl.hex"
+
+HTTP/2 302
+location: https://release-assets.githubusercontent.com/github-production-release-asset/1179426748/...(signed URL)...
+
+$ curl -sD - -o /dev/null -H "Origin: https://novax-alux.github.io" "$LOCATION_FROM_HOP_1"
+
+HTTP/2 200
+content-disposition: attachment; filename=AF-F4_T10_nano-v0.3.4_with_bl.hex
+content-type: application/octet-stream
+content-length: 2515648
+server: Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0
+```
+
+Same result: no `access-control-*` header anywhere. `.apj` and `.hex` — the
+two file types this project actually ships — are both confirmed directly,
+not inferred from one another.
 
 Also tried the `api.github.com` asset-by-ID redirect path (`GET
 /repos/.../releases/assets/{id}` with `Accept: application/octet-stream`)
@@ -211,10 +246,10 @@ fact.
   alongside the `.apj`/`.hex`). That means `manifest.json` would be served
   from `release-assets.githubusercontent.com`, hitting the **exact same**
   missing-CORS-header wall as the firmware binaries — content-type makes no
-  difference, this was verified against a `.apj`, a `.hex` (via the
-  redirect target's `content-type: application/octet-stream`), and is
-  infrastructure-level per the `cli/cli` corroboration. **A `manifest.json`
-  release asset cannot be `fetch()`-ed by the browser either.**
+  difference, verified directly against both the `.apj` and the `.hex`
+  assets (see Evidence above), and corroborated infrastructure-level via
+  `cli/cli`'s `.txt` asset. **A `manifest.json` release asset cannot be
+  `fetch()`-ed by the browser either.**
 
 ## Correction to the existing design assumption
 
