@@ -31,23 +31,38 @@ export class WebSocketTransport extends BaseTransport {
     this.wsFactory = opts?.wsFactory ?? ((u) => new WebSocket(u) as unknown as WebSocketLike)
   }
 
-  protected doOpen(): Promise<void> {
+  protected doOpen(generation: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = this.wsFactory(this.url)
       ws.binaryType = 'arraybuffer'
 
       ws.onopen = () => {
+        if (!this.isCurrentGeneration(generation)) {
+          // Superseded (closed, or a newer open()) while this socket was
+          // still connecting. `this.ws` may already point at a newer,
+          // live generation's socket, so it must not be touched here —
+          // release this one directly instead, via its own local
+          // reference, then settle so the pending open() can return.
+          ws.close()
+          resolve()
+          return
+        }
         this.ws = ws
         resolve()
       }
       ws.onerror = () => {
+        if (!this.isCurrentGeneration(generation)) {
+          ws.close()
+          resolve()
+          return
+        }
         reject(new Error(`WebSocket connection to ${this.url} failed`))
       }
       ws.onmessage = (ev) => {
-        this.enqueue(new Uint8Array(ev.data as ArrayBuffer))
+        this.enqueue(new Uint8Array(ev.data as ArrayBuffer), generation)
       }
       ws.onclose = (ev) => {
-        void this.terminateAndTeardown(ev.reason || `WebSocket closed (code ${ev.code})`)
+        void this.terminateAndTeardown(ev.reason || `WebSocket closed (code ${ev.code})`, generation)
       }
     })
   }

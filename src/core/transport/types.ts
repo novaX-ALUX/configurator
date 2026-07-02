@@ -125,7 +125,7 @@ export abstract class BaseTransport implements Transport {
     })
 
     try {
-      await this.doOpen(opts)
+      await this.doOpen(generation, opts)
     } catch (err) {
       if (generation === this.openGeneration) this.state = 'closed'
       throw err
@@ -133,9 +133,11 @@ export abstract class BaseTransport implements Transport {
 
     if (generation !== this.openGeneration) {
       // A close() (or a newer open()) already won the race while doOpen()
-      // was in flight. The resource doOpen() just set up is now stale —
-      // release it instead of reporting this transport as open.
-      await this.doClose().catch(() => {})
+      // was in flight. `doOpen(generation, ...)` is responsible for not
+      // adopting stale resources into shared fields (this.ws, this.reader,
+      // ...) and for releasing whatever it privately set up itself — by
+      // now those fields may already belong to a *newer* generation, so
+      // there is nothing left for this method to safely tear down here.
       return
     }
     this.state = 'open'
@@ -167,27 +169,53 @@ export abstract class BaseTransport implements Transport {
     return this.disconnect.subscribe(cb)
   }
 
-  /** Bytes arriving from the underlying resource; enqueues onto the consumer-facing `readable`. */
-  protected enqueue(bytes: Uint8Array): void {
+  /**
+   * The generation currently considered "live". Subclasses capture the
+   * generation number passed into their `doOpen(generation, ...)` call and
+   * compare it against this later (in event handlers that can fire after
+   * being superseded) to decide whether they're still allowed to touch
+   * shared state.
+   */
+  protected get currentGeneration(): number {
+    return this.openGeneration
+  }
+
+  /** True if `generation` is still the live one — i.e. hasn't been superseded by a `close()` or a newer `open()`. */
+  protected isCurrentGeneration(generation: number): boolean {
+    return generation === this.openGeneration
+  }
+
+  /**
+   * Bytes arriving from the underlying resource; enqueues onto the
+   * consumer-facing `readable`. `generation` defaults to "whichever is
+   * current right now" (fine for callers with no multi-generation race of
+   * their own, e.g. MockTransport's test-only `feed()`); WebSocket/Serial
+   * pass the generation their event handler/pump loop was opened with, so
+   * a stale generation's still-arriving bytes are dropped instead of
+   * enqueued onto a controller that may since belong to a newer
+   * generation (or have already been closed).
+   */
+  protected enqueue(bytes: Uint8Array, generation: number = this.openGeneration): void {
+    if (!this.isCurrentGeneration(generation)) return
     if (!this.controller) {
       throw new Error('Transport is not open')
     }
-    // A close() can race a still-in-flight open() (see openGeneration
-    // above): once that happens this generation's resource is stale, and
-    // any bytes it still delivers must be dropped rather than enqueued
-    // onto an already-closed controller (which throws).
     if (this.state !== 'open') return
     this.controller.enqueue(bytes)
   }
 
   /**
    * Single teardown path for both caller-initiated `close()` and
-   * subclass-detected abnormal disconnects. Idempotent: a second call
-   * (from either source) is a no-op. Ends `readable` gracefully and fires
-   * `onDisconnect` with `reason` before best-effort releasing the
-   * underlying resource via `doClose()`.
+   * subclass-detected abnormal disconnects. Idempotent: a second call for
+   * the *same* generation is a no-op. A call tagged with a *stale*
+   * generation (see `enqueue()` doc) is unconditionally a no-op too — it
+   * must never mutate `state`/`controller`/`disconnect`, since those may
+   * belong to a newer, live generation by the time it fires. Ends
+   * `readable` gracefully and fires `onDisconnect` with `reason` before
+   * best-effort releasing the underlying resource via `doClose()`.
    */
-  protected async terminateAndTeardown(reason: string): Promise<void> {
+  protected async terminateAndTeardown(reason: string, generation: number = this.openGeneration): Promise<void> {
+    if (!this.isCurrentGeneration(generation)) return
     if (this.state === 'closed') return
     this.state = 'closed'
     this.openGeneration++
@@ -201,7 +229,17 @@ export abstract class BaseTransport implements Transport {
     }
   }
 
-  protected abstract doOpen(opts?: { signal?: AbortSignal }): Promise<void>
+  /**
+   * `generation` is this call's own generation number (see
+   * `currentGeneration`/`isCurrentGeneration`). Implementations must check
+   * it — via their event handlers/pump loop, and once more right after any
+   * `await` inside `doOpen` itself — before adopting a resource into a
+   * shared field (`this.ws`, `this.reader`, ...): if superseded, release
+   * what was just set up directly (it's still in a local variable) instead
+   * of assigning it to the shared field, which may already hold a newer,
+   * live generation's resource.
+   */
+  protected abstract doOpen(generation: number, opts?: { signal?: AbortSignal }): Promise<void>
   protected abstract doWrite(data: Uint8Array): Promise<void>
   protected abstract doClose(): Promise<void>
 }

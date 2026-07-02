@@ -18,33 +18,45 @@ export class SerialTransport extends BaseTransport {
     this.baud = baud
   }
 
-  protected async doOpen(): Promise<void> {
+  protected async doOpen(generation: number): Promise<void> {
     await this.port.open({ baudRate: this.baud })
+    if (!this.isCurrentGeneration(generation)) {
+      // Superseded (closed, or a newer open()) while port.open() was in
+      // flight. `this.reader`/`this.writer` may already belong to a
+      // newer, live generation, so they must not be touched here — undo
+      // our own open() call directly on the port instead.
+      try {
+        await this.port.close()
+      } catch {
+        // Best-effort: the port may already be gone.
+      }
+      return
+    }
     if (!this.port.readable || !this.port.writable) {
       throw new Error('SerialPort did not expose readable/writable streams after open()')
     }
     this.reader = this.port.readable.getReader()
     this.writer = this.port.writable.getWriter()
-    void this.pump()
+    void this.pump(generation)
   }
 
   /** Reads `port.readable` until it ends (gracefully or via error/disconnect) and relays bytes onto our own `readable`. */
-  private async pump(): Promise<void> {
+  private async pump(generation: number): Promise<void> {
     const reader = this.reader
     if (!reader) return
     try {
       for (;;) {
         const { value, done } = await reader.read()
         if (done) {
-          void this.terminateAndTeardown('serial port closed')
+          void this.terminateAndTeardown('serial port closed', generation)
           return
         }
-        if (value) this.enqueue(value)
+        if (value) this.enqueue(value, generation)
       }
     } catch (err) {
       // The Web Serial spec errors `readable` on physical disconnect
       // (typically a NetworkError) — this is the disconnect path.
-      void this.terminateAndTeardown(err instanceof Error ? err.message : 'serial read error')
+      void this.terminateAndTeardown(err instanceof Error ? err.message : 'serial read error', generation)
     }
   }
 
