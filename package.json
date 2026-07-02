@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "i18next": "^26.3.4",
+    "mavlink-mappings": "1.0.20-20240131-0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^17.0.8",
