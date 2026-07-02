@@ -21,3 +21,8 @@ yarn-error.log*
 
 # Test
 coverage
+
+# Mirrored firmware (scripts/sync-firmware.sh output) -- build/deploy-time
+# content, not source. See docs/notes/decisions-m1.md decision 4.
+public/firmware/*
+!public/firmware/.gitkeep
