@@ -1,0 +1,121 @@
+{
+  "generatedBy": "scripts/gen-fixtures.py",
+  "pymavlinkVersion": "2.4.49",
+  "frames": [
+    {
+      "version": 2,
+      "msgid": 0,
+      "msgname": "HEARTBEAT",
+      "seq": 0,
+      "sysid": 1,
+      "compid": 1,
+      "payloadHex": "000000000608510403",
+      "fields": {
+        "type": 6,
+        "autopilot": 8,
+        "base_mode": 81,
+        "custom_mode": 0,
+        "system_status": 4,
+        "mavlink_version": 3
+      }
+    },
+    {
+      "version": 2,
+      "msgid": 30,
+      "msgname": "ATTITUDE",
+      "seq": 1,
+      "sysid": 1,
+      "compid": 1,
+      "payloadHex": "39300000cdcccc3dcdcc4cbed00f49400ad7233c0ad7a33c8fc2f53c",
+      "fields": {
+        "time_boot_ms": 12345,
+        "roll": 0.10000000149011612,
+        "pitch": -0.20000000298023224,
+        "yaw": 3.141590118408203,
+        "rollspeed": 0.009999999776482582,
+        "pitchspeed": 0.019999999552965164,
+        "yawspeed": 0.029999999329447746
+      }
+    },
+    {
+      "version": 2,
+      "msgid": 22,
+      "msgname": "PARAM_VALUE",
+      "seq": 2,
+      "sysid": 1,
+      "compid": 1,
+      "payloadHex": "9a99193e320003005448525f4d494e00000000000000000009",
+      "fields": {
+        "param_id": "THR_MIN",
+        "param_value": 0.15000000596046448,
+        "param_type": 9,
+        "param_count": 50,
+        "param_index": 3
+      }
+    },
+    {
+      "version": 2,
+      "msgid": 253,
+      "msgname": "STATUSTEXT",
+      "seq": 3,
+      "sysid": 1,
+      "compid": 1,
+      "payloadHex": "06707265666c6967687420636865636b20706173730000000000000000000000000000000000000000000000000000000000002a0001",
+      "fields": {
+        "severity": 6,
+        "text": "preflight check pass",
+        "id": 42,
+        "chunk_seq": 1
+      }
+    },
+    {
+      "version": 2,
+      "msgid": 253,
+      "msgname": "STATUSTEXT",
+      "seq": 4,
+      "sysid": 1,
+      "compid": 1,
+      "payloadHex": "026f6b",
+      "fields": {
+        "severity": 2,
+        "text": "ok",
+        "id": 0,
+        "chunk_seq": 0
+      }
+    },
+    {
+      "version": 2,
+      "msgid": 77,
+      "msgname": "COMMAND_ACK",
+      "seq": 5,
+      "sysid": 1,
+      "compid": 1,
+      "payloadHex": "90010032070000000101",
+      "fields": {
+        "command": 400,
+        "result": 0,
+        "progress": 50,
+        "result_param2": 7,
+        "target_system": 1,
+        "target_component": 1
+      }
+    },
+    {
+      "version": 1,
+      "msgid": 0,
+      "msgname": "HEARTBEAT",
+      "seq": 6,
+      "sysid": 2,
+      "compid": 2,
+      "payloadHex": "000000000608000003",
+      "fields": {
+        "type": 6,
+        "autopilot": 8,
+        "base_mode": 0,
+        "custom_mode": 0,
+        "system_status": 0,
+        "mavlink_version": 3
+      }
+    }
+  ]
+}
