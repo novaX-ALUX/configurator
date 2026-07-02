@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "tag": "v0.2.0",
+  "generatedFrom": "releases",
+  "boards": [
+    {
+      "boardName": "AF-F4_nano",
+      "apjBoardId": 6203,
+      "hwdefBoardId": 6203,
+      "mcuFamily": "F4",
+      "vehicle": "copter",
+      "version": "0.2.0",
+      "gitHash": "92b0cd788e",
+      "files": [
+        {
+          "kind": "apj",
+          "name": "AF-F4_nano-v0.2.0.apj",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-F4_nano-v0.2.0.apj",
+          "sha256": "d4d85573249660044606e72542c025b11cddbf19ffa76b33c95d788454d0b877",
+          "size": 834354
+        },
+        {
+          "kind": "other",
+          "name": "AF-F4_nano-v0.2.0.bin",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-F4_nano-v0.2.0.bin",
+          "sha256": "c56ed616f7465c63181a2226a07e927d4c57bed09f899c28cac645fe2f3ca20a",
+          "size": 910500
+        },
+        {
+          "kind": "with_bl_hex",
+          "name": "AF-F4_nano-v0.2.0_with_bl.hex",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-F4_nano-v0.2.0_with_bl.hex",
+          "sha256": "fd0a6751addaf31248ad3d0be68de921d358c4a3d137e2f9bae74a5c2f462d95",
+          "size": 2639304
+        }
+      ],
+      "method": "ardupilot",
+      "softwareDfuAllowed": true,
+      "dfuRecoveryAllowed": true
+    },
+    {
+      "boardName": "AF-F7_mini",
+      "apjBoardId": 6201,
+      "hwdefBoardId": 6201,
+      "mcuFamily": "F7",
+      "vehicle": "copter",
+      "version": "0.2.0",
+      "gitHash": "92b0cd788e",
+      "files": [
+        {
+          "kind": "apj",
+          "name": "AF-F7_mini-v0.2.0.apj",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-F7_mini-v0.2.0.apj",
+          "sha256": "3975579a72ba5aced810ef5add1498143237479af231134f3c15ce8e2770d3a1",
+          "size": 1516730
+        },
+        {
+          "kind": "other",
+          "name": "AF-F7_mini-v0.2.0.bin",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-F7_mini-v0.2.0.bin",
+          "sha256": "a11175ff84e3be87c479cd8c41e3a2bfe5c6e1b2a75d0b3368bd2df5fa75d79c",
+          "size": 1717560
+        },
+        {
+          "kind": "with_bl_hex",
+          "name": "AF-F7_mini-v0.2.0_with_bl.hex",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-F7_mini-v0.2.0_with_bl.hex",
+          "sha256": "f3d841e76d8a7e2c3a8afb467939ab25141856b80dd535f60b704a9d6e7a5cc1",
+          "size": 4813852
+        }
+      ],
+      "method": "ardupilot",
+      "softwareDfuAllowed": false,
+      "dfuRecoveryAllowed": true
+    },
+    {
+      "boardName": "AF-H7E",
+      "apjBoardId": 6202,
+      "hwdefBoardId": 6202,
+      "mcuFamily": "H7",
+      "vehicle": "copter",
+      "version": "0.2.0",
+      "gitHash": "92b0cd788e",
+      "files": [
+        {
+          "kind": "apj",
+          "name": "AF-H7E-v0.2.0.apj",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-H7E-v0.2.0.apj",
+          "sha256": "d76fc41aed3e132aeca6da8afa16926ab862ee7c2581f76a649d6c77ac5131b8",
+          "size": 1742533
+        },
+        {
+          "kind": "other",
+          "name": "AF-H7E-v0.2.0.bin",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-H7E-v0.2.0.bin",
+          "sha256": "5813a045bd7aa743e01edc757eda149f26f12424ef36ea3533ea0012f1d2e538",
+          "size": 1931592
+        },
+        {
+          "kind": "with_bl_hex",
+          "name": "AF-H7E-v0.2.0_with_bl.hex",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-H7E-v0.2.0_with_bl.hex",
+          "sha256": "db986069033edb91de2163e2610a5ca09f7b8eaac7c2b73bbc04228bfb98f622",
+          "size": 5672856
+        }
+      ],
+      "method": "ardupilot",
+      "softwareDfuAllowed": false,
+      "dfuRecoveryAllowed": true
+    },
+    {
+      "boardName": "AF-H7_nano",
+      "apjBoardId": 6200,
+      "hwdefBoardId": 6200,
+      "mcuFamily": "H7",
+      "vehicle": "copter",
+      "version": "0.2.0",
+      "gitHash": "92b0cd788e",
+      "files": [
+        {
+          "kind": "apj",
+          "name": "AF-H7_nano-v0.2.0.apj",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-H7_nano-v0.2.0.apj",
+          "sha256": "e3d9a11e26a609a9cbe1feb4f9c1d9e15f5a485bb0a91da2174f83ca6ef3b961",
+          "size": 1407198
+        },
+        {
+          "kind": "other",
+          "name": "AF-H7_nano-v0.2.0.bin",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-H7_nano-v0.2.0.bin",
+          "sha256": "91e3be7941fab26e9b3584c779faca4c5ad46fdf1516333d00b7c56b90313144",
+          "size": 1581484
+        },
+        {
+          "kind": "with_bl_hex",
+          "name": "AF-H7_nano-v0.2.0_with_bl.hex",
+          "url": "https://github.com/novaX-ALUX/flight_controller/releases/download/v0.2.0/AF-H7_nano-v0.2.0_with_bl.hex",
+          "sha256": "9d36e544a854a5b1458d6d06e2fba299b7fd8d9ec4ed762127885802ba2ceb00",
+          "size": 5430936
+        }
+      ],
+      "method": "ardupilot",
+      "softwareDfuAllowed": false,
+      "dfuRecoveryAllowed": true
+    }
+  ]
+}
