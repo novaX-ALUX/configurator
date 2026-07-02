@@ -96,8 +96,11 @@ export function describeTransportContract(name: string, makeHarness: () => Trans
       unsubscribe()
       harness.simulateDisconnect('bye')
 
+      // Disconnect detection can take a microtask hop or more to settle
+      // (e.g. SerialTransport's pump loop awaiting a rejected read), so
+      // poll for the expected callback instead of asserting synchronously.
+      await vi.waitFor(() => expect(kept).toHaveBeenCalledTimes(1))
       expect(removed).not.toHaveBeenCalled()
-      expect(kept).toHaveBeenCalledTimes(1)
     })
 
     it('write() after open sends bytes verbatim', async () => {
