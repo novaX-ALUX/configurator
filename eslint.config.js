@@ -25,4 +25,19 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // mavlink-mappings is LGPL-licensed and metadata-only; docs/notes/decisions-m1.md
+    // decisions 2/8 confine importing it to this one adapter file so the
+    // dependency (and its license exposure) stays swappable behind `GeneratedDefs`.
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['src/core/mavlink/defs.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{
+          group: ['mavlink-mappings', 'mavlink-mappings/*'],
+          message: 'mavlink-mappings may only be imported from src/core/mavlink/defs.ts (docs/notes/decisions-m1.md decisions 2 and 8).',
+        }],
+      }],
+    },
+  },
 )
