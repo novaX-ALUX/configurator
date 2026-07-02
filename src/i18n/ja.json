@@ -1,0 +1,24 @@
+{
+  "app": {
+    "title": "novaX Configurator"
+  },
+  "nav": {
+    "ariaLabel": "Primary navigation",
+    "firmware": "Firmware",
+    "parameters": "Parameters",
+    "debug": "Debug / Status",
+    "dashboard": "Dashboard",
+    "setup": "Setup",
+    "calibration": "Calibration",
+    "motors": "Motors",
+    "console": "Console"
+  },
+  "topbar": {
+    "notConnected": "Not connected",
+    "connect": "Connect",
+    "language": "Language"
+  },
+  "placeholder": {
+    "comingSoon": "This page is a placeholder. The real implementation lands in a later milestone."
+  }
+}
