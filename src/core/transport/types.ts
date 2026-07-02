@@ -98,6 +98,14 @@ export abstract class BaseTransport implements Transport {
   private currentReadable: ReadableStream<Uint8Array> | null = null
   private controller: ReadableStreamDefaultController<Uint8Array> | null = null
   private readonly disconnect = new DisconnectEmitter()
+  /**
+   * Bumped by `terminateAndTeardown()` and by every `open()` call. Lets a
+   * pending `open()` notice that a concurrent `close()` (or a newer
+   * `open()`) won the race while `doOpen()` was in flight, instead of
+   * blindly setting `state = 'open'` and clobbering the close that already
+   * happened.
+   */
+  private openGeneration = 0
 
   async open(opts?: { signal?: AbortSignal }): Promise<void> {
     if (opts?.signal?.aborted) {
@@ -107,6 +115,7 @@ export abstract class BaseTransport implements Transport {
       throw new Error('Transport is already open')
     }
 
+    const generation = ++this.openGeneration
     this.state = 'opening'
     this.disconnect.reset()
     this.currentReadable = new ReadableStream<Uint8Array>({
@@ -118,8 +127,16 @@ export abstract class BaseTransport implements Transport {
     try {
       await this.doOpen(opts)
     } catch (err) {
-      this.state = 'closed'
+      if (generation === this.openGeneration) this.state = 'closed'
       throw err
+    }
+
+    if (generation !== this.openGeneration) {
+      // A close() (or a newer open()) already won the race while doOpen()
+      // was in flight. The resource doOpen() just set up is now stale —
+      // release it instead of reporting this transport as open.
+      await this.doClose().catch(() => {})
+      return
     }
     this.state = 'open'
   }
@@ -155,6 +172,11 @@ export abstract class BaseTransport implements Transport {
     if (!this.controller) {
       throw new Error('Transport is not open')
     }
+    // A close() can race a still-in-flight open() (see openGeneration
+    // above): once that happens this generation's resource is stale, and
+    // any bytes it still delivers must be dropped rather than enqueued
+    // onto an already-closed controller (which throws).
+    if (this.state !== 'open') return
     this.controller.enqueue(bytes)
   }
 
@@ -168,6 +190,7 @@ export abstract class BaseTransport implements Transport {
   protected async terminateAndTeardown(reason: string): Promise<void> {
     if (this.state === 'closed') return
     this.state = 'closed'
+    this.openGeneration++
     this.controller?.close()
     this.disconnect.fire(reason)
     try {
