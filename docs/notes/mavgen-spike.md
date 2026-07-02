@@ -206,6 +206,124 @@ our own Web-native (`Uint8Array`/`DataView`) codec in `FrameParser`.
   required by `mavlink-mappings-gen`. Worth a one-line callout in Task 0.4
   since it'll appear in any dependency audit, even though it's inert at
   runtime.
+
+  **Reproduction (fix, added after review)**: rebuilt this from scratch to
+  paste raw evidence rather than just narrate it. Scratch project at
+  `bundle-test/` (isolated `npm init`, not part of this repo):
+
+  `bundle-test/package.json`:
+  ```json
+  {
+    "name": "bundle-test",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+      "mavlink-mappings": "1.0.20-20240131-0"
+    },
+    "devDependencies": {
+      "typescript": "^5.9.3",
+      "vite": "^6.4.3"
+    }
+  }
+  ```
+  Resolved versions actually installed: `vite@6.4.3`, `typescript@5.9.3`,
+  `mavlink-mappings@1.0.20-20240131-0`. Each entry point got its own
+  minimal `vite.*.config.ts` (`{ build: { outDir, minify: 'esbuild',
+  rollupOptions: { input: '<entry>.ts' } } }`), built one at a time with
+  `npx vite build --config vite.<name>.config.ts`.
+
+  `entry-full.ts` (barrel import):
+  ```ts
+  import { ardupilotmega } from 'mavlink-mappings'
+
+  const reg = ardupilotmega.REGISTRY
+  console.log('msg count', Object.keys(reg).length)
+  // touch one class to prevent total dead-code elimination
+  console.log(ardupilotmega.Heartbeat.MAGIC_NUMBER, ardupilotmega.Heartbeat.FIELDS.length)
+  ```
+  Raw `vite build` output:
+  ```
+  vite v6.4.3 building for production...
+  transforming...
+  [plugin vite:resolve] Module "events" has been externalized for browser compatibility, imported by ".../bundle-test/node_modules/xml2js/lib/parser.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+  [plugin vite:resolve] Module "timers" has been externalized for browser compatibility, imported by ".../bundle-test/node_modules/xml2js/lib/parser.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+  [plugin vite:resolve] Module "stream" has been externalized for browser compatibility, imported by ".../bundle-test/node_modules/sax/lib/sax.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+  ✓ 123 modules transformed.
+  rendering chunks...
+  computing gzip size...
+  dist-full/assets/entry-full-u5WyJAyN.js  582.69 kB │ gzip: 117.96 kB
+
+  (!) Some chunks are larger than 500 kB after minification. Consider:
+  - Using dynamic import() to code-split the application
+  - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+  - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+  ✓ built in 684ms
+  ```
+
+  `entry-ardu-direct.ts` (direct dialect submodule import):
+  ```ts
+  import * as ardupilotmega from 'mavlink-mappings/dist/lib/ardupilotmega'
+
+  const reg = ardupilotmega.REGISTRY
+  console.log('msg count', Object.keys(reg).length)
+  console.log(ardupilotmega.Heartbeat.MAGIC_NUMBER, ardupilotmega.Heartbeat.FIELDS.length)
+  ```
+  Raw `vite build` output:
+  ```
+  vite v6.4.3 building for production...
+  transforming...
+  ✓ 11 modules transformed.
+  rendering chunks...
+  computing gzip size...
+  dist-ardu-direct/assets/entry-ardu-direct-BF4fxhW8.js  398.37 kB │ gzip: 72.73 kB
+  ✓ built in 422ms
+  ```
+
+  `entry-ardu-single-class.ts` (single named import from the same submodule,
+  to test tree-shaking):
+  ```ts
+  import { Heartbeat } from 'mavlink-mappings/dist/lib/ardupilotmega'
+
+  console.log(Heartbeat.MAGIC_NUMBER, Heartbeat.FIELDS.length)
+  ```
+  Raw `vite build` output:
+  ```
+  vite v6.4.3 building for production...
+  transforming...
+  ✓ 11 modules transformed.
+  rendering chunks...
+  computing gzip size...
+  dist-ardu-single/assets/entry-ardu-single-class-aTxf3_Z9.js  398.30 kB │ gzip: 72.70 kB
+  ✓ built in 439ms
+  ```
+
+  `entry-narrow.ts` (minimal dialect only, scale reference):
+  ```ts
+  import { Heartbeat } from 'mavlink-mappings/dist/lib/minimal'
+
+  console.log(Heartbeat.MAGIC_NUMBER, Heartbeat.FIELDS.length)
+  ```
+  Raw `vite build` output:
+  ```
+  vite v6.4.3 building for production...
+  transforming...
+  ✓ 7 modules transformed.
+  rendering chunks...
+  computing gzip size...
+  dist-narrow/assets/entry-narrow-C-QSwCMI.js  8.25 kB │ gzip: 2.91 kB
+  ✓ built in 66ms
+  ```
+  All four builds were re-run fresh (after `rm -rf dist-*`) to produce the
+  numbers above, and match the numbers first captured during the spike
+  exactly — the measurement is deterministic given the pinned dependency
+  versions.
 - **(d) TS strict-mode — PASS.** Reproduced the project's actual
   `tsconfig.json` settings (`strict`, `target: ES2022`, `module: ESNext`,
   `moduleResolution: Bundler`) against a sample file exercising the exact
@@ -263,7 +381,32 @@ added it's schema-only (no offsets, no pack/unpack) — strictly worse than
 
 ## Concerns to carry into Task 0.4 (选型锁定记录)
 
-1. **Coverage gap**: `mavlink-mappings`'s `ardupilotmega` module (64 msgs)
+1. **License (LGPL) — needs a human decision, not a spike decision.**
+   `mavlink-mappings`' own `package.json` declares `"license": "LGPL"`
+   (confirmed both in the package's published `package.json` and in this
+   repo's `package-lock.json` — `node_modules/mavlink-mappings` →
+   `"license": "LGPL"`). LGPL is copyleft on the *library itself*: it
+   normally requires that a work be "dynamically linked" (replaceable by
+   the end user) for the calling application to stay unaffected, and that
+   modifications to the LGPL'd code itself be released under LGPL too. For
+   an npm package bundled by Vite/Rollup into a single browser JS bundle,
+   whether that counts as "dynamic linking" in the LGPL's sense is a
+   genuine gray area (bundling is closer to static linking than the
+   LGPL's drafters had in mind; there's ongoing community disagreement
+   about npm-bundled LGPL code generally). Two mitigating factors worth
+   weighing, not resolving here: (a) this package is machine-generated
+   *data* (message/field/enum tables transcribed from the MAVLink XML
+   spec) rather than original algorithmic logic, which is a common
+   argument for why such packages are lower-risk than LGPL'd runtime
+   libraries — but that argument doesn't come from the license text and
+   isn't guaranteed to hold; (b) we are not modifying the package's
+   source, only importing it unmodified, which is the safer end of LGPL
+   obligations. Given this is a production web app being distributed to
+   end users, **the actual go/no-go on shipping an LGPL dependency in the
+   bundle, and any resulting distribution obligations (e.g. offering
+   source/relink instructions), belongs to Task 0.4 and the human, not
+   this spike** — flagging it here so it isn't discovered post-ship.
+2. **Coverage gap**: `mavlink-mappings`'s `ardupilotmega` module (64 msgs)
    + `common` (207) + `minimal` (1) = 272 messages, vs. 325 in upstream
    `mavlink/mavlink`'s live `ardupilotmega.xml` (which also includes
    `loweheiser.xml`/`cubepilot.xml`/`csAirLink.xml`/`standard.xml`, none of
@@ -271,12 +414,12 @@ added it's schema-only (no offsets, no pack/unpack) — strictly worse than
    latest). If a target board needs CubePilot/csAirLink/Loweheiser vendor
    messages, this package cannot supply them and a custom generation step
    would be needed later.
-2. **`npm audit` noise**: pulls `xml2js`/`sax`/`ts-node`/`mavlink-mappings-gen`
+3. **`npm audit` noise**: pulls `xml2js`/`sax`/`ts-node`/`mavlink-mappings-gen`
    into `node_modules` (dev-only, inert at runtime) because they're
    mis-declared as runtime `dependencies` upstream — 3 moderate advisories
    will show up in scans; document as a known false-positive rather than
    chasing an upgrade that changes the pinned version.
-3. **Import discipline is load-bearing**: the barrel import
+4. **Import discipline is load-bearing**: the barrel import
    (`from 'mavlink-mappings'`) silently balloons the bundle by ~200 kB
    minified and drags in Node builtins Vite has to externalize. This is
    enforced today only by `scripts/gen-mavlink.sh`'s grep check — worth
