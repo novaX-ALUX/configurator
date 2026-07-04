@@ -83,6 +83,18 @@ export class Px4FlashError extends Error {}
 /** Internal: the bootloader answered INSYNC + INVALID specifically — distinguished from other failures so `erase()` can apply its one-shot re-handshake-and-retry (see module doc's CRITICAL ORDER note). */
 class Px4InvalidError extends Px4FlashError {}
 
+/**
+ * Thrown by `erase()` if it is somehow reached before `identify()` has
+ * queried INFO_BL_REV — a programming-error/assertion-failure, not a device
+ * response, so it deliberately does NOT extend `Px4FlashError` (a caller
+ * that catches `Px4FlashError` to handle expected device-communication
+ * failures should not accidentally swallow this). This turns the module
+ * doc's CRITICAL ORDER requirement into a runtime invariant checked at the
+ * one call site that matters, instead of relying on `flash()`'s current
+ * call order never regressing under a future refactor.
+ */
+export class Px4InvariantError extends Error {}
+
 /** Buffers bytes off `transport.readable` in the background so `read(n, timeoutMs)` can wait for enough of them (or time out) without busy-polling. Internal to this module — a byte-protocol concern, not part of the `Transport` contract. */
 class ByteReader {
   private readonly buf: number[] = []
@@ -184,6 +196,8 @@ export class Px4Flasher {
   private boardId = 0
   private flashSize = 0
   private blRev = 0
+  /** Set by `identify()` once INFO_BL_REV has actually been queried — `erase()` asserts this is true (see `Px4InvariantError`). */
+  private blRevQueried = false
 
   constructor(private readonly transport: Transport) {
     this.io = new ByteReader(transport)
@@ -249,12 +263,20 @@ export class Px4Flasher {
     this.boardId = await this.getInfo(INFO_BOARD_ID)
     this.flashSize = await this.getInfo(INFO_FLASH_SIZE)
     this.blRev = await this.getInfo(INFO_BL_REV)
+    this.blRevQueried = true
     this.state_ = 'identified'
     return { boardId: this.boardId, flashSize: this.flashSize, blRev: this.blRev }
   }
 
   /** Not exported: the only way to reach this is through `flash()`, after its guards pass. */
   private async erase(): Promise<void> {
+    if (!this.blRevQueried) {
+      // Not a retry path: this is a bug in this class (identify() bypassed or reordered
+      // relative to erase()), not a device response — see Px4InvariantError's doc.
+      throw new Px4InvariantError(
+        'Px4Flasher internal invariant violated: erase() reached before INFO_BL_REV was queried. A fresh bootloader rejects CHIP_ERASE with INVALID until this handshake completes (verified on hardware, see module doc CRITICAL ORDER) — identify() must run first.',
+      )
+    }
     try {
       await this.cmd([CHIP_ERASE, EOC], 20000)
     } catch (err) {
@@ -309,6 +331,13 @@ export class Px4Flasher {
    * back into the still-intact app) rather than stuck.
    */
   async flash(apj: ParsedApj, onProgress: Progress): Promise<void> {
+    if (apj.image.length === 0) {
+      // Checked before ever talking to the device: a blank image erasing a chip and then
+      // "verifying" an all-0xFF blank against itself is exactly the class of accident this
+      // module exists to prevent — no identify()/erase() attempt is worth starting for it.
+      this.state_ = 'failed'
+      throw new Px4FlashError('Empty image — flash aborted, nothing erased. The firmware image has 0 bytes.')
+    }
     const info = await this.identify()
 
     if (apj.boardId !== info.boardId) {

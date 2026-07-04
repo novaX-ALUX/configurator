@@ -93,6 +93,12 @@ export async function parseApj(buf: ArrayBuffer): Promise<ParsedApj> {
 
   const compressed = base64Decode(imageField)
   const image = await inflate(compressed)
+  if (image.length === 0) {
+    // A blank image erasing a chip and then "verifying" empty is exactly the class of
+    // accident the flashers' guards exist to prevent — reject it here, before it ever
+    // reaches a flasher, rather than relying on every flasher to separately notice.
+    throw new Error('.apj format error: image decompressed to 0 bytes')
+  }
 
   return { boardId, image, imageSize: image.length }
 }

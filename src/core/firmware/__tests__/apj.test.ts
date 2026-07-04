@@ -91,6 +91,11 @@ describe('parseApj', () => {
     const buf = await buildApj({ image: undefined })
     await expect(parseApj(buf)).rejects.toThrow(/image/i)
   })
+
+  it('throws when the image decompresses to 0 bytes', async () => {
+    const buf = await buildApj({}, new Uint8Array(0))
+    await expect(parseApj(buf)).rejects.toThrow(/0 bytes/i)
+  })
 })
 
 describe('verifyImageSha256', () => {

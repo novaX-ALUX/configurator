@@ -195,6 +195,17 @@ describe('Stm32Dfu.flashInfo', () => {
 })
 
 describe('Stm32Dfu.flash chip guard (must run before erase)', () => {
+  it('rejects a 0-byte image — flash aborted before ever opening/claiming the device', async () => {
+    const dev = makeF4Device()
+    const dfu = new Stm32Dfu(dev as unknown as USBDevice)
+    const hex = makeHex({ totalBytes: 0 })
+
+    await expect(dfu.flash(hex, vi.fn())).rejects.toThrow(/empty image/i)
+
+    expect(dev.eraseCalls).toHaveLength(0)
+    expect(dev.opened).toBe(false) // rejected before flashInfo() ever opened the device
+  })
+
   it('rejects an oversized image — chip mismatch, nothing erased', async () => {
     const dev = makeF4Device()
     const dfu = new Stm32Dfu(dev as unknown as USBDevice)

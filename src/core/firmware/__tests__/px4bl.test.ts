@@ -4,7 +4,7 @@ import { defs } from '../../mavlink/defs'
 import { decodePayload } from '../../mavlink/decode'
 import { FrameParser } from '../../mavlink/frame'
 import type { ParsedApj } from '../apj'
-import { Px4Flasher, crc32, sendEnterRomDfu, sendRebootToBootloader } from '../px4bl'
+import { Px4Flasher, Px4InvariantError, crc32, sendEnterRomDfu, sendRebootToBootloader } from '../px4bl'
 
 const INSYNC = 0x12
 const OK = 0x10
@@ -37,8 +37,20 @@ class ScriptedBootloader extends MockTransport {
   boardId = 6203
   flashSize = 1024 // small, 4-byte-aligned, keeps test fixtures tiny
   blRevQueried = false
-  /** If true, CHIP_ERASE returns INVALID until INFO_BL_REV has been queried at least once — replicates the hardware quirk this module's identify()-before-erase ordering exists to avoid. */
-  rejectEraseUntilBlRev = false
+  /**
+   * Set (and left set) the instant CHIP_ERASE arrives on the wire while
+   * `blRevQueried` is still false — tracked unconditionally, independent of
+   * `Px4Flasher`'s own internal bookkeeping/retry behavior, and never reset
+   * back to false. Assert this is `false` at the end of a test: a version of
+   * this mock that only returned INVALID for a premature erase (and relied
+   * on `Px4Flasher`'s own INVALID-retry-once logic to recover) would let a
+   * real ordering regression pass silently — retry() would just re-query
+   * BL_REV and succeed on the second attempt, and the test would see
+   * `flash()` resolve normally either way. This flag makes the wire-order
+   * violation itself the thing under test, not "did flash() eventually
+   * succeed".
+   */
+  orderViolation = false
   /** If >0, the next N CHIP_ERASE attempts return INVALID unconditionally (a generic transient-failure simulation, distinct from the BL_REV quirk) — used to test the erase retry-once path. */
   rejectEraseTimes = 0
   eraseCount = 0
@@ -69,7 +81,7 @@ class ScriptedBootloader extends MockTransport {
     }
     if (op === CHIP_ERASE) {
       this.eraseCount++
-      if (this.rejectEraseUntilBlRev && !this.blRevQueried) return concat([INSYNC, INVALID])
+      if (!this.blRevQueried) this.orderViolation = true
       if (this.rejectEraseTimes > 0) {
         this.rejectEraseTimes--
         return concat([INSYNC, INVALID])
@@ -121,9 +133,8 @@ describe('Px4Flasher.identify', () => {
 })
 
 describe('Px4Flasher erase hard gate (INFO_BL_REV before CHIP_ERASE)', () => {
-  it('never sends CHIP_ERASE before INFO_BL_REV has been queried — flash() succeeds against a bootloader that rejects premature erase', async () => {
+  it('never sends CHIP_ERASE before INFO_BL_REV has been queried — the mock independently records no ordering violation', async () => {
     const transport = new ScriptedBootloader()
-    transport.rejectEraseUntilBlRev = true
     await transport.open()
 
     const flasher = new Px4Flasher(transport)
@@ -131,6 +142,9 @@ describe('Px4Flasher erase hard gate (INFO_BL_REV before CHIP_ERASE)', () => {
     await flasher.flash(makeApj(), progress)
 
     expect(flasher.state).toBe('done')
+    // Independent of Px4Flasher's own retry logic (see orderViolation's doc) — this is the
+    // assertion that actually fails loudly if a future refactor reorders identify()/erase().
+    expect(transport.orderViolation).toBe(false)
 
     const blRevIndex = transport.sent.findIndex((b) => b[0] === GET_DEVICE && b[1] === INFO_BL_REV)
     const eraseIndex = transport.sent.findIndex((b) => b[0] === CHIP_ERASE)
@@ -148,6 +162,21 @@ describe('Px4Flasher erase hard gate (INFO_BL_REV before CHIP_ERASE)', () => {
 
     expect(flasher.state).toBe('done')
     expect(transport.eraseCount).toBe(2) // first rejected, second (after re-identify) succeeded
+  })
+})
+
+describe('Px4Flasher internal invariant: erase() requires INFO_BL_REV to have been queried', () => {
+  it('throws a programming-error (not a retry) if erase() is somehow reached before identify() ever ran', async () => {
+    const transport = new ScriptedBootloader()
+    await transport.open()
+    const flasher = new Px4Flasher(transport)
+    // Reach into the private erase() directly — same "documented private-field/method access
+    // for an otherwise-unreachable invariant" pattern as command.test.ts's subscriberCount().
+    // identify() was never called, so blRevQueried is still false.
+    const bypassErase = (flasher as unknown as { erase(): Promise<void> }).erase.bind(flasher)
+
+    await expect(bypassErase()).rejects.toThrow(Px4InvariantError)
+    expect(transport.sent.some((b) => b[0] === CHIP_ERASE)).toBe(false) // the invariant fires before any wire write
   })
 })
 
@@ -190,6 +219,16 @@ describe('Px4Flasher.flash guards (must run before erase)', () => {
 
     expect(flasher.state).toBe('failed')
     expect(transport.sent.some((b) => b[0] === CHIP_ERASE)).toBe(false)
+  })
+
+  it('rejects a 0-byte image — flash aborted before ever talking to the device', async () => {
+    const flasher = new Px4Flasher(transport)
+    const apj = makeApj({ image: new Uint8Array(0), imageSize: 0 })
+
+    await expect(flasher.flash(apj, vi.fn())).rejects.toThrow(/empty image/i)
+
+    expect(flasher.state).toBe('failed')
+    expect(transport.sent).toHaveLength(0) // rejected before even GET_SYNC
   })
 })
 

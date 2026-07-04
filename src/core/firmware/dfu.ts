@@ -276,6 +276,13 @@ export class Stm32Dfu {
    * own address pointer, so the chunk size is free.
    */
   async flash(hex: ParsedHex, onProgress: Progress, expectedFamily?: StmFamily): Promise<void> {
+    if (hex.totalBytes === 0) {
+      // Checked before ever opening/claiming the device: a blank image erasing a chip and
+      // then "verifying" nothing is exactly the class of accident this module exists to
+      // prevent. (parseIntelHex() itself never produces a 0-byte ParsedHex, but flash()'s
+      // input isn't guaranteed to come from there.)
+      throw new DfuError('Empty image — flash aborted, nothing erased. The firmware image has 0 bytes.')
+    }
     const info = await this.flashInfo()
     const base = info.sectors[0].start
     const totalSize = info.sectors.reduce((a, s) => a + s.size, 0)
