@@ -31,6 +31,19 @@
  * link itself is gone rather than merely quiet — the pump stops cleanly
  * (the underlying stream ends gracefully per the `Transport` contract) and
  * no further subscriber callbacks fire.
+ *
+ * Transport handoff: a `MavRouter` is single-shot, tied to one
+ * `transport.open()` generation — `start()` is single-use and never resets
+ * (see `start()`'s own doc), even after a disconnect. To hand the same
+ * physical transport to another consumer (e.g. task 3.3's PX4 flasher) or
+ * to reconnect, the caller must `close()` the transport, `open()` a fresh
+ * generation, and construct a **new** `MavRouter` around it — it is not
+ * reused across generations. Concretely, this is what makes a "pause
+ * telemetry -> flash firmware -> resume telemetry" workflow look like:
+ * stop using the old `MavRouter` (its pump has already ended via
+ * `onDisconnect` once the transport is closed for the flash), hand the
+ * closed-then-reopened `Transport` to the flasher and back, then construct
+ * a new `MavRouter` and `start()` it to resume telemetry.
  */
 import type { Transport } from '../transport/types'
 import type { GeneratedDefs } from './defs'
@@ -173,6 +186,12 @@ export class MavRouter {
     const reader = this.transport.readable.getReader() // throws if transport isn't open
     this.started = true
     this.setLinkState('connecting')
+    // Fire-and-forget: relies on every `Transport` funneling all stream ends
+    // (normal or abnormal) through a graceful `done: true`, never
+    // `controller.error()` (see transport/types.ts's module doc) — `pump()`
+    // is built to never reject under that assumption. A future `Transport`
+    // implementation that violates it would surface as an unhandled
+    // rejection here, not a caught error.
     void this.pump(reader)
   }
 
@@ -263,6 +282,8 @@ export class MavRouter {
       lastSeen: this.now(),
     })
 
+    // Re-armed by ANY component's HEARTBEAT — link-wide liveness, not
+    // per-component (M1 scope cut).
     this.setLinkState('connected')
     this.armHeartbeatTimer()
   }
