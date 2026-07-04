@@ -98,4 +98,29 @@ describe('DisconnectToast', () => {
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
+
+  it('caps the visible stack at 3, dropping the oldest on a 4th rapid push', () => {
+    useConnectionStore.setState({ phase: 'connected' })
+    render(<DisconnectToast />)
+
+    // Four independent teardown-with-reason transitions in a row, each one a
+    // fresh connected -> disconnected(reason) push.
+    for (const reason of ['r1', 'r2', 'r3', 'r4']) {
+      act(() => {
+        useConnectionStore.setState({ phase: 'disconnected', lastDisconnectReason: reason })
+      })
+      act(() => {
+        useConnectionStore.setState({ phase: 'connecting' })
+      })
+      act(() => {
+        useConnectionStore.setState({ phase: 'connected' })
+      })
+    }
+
+    expect(screen.getAllByRole('status')).toHaveLength(3)
+    expect(screen.queryByText('Disconnected: r1')).not.toBeInTheDocument()
+    expect(screen.getByText('Disconnected: r2')).toBeInTheDocument()
+    expect(screen.getByText('Disconnected: r3')).toBeInTheDocument()
+    expect(screen.getByText('Disconnected: r4')).toBeInTheDocument()
+  })
 })

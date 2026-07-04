@@ -37,7 +37,10 @@ export function DisconnectToast() {
 
   function push(text: string): void {
     const id = ++nextIdRef.current
-    setToasts((ts) => [...ts, { id, text }])
+    // Cap the visible stack at 3 (design file's own toast system, `nvxToast`'s
+    // `slice(-2)` before append) — drop the oldest rather than let a burst of
+    // transitions pile up an unbounded column of toasts.
+    setToasts((ts) => [...ts.slice(-2), { id, text }])
     setTimeout(() => dismiss(id), AUTO_DISMISS_MS)
   }
 
