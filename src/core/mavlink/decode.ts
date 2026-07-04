@@ -26,9 +26,10 @@ export interface DecodedMessage {
 const KNOWN_BASE_TYPES = [
   'uint64_t', 'int64_t', 'uint32_t', 'int32_t', 'uint16_t', 'int16_t', 'uint8_t', 'int8_t', 'double', 'float', 'char',
 ] as const
-type BaseType = (typeof KNOWN_BASE_TYPES)[number]
+/** Exported for reuse by `encode.ts`, which mirrors this same type table for its inverse (fields -> payload) direction. */
+export type BaseType = (typeof KNOWN_BASE_TYPES)[number]
 
-function baseType(type: string): BaseType {
+export function baseType(type: string): BaseType {
   const withoutArray = type.endsWith('[]') ? type.slice(0, -2) : type
   const match = KNOWN_BASE_TYPES.find((t) => withoutArray.startsWith(t))
   if (!match) throw new Error(`decodePayload: unsupported field type '${type}'`)
@@ -59,8 +60,12 @@ function readCharArray(payload: Uint8Array, offset: number, length: number): str
   return String.fromCharCode(...trimmed)
 }
 
-/** Full struct length (base fields + extensions) implied by the field table's own offsets/sizes. */
-function fullPayloadLength(fields: MavFieldDef[]): number {
+/**
+ * Full struct length (base fields + extensions) implied by the field
+ * table's own offsets/sizes. Exported for `encode.ts`, which needs the same
+ * full-length (pre-truncation) buffer size to build a payload into.
+ */
+export function fullPayloadLength(fields: MavFieldDef[]): number {
   let max = 0
   for (const f of fields) {
     const bytes = f.length > 0 ? f.size * f.length : f.size
