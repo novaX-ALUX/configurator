@@ -98,10 +98,15 @@ export function StatusPanel() {
         <div className="max-w-[400px] text-center text-[13px] leading-relaxed text-nvx-muted">
           {t('debug.notConnectedBody')}
         </div>
+        {/* Only clickable while truly 'disconnected' — store.connect() itself
+            no-ops during 'connecting'/'lost' (an active session already
+            exists), so a live button there would be a silent, confusing
+            no-op. */}
         <button
           type="button"
+          disabled={phase !== 'disconnected'}
           onClick={() => void connect(baud)}
-          className="rounded-[10px] bg-nvx-primary px-[22px] py-2.5 text-[13px] font-bold text-white hover:bg-nvx-primaryHover"
+          className="rounded-[10px] bg-nvx-primary px-[22px] py-2.5 text-[13px] font-bold text-white hover:bg-nvx-primaryHover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {t('debug.connectCta')}
         </button>

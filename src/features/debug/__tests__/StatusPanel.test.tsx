@@ -33,6 +33,15 @@ describe('StatusPanel', () => {
     expect(calls).toEqual([[115200, undefined]])
   })
 
+  it('connecting/lost: the empty-state CTA is disabled (connect() would be a silent no-op there)', () => {
+    useConnectionStore.setState({ phase: 'connecting' })
+    render(<StatusPanel />)
+    expect(screen.getByRole('button', { name: 'Connect flight controller' })).toBeDisabled()
+
+    useConnectionStore.setState({ phase: 'lost' })
+    expect(screen.getByRole('button', { name: 'Connect flight controller' })).toBeDisabled()
+  })
+
   it('connected: renders STATUSTEXT rows, message count, and link stats', () => {
     useConnectionStore.setState({
       phase: 'connected',
