@@ -96,5 +96,86 @@
     "statusPrecision": "Value too large to store exactly — not sent",
     "statusError": "Write failed: {{message}}",
     "close": "Close"
+  },
+  "firmware": {
+    "title": "Firmware",
+    "subtitle": "Driverless flashing over Web Serial",
+    "tabNormal": "Normal update",
+    "tabDfu": "DFU rescue",
+
+    "connectNote": "Connect a board to highlight its recommended firmware — every board is always listed, connected or not.",
+    "connectCta": "Connect flight controller",
+    "connectedAs": "{{board}} · board ID {{boardId}}",
+    "recommended": "Recommended for this board",
+
+    "onlineLoading": "Loading the firmware list…",
+    "onlineError": "Couldn't load the firmware list: {{message}}",
+    "onlineErrorNote": "You can still flash a local .apj file below.",
+    "onlineRetry": "Retry",
+    "onlineEmpty": "No firmware entries in the mirror yet.",
+    "fileMeta": "{{fileName}} · {{size}}",
+
+    "localTitle": "Local .apj file",
+    "localDropHint": "Drag a .apj file here, or click to choose one",
+    "localParsed": "Board ID {{boardId}} · {{size}}",
+    "localParseError": "Couldn't read this file: {{message}}",
+    "localBoardName": "Unknown board (ID {{boardId}})",
+
+    "updateButton": "Update {{board}} to {{version}}",
+
+    "confirmTitle": "Update {{board}} to {{version}}?",
+    "confirmBody": "The board reboots into its bootloader, is reflashed, then reboots back. Parameters are preserved. Don't disconnect the USB cable during this process.",
+    "confirmCancel": "Cancel",
+    "confirmProceed": "Update",
+
+    "stepDownload": "Download",
+    "stepVerify": "Verify",
+    "stepReboot": "Reboot",
+    "stepReconnect": "Reconnect",
+    "stepIdentify": "Identify",
+    "stepErase": "Erase",
+    "stepProgram": "Write",
+    "stepVerifyFlash": "Verify",
+
+    "cancel": "Cancel",
+    "failedAt": "Failed at \"{{step}}\": {{message}}",
+    "safeRetryHint": "The board is still in its bootloader — retry is safe.",
+    "disconnectedHint": "Connection lost. Reconnect the USB cable, then retry.",
+    "retry": "Retry flash",
+    "doneMessage": "Flashed and verified — board rebooted, parameters intact.",
+    "doneClose": "Done",
+
+    "dfuSoftwareLabel": "ONE-CLICK DFU",
+    "dfuSoftwareBadge": "novaX boards only",
+    "dfuSoftwareBody": "If the board still talks over USB, skip the BOOT button — reboot it straight into the STM32 system bootloader.",
+    "dfuEnterButton": "Reboot into DFU",
+    "dfuEnterWarning": "DFU flashing erases all parameters — back them up first (Parameters → Export).",
+    "dfuEnterDone": "Rebooted into DFU. Now click \"Select DFU device\" and pick the board from the browser dialog.",
+    "dfuEnterUnavailable": "Connect a novaX board that supports one-click DFU to unlock this.",
+    "dfuEnterFailed": "Couldn't reboot into DFU: {{message}}",
+
+    "dfuManualLabel": "MANUAL DFU · BRICKED BOARD",
+    "dfuStep1": "Unplug USB. Hold the BOOT button on the FC.",
+    "dfuStep2": "Plug USB back in while holding — then release.",
+    "dfuStep3": "Select the DFU device below, drop a *_with_bl.hex file, and flash.",
+    "dfuSelectDevice": "Select DFU device",
+    "dfuNoDevice": "No DFU device selected",
+    "dfuWaiting": "Waiting for a board in bootloader mode…",
+    "dfuSelectFailed": "Couldn't open the DFU device: {{message}}",
+    "dfuChipInfo": "STM32{{family}}-class · {{flashKB}} KB flash",
+    "dfuChipInfoError": "Couldn't read the chip's flash layout: {{message}}",
+    "dfuZadigHint": "Windows: if the device doesn't appear, install the WinUSB driver via Zadig (choose \"STM32 BOOTLOADER\", driver WinUSB), then try again.",
+
+    "dfuDropTitle": "Local *_with_bl.hex file",
+    "dfuDropHint": "Drag a *_with_bl.hex file here, or click to choose one",
+    "dfuParsed": "{{fileName}} · {{size}}",
+    "dfuParseError": "Couldn't read this file: {{message}}",
+
+    "dfuFlashButton": "Flash {{fileName}}",
+    "dfuConfirmTitle": "Flash {{fileName}}?",
+    "dfuConfirmWarning": "This performs a FULL CHIP ERASE — the bootloader and all parameters are wiped, not just the app. Make sure this file matches the connected board.",
+    "dfuConfirmProceed": "Erase & flash",
+
+    "leaveConfirm": "A firmware flash is in progress — leaving now may brick the board. Leave anyway?"
   }
 }

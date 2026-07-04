@@ -96,5 +96,86 @@
     "statusPrecision": "値が大きすぎて正確に保存できません — 送信されませんでした",
     "statusError": "書き込みに失敗しました:{{message}}",
     "close": "閉じる"
+  },
+  "firmware": {
+    "title": "ファームウェア",
+    "subtitle": "Web Serial によるドライバー不要の書き込み",
+    "tabNormal": "通常更新",
+    "tabDfu": "DFU レスキュー",
+
+    "connectNote": "ボードを接続するとおすすめのファームウェアが強調表示されます — 接続の有無にかかわらず、一覧は常にすべて表示されます。",
+    "connectCta": "フライトコントローラーに接続",
+    "connectedAs": "{{board}} · ボード ID {{boardId}}",
+    "recommended": "このボードにおすすめ",
+
+    "onlineLoading": "ファームウェア一覧を読み込み中…",
+    "onlineError": "ファームウェア一覧を読み込めませんでした:{{message}}",
+    "onlineErrorNote": "下のローカル .apj ファイルからも書き込めます。",
+    "onlineRetry": "再試行",
+    "onlineEmpty": "ミラーにはまだファームウェアがありません。",
+    "fileMeta": "{{fileName}} · {{size}}",
+
+    "localTitle": "ローカルの .apj ファイル",
+    "localDropHint": ".apj ファイルをここにドラッグするか、クリックして選択してください",
+    "localParsed": "ボード ID {{boardId}} · {{size}}",
+    "localParseError": "このファイルを読み込めませんでした:{{message}}",
+    "localBoardName": "不明なボード（ID {{boardId}}）",
+
+    "updateButton": "{{board}} を {{version}} に更新",
+
+    "confirmTitle": "{{board}} を {{version}} に更新しますか？",
+    "confirmBody": "ボードはブートローダーに再起動し、書き込み後にアプリへ再起動します。パラメータは保持されます。この間は USB ケーブルを抜かないでください。",
+    "confirmCancel": "キャンセル",
+    "confirmProceed": "更新",
+
+    "stepDownload": "ダウンロード",
+    "stepVerify": "検証",
+    "stepReboot": "再起動",
+    "stepReconnect": "再接続",
+    "stepIdentify": "識別",
+    "stepErase": "消去",
+    "stepProgram": "書き込み",
+    "stepVerifyFlash": "検証",
+
+    "cancel": "キャンセル",
+    "failedAt": "「{{step}}」で失敗しました:{{message}}",
+    "safeRetryHint": "ボードはまだブートローダー状態です — 再試行しても安全です。",
+    "disconnectedHint": "接続が切断されました。USB ケーブルを挿し直してから再試行してください。",
+    "retry": "書き込みを再試行",
+    "doneMessage": "書き込みと検証が完了しました — ボードは再起動し、パラメータはそのままです。",
+    "doneClose": "完了",
+
+    "dfuSoftwareLabel": "ワンクリック DFU",
+    "dfuSoftwareBadge": "novaX ボード専用",
+    "dfuSoftwareBody": "ボードがまだ USB 経由で通信できる場合、BOOT ボタン操作をせずに直接 STM32 システムブートローダーへ再起動できます。",
+    "dfuEnterButton": "DFU に再起動",
+    "dfuEnterWarning": "DFU 書き込みはすべてのパラメータを消去します — 事前にバックアップしてください（パラメータ → エクスポート）。",
+    "dfuEnterDone": "DFU に再起動しました。右側の「DFU デバイスを選択」をクリックし、ブラウザのダイアログでボードを選択してください。",
+    "dfuEnterUnavailable": "ワンクリック DFU に対応した novaX ボードを接続すると利用できます。",
+    "dfuEnterFailed": "DFU への再起動に失敗しました:{{message}}",
+
+    "dfuManualLabel": "手動 DFU · 文鎮化したボード",
+    "dfuStep1": "USB を抜き、FC の BOOT ボタンを押したままにします。",
+    "dfuStep2": "押したまま USB を挿し直し、その後離します。",
+    "dfuStep3": "下で DFU デバイスを選択し、*_with_bl.hex ファイルをドロップして書き込みます。",
+    "dfuSelectDevice": "DFU デバイスを選択",
+    "dfuNoDevice": "DFU デバイス未選択",
+    "dfuWaiting": "ブートローダーモードのボードを待っています…",
+    "dfuSelectFailed": "DFU デバイスを開けませんでした:{{message}}",
+    "dfuChipInfo": "STM32{{family}} 系 · {{flashKB}} KB フラッシュ",
+    "dfuChipInfoError": "このチップのフラッシュ構成を読み取れませんでした:{{message}}",
+    "dfuZadigHint": "Windows:デバイスが表示されない場合は、Zadig で WinUSB ドライバーをインストールしてください（「STM32 BOOTLOADER」を選択し、ドライバーは WinUSB）。その後もう一度お試しください。",
+
+    "dfuDropTitle": "ローカルの *_with_bl.hex ファイル",
+    "dfuDropHint": "*_with_bl.hex ファイルをここにドラッグするか、クリックして選択してください",
+    "dfuParsed": "{{fileName}} · {{size}}",
+    "dfuParseError": "このファイルを読み込めませんでした:{{message}}",
+
+    "dfuFlashButton": "{{fileName}} を書き込む",
+    "dfuConfirmTitle": "{{fileName}} を書き込みますか？",
+    "dfuConfirmWarning": "この操作はチップ全体を完全に消去します — アプリだけでなくブートローダーと全パラメータも消去されます。このファイルが接続中のボードと一致していることを確認してください。",
+    "dfuConfirmProceed": "消去して書き込む",
+
+    "leaveConfirm": "ファームウェアの書き込み中です — 今離れるとボードが文鎮化するおそれがあります。それでも離れますか？"
   }
 }

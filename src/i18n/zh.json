@@ -96,5 +96,86 @@
     "statusPrecision": "数值过大，无法精确存储 — 未发送",
     "statusError": "写入失败:{{message}}",
     "close": "关闭"
+  },
+  "firmware": {
+    "title": "固件",
+    "subtitle": "通过 Web Serial 免驱动刷写",
+    "tabNormal": "正常更新",
+    "tabDfu": "DFU 救砖",
+
+    "connectNote": "连接飞控可高亮推荐固件 — 无论是否连接，完整列表始终可见。",
+    "connectCta": "连接飞控",
+    "connectedAs": "{{board}} · 板型 ID {{boardId}}",
+    "recommended": "推荐用于此板型",
+
+    "onlineLoading": "正在加载固件列表…",
+    "onlineError": "无法加载固件列表:{{message}}",
+    "onlineErrorNote": "你仍可以在下方刷写本地 .apj 文件。",
+    "onlineRetry": "重试",
+    "onlineEmpty": "镜像中暂无固件条目。",
+    "fileMeta": "{{fileName}} · {{size}}",
+
+    "localTitle": "本地 .apj 文件",
+    "localDropHint": "将 .apj 文件拖到此处，或点击选择文件",
+    "localParsed": "板型 ID {{boardId}} · {{size}}",
+    "localParseError": "无法读取此文件:{{message}}",
+    "localBoardName": "未知板型（ID {{boardId}}）",
+
+    "updateButton": "将 {{board}} 更新到 {{version}}",
+
+    "confirmTitle": "将 {{board}} 更新到 {{version}}？",
+    "confirmBody": "飞控将重启进入 bootloader、刷写新固件、再重启回应用 — 参数会被保留。刷写期间请勿拔出 USB 线。",
+    "confirmCancel": "取消",
+    "confirmProceed": "更新",
+
+    "stepDownload": "下载",
+    "stepVerify": "校验",
+    "stepReboot": "重启",
+    "stepReconnect": "重新连接",
+    "stepIdentify": "识别",
+    "stepErase": "擦除",
+    "stepProgram": "写入",
+    "stepVerifyFlash": "校验",
+
+    "cancel": "取消",
+    "failedAt": "在“{{step}}”步骤失败:{{message}}",
+    "safeRetryHint": "飞控仍处于 bootloader 状态 — 可以安全重试。",
+    "disconnectedHint": "连接已断开，请重新插拔 USB 线后重试。",
+    "retry": "重试刷写",
+    "doneMessage": "刷写并校验完成 — 飞控已重启，参数保持不变。",
+    "doneClose": "完成",
+
+    "dfuSoftwareLabel": "一键 DFU",
+    "dfuSoftwareBadge": "仅限 novaX 板型",
+    "dfuSoftwareBody": "如果飞控仍能通过 USB 通信，可跳过 BOOT 键操作 — 直接让它重启进入 STM32 系统 bootloader。",
+    "dfuEnterButton": "重启进入 DFU",
+    "dfuEnterWarning": "DFU 刷写会清除全部参数 — 请先备份（参数 → 导出）。",
+    "dfuEnterDone": "已重启进入 DFU。现在点击右侧的“选择 DFU 设备”，在浏览器弹窗中选择该板型。",
+    "dfuEnterUnavailable": "连接一台支持一键 DFU 的 novaX 板型以解锁此功能。",
+    "dfuEnterFailed": "重启进入 DFU 失败:{{message}}",
+
+    "dfuManualLabel": "手动 DFU · 已变砖飞控",
+    "dfuStep1": "拔出 USB，按住飞控上的 BOOT 键。",
+    "dfuStep2": "按住的同时重新插入 USB，然后松开。",
+    "dfuStep3": "在下方选择 DFU 设备，拖入 *_with_bl.hex 文件后刷写。",
+    "dfuSelectDevice": "选择 DFU 设备",
+    "dfuNoDevice": "未选择 DFU 设备",
+    "dfuWaiting": "等待处于 bootloader 模式的飞控…",
+    "dfuSelectFailed": "无法打开 DFU 设备:{{message}}",
+    "dfuChipInfo": "STM32{{family}} 系列 · {{flashKB}} KB flash",
+    "dfuChipInfoError": "无法读取该芯片的 flash 布局:{{message}}",
+    "dfuZadigHint": "Windows:若设备未出现，请用 Zadig 安装 WinUSB 驱动（选择“STM32 BOOTLOADER”，驱动选 WinUSB），然后重试。",
+
+    "dfuDropTitle": "本地 *_with_bl.hex 文件",
+    "dfuDropHint": "将 *_with_bl.hex 文件拖到此处，或点击选择文件",
+    "dfuParsed": "{{fileName}} · {{size}}",
+    "dfuParseError": "无法读取此文件:{{message}}",
+
+    "dfuFlashButton": "刷写 {{fileName}}",
+    "dfuConfirmTitle": "刷写 {{fileName}}？",
+    "dfuConfirmWarning": "此操作将对芯片进行完整擦除 — bootloader 与全部参数都会被清除，不只是应用程序。请确认此文件与当前连接的板型匹配。",
+    "dfuConfirmProceed": "擦除并刷写",
+
+    "leaveConfirm": "固件刷写正在进行中 — 此时离开可能导致飞控变砖，仍要离开吗？"
   }
 }
