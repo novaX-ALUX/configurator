@@ -14,7 +14,10 @@
     "console": "Console"
   },
   "topbar": {
-    "notConnected": "Not connected",
+    "brandLabel": "CONFIGURATOR",
+    "port": "シリアルポート",
+    "noPort": "ポート未選択",
+    "baud": "ボーレート",
     "connect": "Connect",
     "language": "Language"
   },

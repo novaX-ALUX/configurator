@@ -15,8 +15,10 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: 'Dashboard' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Console' })).toBeDisabled()
 
-    // Top bar shows the not-connected state with a disabled Connect button.
-    expect(screen.getByText('Not connected')).toBeInTheDocument()
+    // Top bar shows the disconnected state: port/baud pickers and Connect are
+    // present but disabled until Task 3.1 wires up real connection logic.
     expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled()
+    expect(screen.getByLabelText('Serial port')).toBeDisabled()
+    expect(screen.getByLabelText('Baud rate')).toBeDisabled()
   })
 })

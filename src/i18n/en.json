@@ -14,7 +14,10 @@
     "console": "Console"
   },
   "topbar": {
-    "notConnected": "Not connected",
+    "brandLabel": "CONFIGURATOR",
+    "port": "Serial port",
+    "noPort": "No port selected",
+    "baud": "Baud rate",
     "connect": "Connect",
     "language": "Language"
   },

@@ -12,9 +12,13 @@ export function PagePlaceholder({ titleKey }: PagePlaceholderProps) {
   const { t } = useTranslation()
 
   return (
-    <div className="rounded-lg border border-dashed border-white/10 p-8 text-slate-400">
-      <h1 className="mb-2 text-lg font-semibold text-slate-200">{t(titleKey)}</h1>
-      <p className="text-sm">{t('placeholder.comingSoon')}</p>
+    <div className="px-5 pb-6 pt-[18px]">
+      <div className="mb-3 flex items-baseline">
+        <h1 className="font-heading text-[19px] font-bold text-nvx-text">{t(titleKey)}</h1>
+      </div>
+      <div className="rounded-xl border border-nvx-border bg-nvx-surface p-4 text-nvx-muted shadow-card">
+        <p className="text-sm">{t('placeholder.comingSoon')}</p>
+      </div>
     </div>
   )
 }

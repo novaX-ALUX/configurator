@@ -9,14 +9,12 @@ function App() {
   const page = NAV_PAGES.find((p) => p.id === activePage)
 
   return (
-    <div className="flex h-screen bg-[#0A0A0F] text-slate-100">
+    <div className="grid h-screen min-w-[1024px] grid-cols-[64px_1fr] grid-rows-[56px_minmax(0,1fr)] bg-nvx-bg font-sans text-nvx-text">
+      <TopBar />
       <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar />
-        <main className="flex-1 overflow-auto p-6">
-          {page && <PagePlaceholder titleKey={page.labelKey} />}
-        </main>
-      </div>
+      <main className="col-start-2 row-start-2 min-w-0 overflow-auto">
+        {page && <PagePlaceholder titleKey={page.labelKey} />}
+      </main>
     </div>
   )
 }

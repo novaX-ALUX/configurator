@@ -14,7 +14,10 @@
     "console": "Console"
   },
   "topbar": {
-    "notConnected": "Not connected",
+    "brandLabel": "CONFIGURATOR",
+    "port": "시리얼 포트",
+    "noPort": "선택된 포트 없음",
+    "baud": "보드레이트",
     "connect": "Connect",
     "language": "Language"
   },

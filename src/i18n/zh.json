@@ -14,7 +14,10 @@
     "console": "Console"
   },
   "topbar": {
-    "notConnected": "Not connected",
+    "brandLabel": "CONFIGURATOR",
+    "port": "串口",
+    "noPort": "未选择串口",
+    "baud": "波特率",
     "connect": "Connect",
     "language": "Language"
   },
