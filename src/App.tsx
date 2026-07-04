@@ -2,6 +2,7 @@ import './i18n'
 import { Sidebar } from './layout/Sidebar'
 import { TopBar } from './layout/TopBar'
 import { PagePlaceholder } from './layout/PagePlaceholder'
+import { DisconnectToast } from './layout/DisconnectToast'
 import { StatusPanel } from './features/debug/StatusPanel'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
 
@@ -20,6 +21,7 @@ function App() {
           page && <PagePlaceholder titleKey={page.labelKey} />
         )}
       </main>
+      <DisconnectToast />
     </div>
   )
 }
