@@ -316,6 +316,57 @@ describe('connection store', () => {
     })
   })
 
+  describe('takeoverForFlash()', () => {
+    it('tears down telemetry/paramStore like disconnect(), but returns the live transport instead of closing it', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      const paramStore = store.getState().paramStore
+      expect(paramStore).not.toBeNull()
+      const disposeSpy = vi.spyOn(paramStore!, 'dispose')
+
+      const handedOff = store.getState().takeoverForFlash()
+
+      expect(handedOff).toBe(transport)
+      expect(disposeSpy).toHaveBeenCalledTimes(1)
+      expect(store.getState().phase).toBe('disconnected')
+      expect(store.getState().paramStore).toBeNull()
+      expect(store.getState().identity).toBeNull()
+      expect(store.getState().portInfo).toBeNull()
+      // Not a real disconnect — no reason should be recorded.
+      expect(store.getState().lastDisconnectReason).toBeNull()
+    })
+
+    it('does not re-run teardown when the caller later closes the handed-off transport itself', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      store.getState().takeoverForFlash()
+      await transport.close() // simulates px4bl.ts's sendRebootToBootloader closing the transport
+
+      // teardown() must not have fired a second time and clobbered state
+      // (e.g. it would otherwise set a stray lastDisconnectReason).
+      expect(store.getState().phase).toBe('disconnected')
+      expect(store.getState().lastDisconnectReason).toBeNull()
+    })
+
+    it('returns null when not connected', () => {
+      const store = createConnectionStore(async () => {
+        throw new Error('should never be called')
+      })
+
+      expect(store.getState().takeoverForFlash()).toBeNull()
+    })
+  })
+
   describe('linkStats', () => {
     it('is populated immediately on connect and refreshed every second while connected', async () => {
       const transport = new MockTransport()

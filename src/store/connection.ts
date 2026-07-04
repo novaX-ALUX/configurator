@@ -133,6 +133,18 @@ export interface ConnectionState {
   connect: (baud: number, opts?: { anyDevice?: boolean }) => Promise<void>
   disconnect: () => Promise<void>
   clearStatustext: () => void
+  /**
+   * Hands off the live transport for a firmware flash (Task 3.4's flash
+   * session): runs the same teardown as `disconnect()` (unsubscribes
+   * telemetry, stops the stats timer, disposes `paramStore`, resets state to
+   * 'disconnected') but does NOT close the transport and does NOT set
+   * `lastDisconnectReason` — this is a deliberate handoff, not a disconnect.
+   * Ownership of the returned `Transport` passes to the caller, which sends
+   * the MAVLink reboot-to-bootloader command and closes it itself. Returns
+   * `null` if not currently connected (nothing to hand off) — the flash
+   * session's "reboot to bootloader" step surfaces that as its own failure.
+   */
+  takeoverForFlash: () => Transport | null
 }
 
 /**
@@ -152,9 +164,23 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
     let statsTimer: ReturnType<typeof setInterval> | undefined
     let paramStoreRef: ParamStore | undefined
     let identityRequested = false
+    // Captured so `takeoverForFlash()` can unsubscribe `teardown` from the
+    // transport being handed off — without this, the flash session's own
+    // later `transport.close()` (after sending the reboot-to-bootloader
+    // command) would still fire the store's `teardown`, re-running it a
+    // second time against state this method has already reset.
+    let unsubTransportDisconnect: (() => void) | undefined
 
-    /** Single teardown path for both `disconnect()` (via `transport.close()`) and an unplug — both funnel through `Transport.onDisconnect`, fired exactly once per open/close cycle. */
-    function teardown(reason: string): void {
+    /**
+     * Shared reset step for both `teardown()` (a genuine disconnect) and
+     * `takeoverForFlash()` (a deliberate handoff) — clears all per-generation
+     * bookkeeping and resets the reactive state identically either way.
+     * `reason` is only set as `lastDisconnectReason` when given: a flash
+     * handoff must never be reported as a disconnect (see
+     * `takeoverForFlash()`'s own doc), so it omits `reason` entirely rather
+     * than passing e.g. an empty string.
+     */
+    function resetSession(reason?: string): void {
       for (const fn of cleanupFns) fn()
       cleanupFns = []
       if (statsTimer !== undefined) {
@@ -171,8 +197,13 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
         portInfo: null,
         linkStats: null,
         paramStore: null,
-        lastDisconnectReason: reason,
+        ...(reason !== undefined ? { lastDisconnectReason: reason } : {}),
       })
+    }
+
+    /** Single teardown path for both `disconnect()` (via `transport.close()`) and an unplug — both funnel through `Transport.onDisconnect`, fired exactly once per open/close cycle. */
+    function teardown(reason: string): void {
+      resetSession(reason)
     }
 
     return {
@@ -221,7 +252,7 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
         // Registered once per generation, right after a successful open() —
         // fires for a caller-initiated close() (disconnect() below) and for
         // a physical unplug alike, exactly once (Transport's own contract).
-        transport.onDisconnect(teardown)
+        unsubTransportDisconnect = transport.onDisconnect(teardown)
 
         const unsubLinkState = router.onLinkState((linkState) => {
           if (linkState === 'idle') return // transport.onDisconnect's teardown() owns the disconnected transition
@@ -296,6 +327,18 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
 
       clearStatustext() {
         set({ statustext: [] })
+      },
+
+      takeoverForFlash() {
+        const phase = get().phase
+        if (phase !== 'connected' && phase !== 'lost') return null
+        const transport = transportRef
+        if (!transport) return null
+
+        unsubTransportDisconnect?.()
+        unsubTransportDisconnect = undefined
+        resetSession()
+        return transport
       },
     }
   })
