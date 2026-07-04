@@ -19,7 +19,30 @@
     "noPort": "No port selected",
     "baud": "Baud rate",
     "connect": "Connect",
+    "connecting": "Connecting · identifying board…",
+    "linkLost": "Link lost — retrying…",
+    "disconnect": "Disconnect",
+    "anyDevice": "Any device",
+    "unknownBoard": "Unknown board",
+    "boardIdLabel": "ID",
     "language": "Language"
+  },
+  "toast": {
+    "disconnected": "Disconnected: {{reason}}"
+  },
+  "debug": {
+    "notConnectedTitle": "No MAVLink stream",
+    "notConnectedBody": "Connect a board to watch STATUSTEXT messages and link stats.",
+    "connectCta": "Connect flight controller",
+    "messageCount": "{{count}} messages · buffer {{cap}}",
+    "pause": "Pause",
+    "resume": "Resume",
+    "clear": "Clear",
+    "empty": "No STATUSTEXT messages yet.",
+    "legendStatustext": "STATUSTEXT",
+    "legendWarning": "Warning severity",
+    "legendError": "Error severity",
+    "linkStats": "{{framesIn}} in · {{framesOut}} out · {{crcErrors}} CRC errors · {{dropped}} dropped"
   },
   "placeholder": {
     "comingSoon": "This page is a placeholder. The real implementation lands in a later milestone."

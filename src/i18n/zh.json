@@ -19,7 +19,30 @@
     "noPort": "未选择串口",
     "baud": "波特率",
     "connect": "Connect",
+    "connecting": "连接中 · 识别板型…",
+    "linkLost": "连接中断 — 重试中…",
+    "disconnect": "断开连接",
+    "anyDevice": "任意设备",
+    "unknownBoard": "未知板型",
+    "boardIdLabel": "ID",
     "language": "Language"
+  },
+  "toast": {
+    "disconnected": "已断开连接:{{reason}}"
+  },
+  "debug": {
+    "notConnectedTitle": "暂无 MAVLink 数据流",
+    "notConnectedBody": "连接飞控以查看 STATUSTEXT 消息与链路统计。",
+    "connectCta": "连接飞控",
+    "messageCount": "{{count}} 条消息 · 缓冲区 {{cap}}",
+    "pause": "暂停",
+    "resume": "继续",
+    "clear": "清空",
+    "empty": "暂无 STATUSTEXT 消息。",
+    "legendStatustext": "STATUSTEXT",
+    "legendWarning": "警告级别",
+    "legendError": "错误级别",
+    "linkStats": "接收 {{framesIn}} · 发送 {{framesOut}} · CRC 错误 {{crcErrors}} · 丢弃 {{dropped}}"
   },
   "placeholder": {
     "comingSoon": "This page is a placeholder. The real implementation lands in a later milestone."

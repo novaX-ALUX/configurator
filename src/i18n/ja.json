@@ -19,7 +19,30 @@
     "noPort": "ポート未選択",
     "baud": "ボーレート",
     "connect": "Connect",
+    "connecting": "接続中 · ボードを識別しています…",
+    "linkLost": "リンク切断 — 再接続中…",
+    "disconnect": "切断",
+    "anyDevice": "任意のデバイス",
+    "unknownBoard": "不明なボード",
+    "boardIdLabel": "ID",
     "language": "Language"
+  },
+  "toast": {
+    "disconnected": "切断されました:{{reason}}"
+  },
+  "debug": {
+    "notConnectedTitle": "MAVLink ストリームなし",
+    "notConnectedBody": "ボードを接続すると STATUSTEXT メッセージとリンク統計を確認できます。",
+    "connectCta": "フライトコントローラーに接続",
+    "messageCount": "{{count}} 件のメッセージ · バッファ {{cap}}",
+    "pause": "一時停止",
+    "resume": "再開",
+    "clear": "クリア",
+    "empty": "STATUSTEXT メッセージはまだありません。",
+    "legendStatustext": "STATUSTEXT",
+    "legendWarning": "警告レベル",
+    "legendError": "エラーレベル",
+    "linkStats": "受信 {{framesIn}} · 送信 {{framesOut}} · CRC エラー {{crcErrors}} · ドロップ {{dropped}}"
   },
   "placeholder": {
     "comingSoon": "This page is a placeholder. The real implementation lands in a later milestone."
