@@ -232,6 +232,23 @@ export class ParamUnknownError extends Error {
   }
 }
 
+/**
+ * Rejected by a second concurrent `set()` call for the *same* name while one
+ * is already in flight on this store (mirrors `fetchAll`'s
+ * `ParamFetchBusyError` re-entrancy guard). Without this guard, both calls'
+ * echo-waiters listen for the same name, so the first write's `PARAM_VALUE`
+ * echo would also reach the second call's waiter and get compared against
+ * *its* (different) requested value — producing a false
+ * `ParamWriteMismatchError` for a write that was never actually sent yet.
+ * Concurrent `set()` calls for *different* names are unaffected.
+ */
+export class ParamWriteBusyError extends Error {
+  constructor(public readonly paramName: string) {
+    super(`ParamStore.set: a set() call for '${paramName}' is already in progress on this store`)
+    this.name = 'ParamWriteBusyError'
+  }
+}
+
 /** Rejected by `set()`, before sending anything, for an integer-type value that isn't exactly representable as float32 (see module doc). */
 export class ParamPrecisionLossError extends Error {
   constructor(
@@ -324,6 +341,8 @@ export class ParamStore {
   private notifyFetchArrival: (() => void) | undefined
   /** Set only while `fetchAll` is running; receives every arriving `PARAM_VALUE` (name, count included) to update the collection table. */
   private fetchArrivalHandler: ((param: Param, count: number) => void) | undefined
+  /** Names with a `set()` currently in flight — guards against a second concurrent `set()` for the same name (see `ParamWriteBusyError`). */
+  private readonly activeSetNames = new Set<string>()
 
   constructor(
     private readonly router: MavRouter,
@@ -387,7 +406,13 @@ export class ParamStore {
         driftError = new ParamCountDriftError(expectedCount, count)
       }
       received.set(param.index, param)
-      onProgress?.(received.size, expectedCount)
+      // Skip onProgress once drift is detected (including on the very
+      // arrival that triggers it): received.size can coincidentally equal
+      // the *stale* expectedCount at that instant, which would report a
+      // lying "(N, N)" (looks complete) moments before fetchAll rejects.
+      if (!driftError) {
+        onProgress?.(received.size, expectedCount)
+      }
       this.notifyFetchArrival?.()
     }
     this.fetchArrivalHandler = onArrival
@@ -458,11 +483,19 @@ export class ParamStore {
     if (!cached) {
       throw new ParamUnknownError(name)
     }
+    if (this.activeSetNames.has(name)) {
+      throw new ParamWriteBusyError(name)
+    }
     if (INTEGER_PARAM_TYPES.has(cached.type) && Math.fround(value) !== value) {
       throw new ParamPrecisionLossError(name, value)
     }
 
-    return this.doSet(name, value, cached.type, signal)
+    this.activeSetNames.add(name)
+    try {
+      return await this.doSet(name, value, cached.type, signal)
+    } finally {
+      this.activeSetNames.delete(name)
+    }
   }
 
   // --- internals ---------------------------------------------------------

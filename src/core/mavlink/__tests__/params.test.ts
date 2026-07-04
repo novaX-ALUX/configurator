@@ -14,6 +14,7 @@ import {
   ParamStore,
   ParamStoreDisposedError,
   ParamUnknownError,
+  ParamWriteBusyError,
   ParamWriteMismatchError,
   ParamWriteTimeoutError,
   type Param,
@@ -56,6 +57,12 @@ function decodeSent(bytes: Uint8Array): { msgid: number; fields: Record<string, 
 /** Subscriber-count introspection, same accepted pattern as command.test.ts. */
 function subscriberCount(router: MavRouter): number {
   return (router as unknown as { subscribers: Set<unknown> }).subscribers.size
+}
+
+/** Feeds a passive PARAM_VALUE so the given name is cached before `set()` needs it. */
+async function seedParam(transport: MockTransport, name: string, value: number, type: number, index = 0): Promise<void> {
+  transport.feed(paramValueFrame({ name, value, type, count: 1, index }))
+  await vi.advanceTimersByTimeAsync(0)
 }
 
 describe('ParamStore', () => {
@@ -235,6 +242,28 @@ describe('ParamStore', () => {
 
       await rejection
     })
+
+    it('does not call onProgress with a lying "(N, N) looks complete" on the arrival that triggers param_count drift', async () => {
+      const onProgress = vi.fn()
+      const store = new ParamStore(router, target)
+      const promise = store.fetchAll({ onProgress })
+      const rejection = expect(promise).rejects.toBeInstanceOf(ParamCountDriftError)
+      await vi.advanceTimersByTimeAsync(0)
+
+      transport.feed(paramValueFrame({ name: 'P0', value: 0, type: MAV_PARAM_TYPE_REAL32, count: 2, index: 0 }))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(onProgress).toHaveBeenCalledWith(1, 2)
+      onProgress.mockClear()
+
+      // received.size becomes 2 here, coincidentally equal to the OLD (pre-drift) expectedCount
+      // of 2 — a naive onProgress(received.size, expectedCount) call on this same arrival would
+      // report the lying "(2, 2) looks complete" right before fetchAll rejects on the drift.
+      transport.feed(paramValueFrame({ name: 'P1', value: 1, type: MAV_PARAM_TYPE_REAL32, count: 5, index: 1 }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(onProgress).not.toHaveBeenCalled()
+      await rejection
+    })
   })
 
   describe('fetchAll: re-entrancy and abort', () => {
@@ -293,12 +322,6 @@ describe('ParamStore', () => {
   })
 
   describe('set()', () => {
-    /** Feeds a passive PARAM_VALUE so the given name is cached before `set()` needs it. */
-    async function seedParam(name: string, value: number, type: number, index = 0): Promise<void> {
-      transport.feed(paramValueFrame({ name, value, type, count: 1, index }))
-      await vi.advanceTimersByTimeAsync(0)
-    }
-
     it('rejects with ParamUnknownError for a name never seen via fetchAll/PARAM_VALUE', async () => {
       const store = new ParamStore(router, target)
       await expect(store.set('NEVER_SEEN', 1)).rejects.toBeInstanceOf(ParamUnknownError)
@@ -307,7 +330,7 @@ describe('ParamStore', () => {
 
     it('sends PARAM_SET with the cached param_type and resolves with the echoed Param on a matching PARAM_VALUE', async () => {
       const store = new ParamStore(router, target)
-      await seedParam('THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
+      await seedParam(transport, 'THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
 
       const promise = store.set('THR_MIN', 0.25)
       await vi.advanceTimersByTimeAsync(0)
@@ -329,7 +352,7 @@ describe('ParamStore', () => {
 
     it('rejects with ParamWriteMismatchError carrying {requested, actual} when the FC echoes a different value (clamped), and updates the cache with the actual value', async () => {
       const store = new ParamStore(router, target)
-      await seedParam('THR_MAX', 500, MAV_PARAM_TYPE_REAL32)
+      await seedParam(transport, 'THR_MAX', 500, MAV_PARAM_TYPE_REAL32)
 
       const promise = store.set('THR_MAX', 2000)
       // Attached before advancing timers: the promise rejects synchronously
@@ -351,7 +374,7 @@ describe('ParamStore', () => {
 
     it('rejects with ParamWriteTimeoutError and never retransmits on a missing echo', async () => {
       const store = new ParamStore(router, target, { setTimeoutMs: 100 })
-      await seedParam('THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
+      await seedParam(transport, 'THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
 
       const promise = store.set('THR_MIN', 0.5)
       const rejection = expect(promise).rejects.toBeInstanceOf(ParamWriteTimeoutError)
@@ -366,7 +389,7 @@ describe('ParamStore', () => {
 
     it('rejects with ParamPrecisionLossError before sending anything, for an integer-type value not exactly representable as float32', async () => {
       const store = new ParamStore(router, target)
-      await seedParam('SERIAL1_BAUD', 115200, MAV_PARAM_TYPE_INT32)
+      await seedParam(transport, 'SERIAL1_BAUD', 115200, MAV_PARAM_TYPE_INT32)
 
       // 2^24 + 1 = 16777217 is the smallest positive integer float32 cannot represent exactly.
       await expect(store.set('SERIAL1_BAUD', 16777217)).rejects.toBeInstanceOf(ParamPrecisionLossError)
@@ -375,7 +398,7 @@ describe('ParamStore', () => {
 
     it('does not reject on precision-loss grounds for a REAL32 param (non-integer types are inherently float32)', async () => {
       const store = new ParamStore(router, target)
-      await seedParam('SOME_GAIN', 0.1, MAV_PARAM_TYPE_REAL32)
+      await seedParam(transport, 'SOME_GAIN', 0.1, MAV_PARAM_TYPE_REAL32)
 
       const promise = store.set('SOME_GAIN', 0.123456789)
       await vi.advanceTimersByTimeAsync(0)
@@ -389,12 +412,66 @@ describe('ParamStore', () => {
 
     it('an already-aborted signal rejects immediately with nothing sent', async () => {
       const store = new ParamStore(router, target)
-      await seedParam('THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
+      await seedParam(transport, 'THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
 
       const controller = new AbortController()
       controller.abort()
       await expect(store.set('THR_MIN', 0.1, { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
       expect(transport.sent).toHaveLength(0)
+    })
+
+    it('rejects a second concurrent set() for the same name with ParamWriteBusyError, while the first still resolves correctly', async () => {
+      const store = new ParamStore(router, target)
+      await seedParam(transport, 'THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
+
+      const first = store.set('THR_MIN', 0.25)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(transport.sent).toHaveLength(1) // only the first call's PARAM_SET was ever sent
+
+      // Without the busy guard, this second call's echo-waiter for 'THR_MIN' would also see
+      // the first call's echo below and wrongly reject with ParamWriteMismatchError (0.5 !== 0.25).
+      await expect(store.set('THR_MIN', 0.5)).rejects.toBeInstanceOf(ParamWriteBusyError)
+      expect(transport.sent).toHaveLength(1) // the second call never sent anything
+
+      transport.feed(paramValueFrame({ name: 'THR_MIN', value: 0.25, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 0 }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      await expect(first).resolves.toMatchObject({ name: 'THR_MIN', value: expect.closeTo(0.25, 5) })
+    })
+
+    it('allows concurrent set() calls for different names', async () => {
+      const store = new ParamStore(router, target)
+      await seedParam(transport, 'THR_MIN', 0, MAV_PARAM_TYPE_REAL32, 0)
+      await seedParam(transport, 'THR_MAX', 1000, MAV_PARAM_TYPE_REAL32, 1)
+
+      const first = store.set('THR_MIN', 0.1)
+      const second = store.set('THR_MAX', 900)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(transport.sent).toHaveLength(2)
+
+      transport.feed(paramValueFrame({ name: 'THR_MIN', value: 0.1, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 0 }))
+      transport.feed(paramValueFrame({ name: 'THR_MAX', value: 900, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 1 }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      await expect(first).resolves.toMatchObject({ name: 'THR_MIN' })
+      await expect(second).resolves.toMatchObject({ name: 'THR_MAX' })
+    })
+
+    it('allows a fresh set() for the same name once the first call has settled', async () => {
+      const store = new ParamStore(router, target)
+      await seedParam(transport, 'THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
+
+      const first = store.set('THR_MIN', 0.25)
+      await vi.advanceTimersByTimeAsync(0)
+      transport.feed(paramValueFrame({ name: 'THR_MIN', value: 0.25, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 0 }))
+      await vi.advanceTimersByTimeAsync(0)
+      await first
+
+      const second = store.set('THR_MIN', 0.5)
+      await vi.advanceTimersByTimeAsync(0)
+      transport.feed(paramValueFrame({ name: 'THR_MIN', value: 0.5, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 0 }))
+      await vi.advanceTimersByTimeAsync(0)
+      await expect(second).resolves.toMatchObject({ value: expect.closeTo(0.5, 5) })
     })
   })
 
@@ -425,6 +502,36 @@ describe('ParamStore', () => {
       await vi.advanceTimersByTimeAsync(0)
 
       expect(store.get('RC1_MIN')).toBeUndefined()
+    })
+
+    it('rejects an in-flight set() with ParamStoreDisposedError', async () => {
+      const store = new ParamStore(router, target)
+      await seedParam(transport, 'THR_MIN', 0, MAV_PARAM_TYPE_REAL32)
+
+      const promise = store.set('THR_MIN', 0.5)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(transport.sent).toHaveLength(1) // PARAM_SET was sent; still waiting on the echo
+
+      store.dispose()
+      await expect(promise).rejects.toBeInstanceOf(ParamStoreDisposedError)
+    })
+
+    it('rejects an in-flight fetchAll with ParamStoreDisposedError when disposed mid-gap-fill', async () => {
+      const store = new ParamStore(router, target, { fetchSilenceMs: 50 })
+      const promise = store.fetchAll()
+      const rejection = expect(promise).rejects.toBeInstanceOf(ParamStoreDisposedError)
+      await vi.advanceTimersByTimeAsync(0)
+
+      // Only index 0 of 2 arrives; index 1 is missing.
+      transport.feed(paramValueFrame({ name: 'P0', value: 0, type: MAV_PARAM_TYPE_REAL32, count: 2, index: 0 }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      await vi.advanceTimersByTimeAsync(50) // silence window elapses -> gap-fill sends PARAM_REQUEST_READ for index 1
+      const gapFillRequest = transport.sent.find((bytes) => decodeSent(bytes).msgid === PARAM_REQUEST_READ_MSGID)
+      expect(gapFillRequest).toBeDefined() // confirms we're actually mid-gap-fill, waiting on that request's echo
+
+      store.dispose()
+      await rejection
     })
   })
 })
