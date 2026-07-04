@@ -144,8 +144,8 @@ const PARAM_REQUEST_LIST_MSGID = 21
 const PARAM_VALUE_MSGID = 22
 const PARAM_SET_MSGID = 23
 
-/** MAV_PARAM_TYPE 1-8: the integer types (as opposed to 9 REAL32 / 10 REAL64). */
-const INTEGER_PARAM_TYPES: ReadonlySet<number> = new Set([1, 2, 3, 4, 5, 6, 7, 8])
+/** MAV_PARAM_TYPE 1-8: the integer types (as opposed to 9 REAL32 / 10 REAL64). Exported for `features/params`' UI-side precision/validation checks — the single source of truth for "which MAV_PARAM_TYPEs are integers" lives here, not duplicated. */
+export const INTEGER_PARAM_TYPES: ReadonlySet<number> = new Set([1, 2, 3, 4, 5, 6, 7, 8])
 
 const DEFAULT_FETCH_SILENCE_MS = 700
 /** Safety cap on consecutive silence-window resets during fetchAll's initial burst — see module doc. */
