@@ -430,6 +430,7 @@ describe('createFlashSession (normal update, Px4Flasher)', () => {
     await waitFor(store, (s) => s.step === 'failed')
 
     expect(store.getState().failedStep).toBe('identifying') // not misclassified as 'erasing'
+    expect(store.getState().disconnected).toBe(false) // a sync-lost/timeout error is not a dropped-cable error
     expect(closeSpy1).toHaveBeenCalledTimes(1) // this transport is presumed unusable for bootloader traffic — closed, not kept for retry
 
     store.getState().retry()
@@ -437,6 +438,21 @@ describe('createFlashSession (normal update, Px4Flasher)', () => {
 
     expect(store.getState().step).toBe('done')
     expect(openCalls).toBe(2) // retry() reconnected fresh instead of reusing transport1
+  })
+
+  it('classifies an identify() failure caused by a dropped cable as disconnected:true (reconnect guidance, not "still in bootloader, retry is safe")', async () => {
+    const { effects, flasher } = baseEffects()
+    flasher.identify = async () => {
+      throw new Error('Serial port closed')
+    }
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+
+    expect(store.getState().failedStep).toBe('identifying')
+    expect(store.getState().disconnected).toBe(true)
   })
 })
 

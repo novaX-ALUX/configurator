@@ -6,7 +6,7 @@ import { fetchManifest, type BoardFirmware, type FirmwareFile, type FirmwareMani
 import { parseApj, type ParsedApj } from '../../core/firmware/apj'
 import { FlashLog } from './FlashLog'
 import { DfuRecovery } from './DfuRecovery'
-import { useFlashSession, type FlashStep, type FlashTarget } from './flashSession'
+import { CANCELLABLE_STEPS, useFlashSession, type FlashStep, type FlashTarget } from './flashSession'
 import { formatBytes } from './firmwareUtils'
 
 type ManifestLoad = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'loaded'; manifest: FirmwareManifest }
@@ -280,6 +280,7 @@ export function FirmwarePage() {
           >
             <span className="text-[12.5px] font-bold text-nvx-text">{t('firmware.localTitle')}</span>
             <span className="text-[11.5px] text-nvx-faint">{t('firmware.localDropHint')}</span>
+            <span className="text-[10.5px] text-nvx-faint">{t('firmware.localChecksumNote')}</span>
             {localApj.kind === 'parsed' && (
               <span className="font-mono text-[11px] text-nvx-primarySoftText">
                 {localApj.fileName} · {t('firmware.localParsed', { boardId: localApj.apj.boardId, size: formatBytes(localApj.size) })}
@@ -372,6 +373,20 @@ export function FirmwarePage() {
               <div className="mb-3 h-2 overflow-hidden rounded-full bg-nvx-field">
                 <div className="h-full rounded-full bg-nvx-primary transition-[width]" style={{ width: `${progressPct}%` }} />
               </div>
+
+              {IN_FLIGHT_STEPS.includes(session.step) && (
+                <div className="mb-2.5 flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!CANCELLABLE_STEPS.includes(session.step)}
+                    onClick={() => session.cancel()}
+                    className="rounded-[8px] border border-nvx-borderStrong bg-white px-3.5 py-1.5 text-[11.5px] font-semibold text-nvx-text hover:bg-nvx-field disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {t('firmware.cancel')}
+                  </button>
+                  {!CANCELLABLE_STEPS.includes(session.step) && <span className="text-[11px] text-nvx-faint">{t('firmware.cancelUnavailable')}</span>}
+                </div>
+              )}
 
               {session.step === 'failed' && (
                 <div className="mb-2.5 flex items-center gap-3 rounded-[10px] border border-nvx-dangerBorder bg-nvx-dangerSoft px-3.5 py-2.5">

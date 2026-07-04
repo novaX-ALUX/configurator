@@ -117,6 +117,7 @@
 
     "localTitle": "Local .apj file",
     "localDropHint": "Drag a .apj file here, or click to choose one",
+    "localChecksumNote": "Local files aren't checksum-verified (online downloads are).",
     "localParsed": "Board ID {{boardId}} · {{size}}",
     "localParseError": "Couldn't read this file: {{message}}",
     "localBoardName": "Unknown board (ID {{boardId}})",
@@ -138,6 +139,7 @@
     "stepVerifyFlash": "Verify",
 
     "cancel": "Cancel",
+    "cancelUnavailable": "Can't cancel once erasing has started — see it through, or wait for it to finish and retry.",
     "failedAt": "Failed at \"{{step}}\": {{message}}",
     "safeRetryHint": "The board is still in its bootloader — retry is safe.",
     "disconnectedHint": "Connection lost. Reconnect the USB cable, then retry.",

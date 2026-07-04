@@ -117,6 +117,7 @@
 
     "localTitle": "ローカルの .apj ファイル",
     "localDropHint": ".apj ファイルをここにドラッグするか、クリックして選択してください",
+    "localChecksumNote": "ローカルファイルはチェックサム検証されません（オンラインダウンロードは検証されます）。",
     "localParsed": "ボード ID {{boardId}} · {{size}}",
     "localParseError": "このファイルを読み込めませんでした:{{message}}",
     "localBoardName": "不明なボード（ID {{boardId}}）",
@@ -138,6 +139,7 @@
     "stepVerifyFlash": "検証",
 
     "cancel": "キャンセル",
+    "cancelUnavailable": "消去が始まると中止できません — 完了を待ってから再試行してください。",
     "failedAt": "「{{step}}」で失敗しました:{{message}}",
     "safeRetryHint": "ボードはまだブートローダー状態です — 再試行しても安全です。",
     "disconnectedHint": "接続が切断されました。USB ケーブルを挿し直してから再試行してください。",

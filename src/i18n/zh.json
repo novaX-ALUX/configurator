@@ -117,6 +117,7 @@
 
     "localTitle": "本地 .apj 文件",
     "localDropHint": "将 .apj 文件拖到此处，或点击选择文件",
+    "localChecksumNote": "本地文件不会做校验和校验（在线下载会）。",
     "localParsed": "板型 ID {{boardId}} · {{size}}",
     "localParseError": "无法读取此文件:{{message}}",
     "localBoardName": "未知板型（ID {{boardId}}）",
@@ -138,6 +139,7 @@
     "stepVerifyFlash": "校验",
 
     "cancel": "取消",
+    "cancelUnavailable": "擦除一旦开始就无法取消 — 请等待完成后再重试。",
     "failedAt": "在“{{step}}”步骤失败:{{message}}",
     "safeRetryHint": "飞控仍处于 bootloader 状态 — 可以安全重试。",
     "disconnectedHint": "连接已断开，请重新插拔 USB 线后重试。",

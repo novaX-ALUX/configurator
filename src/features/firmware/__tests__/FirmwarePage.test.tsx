@@ -105,6 +105,47 @@ describe('FirmwarePage — online list (Tab 1)', () => {
   })
 })
 
+describe('FirmwarePage — Cancel affordance on the in-progress view', () => {
+  function runningTarget() {
+    return {
+      boardName: 'AF-F4_nano',
+      version: '0.2.0',
+      apjBoardId: 6203,
+      source: { kind: 'local' as const, fileName: 'x.apj', apj: { boardId: 6203, image: new Uint8Array(), imageSize: 0 } },
+    }
+  }
+
+  it('renders an enabled Cancel button while "connecting" (a safely-cancellable step), and clicking it returns the session to idle', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'connected' })
+    useFlashSession.setState({ step: 'connecting', target: runningTarget() })
+
+    render(<FirmwarePage />)
+
+    const cancelButton = screen.getByRole('button', { name: 'Cancel' })
+    expect(cancelButton).toBeEnabled()
+
+    fireEvent.click(cancelButton)
+
+    expect(useFlashSession.getState().step).toBe('idle')
+  })
+
+  it('disables the Cancel button (with an explanation) once programming has started — past the destructive point', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'connected' })
+    useFlashSession.setState({ step: 'programming', progress: { done: 512, total: 1024 }, target: runningTarget() })
+
+    render(<FirmwarePage />)
+
+    const cancelButton = screen.getByRole('button', { name: 'Cancel' })
+    expect(cancelButton).toBeDisabled()
+    expect(screen.getByText(/Can't cancel once erasing has started/)).toBeInTheDocument()
+
+    fireEvent.click(cancelButton) // no-op: disabled, and even if it fired, cancel() itself is a no-op for 'programming'
+    expect(useFlashSession.getState().step).toBe('programming')
+  })
+})
+
 describe('FirmwarePage — local .apj drop', () => {
   async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
     const input = new ReadableStream<Uint8Array>({

@@ -81,8 +81,8 @@ export type FlashStep =
   | 'done'
   | 'failed'
 
-/** Steps where nothing destructive has happened yet — `cancel()` is only honored from one of these (see module doc). */
-const CANCELLABLE_STEPS: readonly FlashStep[] = ['confirming', 'downloading', 'verifying', 'rebooting', 'connecting', 'identifying']
+/** Steps where nothing destructive has happened yet — `cancel()` is only honored from one of these (see module doc). Exported so the page can render a Cancel affordance that's enabled/disabled in exact lockstep with what `cancel()` itself will actually honor, rather than duplicating this list. */
+export const CANCELLABLE_STEPS: readonly FlashStep[] = ['confirming', 'downloading', 'verifying', 'rebooting', 'connecting', 'identifying']
 
 export type FlashSource =
   | { kind: 'online'; board: BoardFirmware; file: FirmwareFile }
@@ -305,16 +305,24 @@ export function createFlashSession(effects: FlashSessionEffects) {
       } catch (err) {
         if (!isCurrent()) return
         if (err instanceof FlashStepError) {
+          // Route through the same disconnected-pattern check classifyPx4Failure
+          // uses below, rather than hardcoding `disconnected: false` — an
+          // identify() (or rebooting/connecting) failure caused by the cable
+          // actually dropping must show "connection lost, reconnect" guidance,
+          // not "still in its bootloader, retry is safe" (those are different
+          // instructions to the user, and only one is true here).
+          const disconnected = DISCONNECTED_PATTERN.test(err.message)
           // A guard failure inside `flash()` (wrong board/oversized image/
           // capacity unknown) already reboots the device back to its app
           // before throwing, and a failed `identify()` at minimum means this
           // transport isn't currently talking to a cooperative bootloader —
-          // in both cases, force `retry()` to redo `connecting` from scratch
-          // rather than risk reusing a transport that no longer speaks the
-          // bootloader protocol (fails safe: worst case is one extra
-          // reconnect wait, not a confusing hang against a dead link).
-          if (err.step === 'identifying') closeBootloaderTransport()
-          set({ step: 'failed', failedStep: err.step, error: err.message, disconnected: false })
+          // in both cases (and whenever the message itself indicates a drop),
+          // force `retry()` to redo `connecting` from scratch rather than risk
+          // reusing a transport that no longer speaks the bootloader protocol
+          // (fails safe: worst case is one extra reconnect wait, not a
+          // confusing hang against a dead link).
+          if (err.step === 'identifying' || disconnected) closeBootloaderTransport()
+          set({ step: 'failed', failedStep: err.step, error: err.message, disconnected })
           log(`Failed: ${err.message}`)
           return
         }
@@ -414,6 +422,9 @@ export interface DfuSessionEffects {
 /** dfu.ts's `Progress` is a fixed 0-1000 permille scale, erase = first 0-300, write = 300-1000 (see that module's doc) — this is how erase/programming are distinguished here, since `Stm32Dfu.flash()` is one call with no phase-changed hook of its own. */
 const DFU_ERASE_PERMILLE_CEILING = 300
 
+/** DFU has no earlier non-destructive steps to cancel out of (no download/reboot dance — the device is already in DFU mode by the time a target exists), so this is just `['confirming']`. Exported (mirrors `CANCELLABLE_STEPS`) so the page renders a Cancel affordance in exact lockstep with what `cancel()` will actually honor. */
+export const DFU_CANCELLABLE_STEPS: readonly DfuStep[] = ['confirming']
+
 export interface DfuSessionState {
   step: DfuStep
   target: DfuTarget | null
@@ -486,7 +497,7 @@ export function createDfuFlashSession(effects: DfuSessionEffects) {
       },
 
       cancel() {
-        if (get().step !== 'confirming') return
+        if (!DFU_CANCELLABLE_STEPS.includes(get().step)) return
         runGeneration++
         set({ step: 'idle', target: null, progress: null, failedStep: null, error: null })
       },

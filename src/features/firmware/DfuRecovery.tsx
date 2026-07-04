@@ -5,7 +5,7 @@ import { STM32_DFU_PRODUCT_ID, STM32_DFU_VENDOR_ID, Stm32Dfu, type DfuFlashInfo 
 import { parseIntelHex, type ParsedHex } from '../../core/firmware/intelhex'
 import { sendEnterRomDfu } from '../../core/firmware/px4bl'
 import type { FirmwareManifest } from '../../core/firmware/manifest'
-import { createDfuFlashSession, type Stm32DfuLike } from './flashSession'
+import { DFU_CANCELLABLE_STEPS, createDfuFlashSession, type Stm32DfuLike } from './flashSession'
 import { FlashLog } from './FlashLog'
 import { formatBytes } from './firmwareUtils'
 
@@ -29,7 +29,7 @@ function currentTime(): number {
  * (CSS-hidden, not unmounted — see FirmwarePage's own doc) needs to know to
  * guard against abandoning a live DFU flash.
  */
-function DfuFlashControls({ flasher, localHex, onInFlight }: { flasher: Stm32DfuLike; localHex: LocalHexState; onInFlight?: (v: boolean) => void }) {
+export function DfuFlashControls({ flasher, localHex, onInFlight }: { flasher: Stm32DfuLike; localHex: LocalHexState; onInFlight?: (v: boolean) => void }) {
   const { t } = useTranslation()
   const session = useMemo(() => createDfuFlashSession({ flasher, now: currentTime }), [flasher])()
 
@@ -65,6 +65,20 @@ function DfuFlashControls({ flasher, localHex, onInFlight }: { flasher: Stm32Dfu
           <div className="mb-2 h-2 overflow-hidden rounded-full bg-nvx-field">
             <div className="h-full rounded-full bg-nvx-primary transition-[width]" style={{ width: `${progressPct}%` }} />
           </div>
+          {(session.step === 'erasing' || session.step === 'programming') && (
+            <div className="mb-2.5 flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!DFU_CANCELLABLE_STEPS.includes(session.step)}
+                onClick={() => session.cancel()}
+                className="rounded-[8px] border border-nvx-borderStrong bg-white px-3.5 py-1.5 text-[11.5px] font-semibold text-nvx-text hover:bg-nvx-field disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t('firmware.cancel')}
+              </button>
+              {/* DFU has no safely-cancellable window once a flash starts (see DFU_CANCELLABLE_STEPS's own doc) — this is always disabled here, shown for parity/discoverability with Tab 1's Cancel affordance. */}
+              {!DFU_CANCELLABLE_STEPS.includes(session.step) && <span className="text-[11px] text-nvx-faint">{t('firmware.cancelUnavailable')}</span>}
+            </div>
+          )}
           {session.step === 'failed' && (
             <div className="mb-2.5 flex items-center gap-3 rounded-[10px] border border-nvx-dangerBorder bg-nvx-dangerSoft px-3.5 py-2.5">
               <span className="text-[12px] font-semibold text-nvx-dangerHover">{session.error}</span>
