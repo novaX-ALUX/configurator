@@ -166,6 +166,15 @@ export function DfuRecovery({
     onInFlight?.(v)
   }
 
+  // `matchedBoard.dfuRecoveryAllowed` (gen_manifest.py semantics,
+  // task-1.1-brief.md) means a `_with_bl.hex` recovery image exists for this
+  // board in the manifest. It is intentionally NOT consumed here: this tab
+  // has no *online* recovery-image list to gate with it — both entry points
+  // below converge on a *local* file drop (module doc above). The manual
+  // BOOT0+local-file path is deliberately left ungated by it: BOOT0 ROM DFU
+  // is a hardware-universal STM32 feature, not board-specific, and it's
+  // exactly the path a bricked board with no working manifest lookup still
+  // needs.
   const matchedBoard = manifest?.boards.find((b) => identity?.boardId !== undefined && b.apjBoardId === identity.boardId)
   const softwareDfuAvailable = phase === 'connected' && !!matchedBoard?.softwareDfuAllowed
   // Neither entry point may run while this tab's own DFU flash is already
