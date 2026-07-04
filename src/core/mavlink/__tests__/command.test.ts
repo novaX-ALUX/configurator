@@ -154,6 +154,22 @@ describe('sendCommand', () => {
     await expect(promise).resolves.toMatchObject({ result: MAV_RESULT_ACCEPTED })
   })
 
+  it('rejects with CommandTimeoutError after opts.maxProgressResets consecutive IN_PROGRESS ACKs, without ever retransmitting', async () => {
+    const promise = sendCommand(router, target, { command: MAV_CMD_DO_SET_MODE }, { timeoutMs: 100, maxProgressResets: 2 })
+    const rejection = expect(promise).rejects.toBeInstanceOf(CommandTimeoutError)
+
+    await vi.advanceTimersByTimeAsync(0)
+    transport.feed(ackFrame({ command: MAV_CMD_DO_SET_MODE, result: MAV_RESULT_IN_PROGRESS, progress: 1 }))
+    await vi.advanceTimersByTimeAsync(0)
+    transport.feed(ackFrame({ command: MAV_CMD_DO_SET_MODE, result: MAV_RESULT_IN_PROGRESS, progress: 2 }))
+    await vi.advanceTimersByTimeAsync(0)
+    transport.feed(ackFrame({ command: MAV_CMD_DO_SET_MODE, result: MAV_RESULT_IN_PROGRESS, progress: 3 }))
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(transport.sent).toHaveLength(1) // IN_PROGRESS never triggers a retransmission, capped or not
+    await rejection
+  })
+
   it('retransmits on timeout with an incrementing confirmation field, then resolves once an ACK arrives', async () => {
     const promise = sendCommand(router, target, { command: MAV_CMD_DO_SET_MODE }, { timeoutMs: 100, retries: 2 })
 

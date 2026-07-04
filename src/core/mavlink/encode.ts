@@ -16,6 +16,24 @@ import { baseType, fullPayloadLength, type BaseType } from './decode'
 
 export type EncodableFieldValue = number | bigint | string
 
+/**
+ * Thrown by `encodePayload` for any input it refuses to encode: an unknown
+ * msgid, or (most commonly) a typo'd field name — `fieldName` is set only
+ * for the latter. A typo'd key would otherwise be silently ignored (the
+ * real field stays at its zero default) rather than surfacing as an error,
+ * which is worse than a thrown exception for a wire-protocol encoder.
+ */
+export class EncodeError extends Error {
+  constructor(
+    message: string,
+    public readonly msgid: number,
+    public readonly fieldName?: string,
+  ) {
+    super(message)
+    this.name = 'EncodeError'
+  }
+}
+
 function writeScalar(view: DataView, offset: number, type: BaseType, value: number | bigint): void {
   switch (type) {
     case 'uint8_t': view.setUint8(offset, Number(value)); return
@@ -53,7 +71,19 @@ function writeCharArray(payload: Uint8Array, offset: number, length: number, val
 export function encodePayload(defs: GeneratedDefs, msgid: number, fields: Record<string, EncodableFieldValue>): Uint8Array {
   const fieldDefs = defs.fieldsForMsgId(msgid)
   if (!fieldDefs) {
-    throw new Error(`encodePayload: unknown msgid ${msgid} (no field table in defs)`)
+    throw new EncodeError(`encodePayload: unknown msgid ${msgid} (no field table in defs)`, msgid)
+  }
+
+  const validNames = new Set(fieldDefs.map((f) => f.name))
+  for (const key of Object.keys(fields)) {
+    if (!validNames.has(key)) {
+      const messageName = defs.messageName(msgid)
+      throw new EncodeError(
+        `encodePayload: unrecognized field '${key}' for msgid ${msgid}${messageName ? ` (${messageName})` : ''} — check for a typo`,
+        msgid,
+        key,
+      )
+    }
   }
 
   const payload = new Uint8Array(fullPayloadLength(fieldDefs))

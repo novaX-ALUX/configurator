@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defs } from '../defs'
 import { decodePayload } from '../decode'
-import { encodePayload } from '../encode'
+import { encodePayload, EncodeError } from '../encode'
 import type { MavFrame } from '../frame'
 
 const HEARTBEAT_MSGID = 0
@@ -10,6 +10,9 @@ const COMMAND_ACK_MSGID = 77
 const SYSTEM_TIME_MSGID = 2
 const TIMESYNC_MSGID = 111
 const PARAM_VALUE_MSGID = 22
+const SYS_STATUS_MSGID = 1 // int8_t battery_remaining
+const SCALED_IMU_MSGID = 26 // int16_t xacc/yacc/zacc
+const GLOBAL_POSITION_INT_MSGID = 33 // int32_t lat/lon
 
 function frameOf(msgid: number, payload: Uint8Array): MavFrame {
   return { version: 2, sysid: 1, compid: 1, msgid, seq: 0, payload, incompatFlags: 0, signed: false }
@@ -71,6 +74,52 @@ describe('encodePayload: scalar fields, round-tripped through decodePayload', ()
     const decodedSystemTime = decodePayload(defs, frameOf(SYSTEM_TIME_MSGID, systemTimePayload))
     expect(decodedSystemTime.fields.time_unix_usec).toBe(1717171717171717n)
     expect(decodedSystemTime.fields.time_boot_ms).toBe(12345)
+  })
+})
+
+describe('encodePayload: negative signed-integer fields round-trip (every signed type class)', () => {
+  it('round-trips a negative int8_t (SYS_STATUS.battery_remaining = -1, "unknown")', () => {
+    const payload = encodePayload(defs, SYS_STATUS_MSGID, { battery_remaining: -1 })
+    const decoded = decodePayload(defs, frameOf(SYS_STATUS_MSGID, payload))
+    expect(decoded.fields.battery_remaining).toBe(-1)
+  })
+
+  it('round-trips negative int16_t fields (SCALED_IMU.xacc/yacc/zacc)', () => {
+    const payload = encodePayload(defs, SCALED_IMU_MSGID, { xacc: -32768, yacc: -1234, zacc: 1234 })
+    const decoded = decodePayload(defs, frameOf(SCALED_IMU_MSGID, payload))
+    expect(decoded.fields.xacc).toBe(-32768)
+    expect(decoded.fields.yacc).toBe(-1234)
+    expect(decoded.fields.zacc).toBe(1234)
+  })
+
+  it('round-trips negative int32_t fields (GLOBAL_POSITION_INT.lat/lon, southern/western hemisphere)', () => {
+    const payload = encodePayload(defs, GLOBAL_POSITION_INT_MSGID, { lat: -337814000, lon: -1502000 })
+    const decoded = decodePayload(defs, frameOf(GLOBAL_POSITION_INT_MSGID, payload))
+    expect(decoded.fields.lat).toBe(-337814000)
+    expect(decoded.fields.lon).toBe(-1502000)
+  })
+})
+
+describe('encodePayload: unrecognized field names', () => {
+  it('throws EncodeError (not a silent no-op) for a typo\'d field name', () => {
+    expect(() => encodePayload(defs, COMMAND_LONG_MSGID, { comfirmation: 2 })).toThrow(EncodeError)
+  })
+
+  it('EncodeError carries the msgid and offending field name', () => {
+    expect.assertions(3)
+    try {
+      encodePayload(defs, COMMAND_LONG_MSGID, { comfirmation: 2 })
+    } catch (err) {
+      expect(err).toBeInstanceOf(EncodeError)
+      expect((err as EncodeError).msgid).toBe(COMMAND_LONG_MSGID)
+      expect((err as EncodeError).fieldName).toBe('comfirmation')
+    }
+  })
+
+  it('does not throw when every key is a recognized field name', () => {
+    expect(() =>
+      encodePayload(defs, COMMAND_LONG_MSGID, { target_system: 1, target_component: 1, command: 400, confirmation: 0 }),
+    ).not.toThrow()
   })
 })
 

@@ -17,6 +17,21 @@
  * `MAV_RESULT_DENIED`/`FAILED`/etc. Deciding whether a non-ACCEPTED result
  * is a caller-visible failure is the caller's policy, not this layer's;
  * only a timeout or an aborted `signal` reject the returned promise.
+ *
+ * **Unbounded MAV_RESULT_IN_PROGRESS.** Every IN_PROGRESS ACK resets the
+ * per-attempt timeout window (see `SendCommandOpts.timeoutMs`) without
+ * consuming a retry, so a device that emits IN_PROGRESS forever holds the
+ * returned promise open indefinitely — bound the total wait with
+ * `opts.signal`, or rely on the `opts.maxProgressResets` safety cap (default
+ * 100), which rejects with `CommandTimeoutError` once exceeded even with no
+ * `signal` supplied.
+ *
+ * **No cross-call correlation.** COMMAND_ACK carries no nonce/request-id, so
+ * two concurrent `sendCommand` calls for the *same* `command` + `target`
+ * are indistinguishable at the protocol level — whichever ACK arrives first
+ * may resolve either in-flight call. Callers issuing the same command
+ * concurrently against the same target should not rely on each call
+ * observing "its own" ACK.
  */
 import { defs } from './defs'
 import { encodePayload } from './encode'
@@ -29,6 +44,7 @@ const MAV_RESULT_IN_PROGRESS = 5
 const DEFAULT_TIMEOUT_MS = 1500
 const DEFAULT_RETRIES = 2
 const MAX_CONFIRMATION = 255
+const DEFAULT_MAX_PROGRESS_RESETS = 100
 
 /**
  * Commands whose accidental retransmission is unsafe (reboot/shutdown,
@@ -67,12 +83,30 @@ export interface SendCommandOpts {
   timeoutMs?: number
   /** Retransmit attempts after the first, default 2 (so up to 3 attempts total). Forced to 0 for `DANGEROUS_COMMANDS`. */
   retries?: number
+  /**
+   * Note: two concurrent `sendCommand` calls for the same `command` +
+   * `target` cannot be told apart by their COMMAND_ACKs (no nonce in the
+   * protocol) — aborting one via its own `signal` does not protect it from
+   * resolving off an ACK actually meant for the other call, or vice versa.
+   */
   signal?: AbortSignal
   /** Called for every MAV_RESULT_IN_PROGRESS ACK received, with its `progress` (0-100 or 255=unknown) and `resultParam2`. */
   onProgress?: (progress: number, resultParam2: number) => void
+  /**
+   * Safety cap on consecutive MAV_RESULT_IN_PROGRESS resets, default 100.
+   * Since IN_PROGRESS resets the timeout window without limit, a
+   * misbehaving device emitting it forever would otherwise hold the
+   * returned promise open forever even with no `opts.signal` — once
+   * exceeded, `sendCommand` rejects with `CommandTimeoutError` instead.
+   */
+  maxProgressResets?: number
 }
 
-/** Rejected when every attempt (initial send + retries) timed out without a matching final-result COMMAND_ACK. */
+/**
+ * Rejected when every attempt (initial send + retries) timed out without a
+ * matching final-result COMMAND_ACK — or when `opts.maxProgressResets`
+ * consecutive MAV_RESULT_IN_PROGRESS ACKs arrived without a final result.
+ */
 export class CommandTimeoutError extends Error {
   constructor(
     public readonly command: number,
@@ -134,6 +168,7 @@ export function sendCommand(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const retries = dangerous ? 0 : (opts.retries ?? DEFAULT_RETRIES)
   const maxAttempts = retries + 1
+  const maxProgressResets = opts.maxProgressResets ?? DEFAULT_MAX_PROGRESS_RESETS
   const { signal } = opts
 
   return new Promise<CommandAck>((resolve, reject) => {
@@ -145,6 +180,7 @@ export function sendCommand(
     let settled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let attemptIndex = 0 // also the `confirmation` value of the most recent send
+    let progressResets = 0
 
     const unsubscribe = router.subscribe(
       { msgid: COMMAND_ACK_MSGID, sysid: target.sysid, compid: target.compid },
@@ -157,6 +193,11 @@ export function sendCommand(
 
         if (result === MAV_RESULT_IN_PROGRESS) {
           opts.onProgress?.(progress, resultParam2)
+          progressResets++
+          if (progressResets > maxProgressResets) {
+            finish(() => reject(new CommandTimeoutError(cmd.command, attemptIndex + 1)))
+            return
+          }
           armTimer() // keep waiting — reset the window, not a retry
           return
         }
@@ -194,11 +235,19 @@ export function sendCommand(
         return
       }
       attemptIndex = Math.min(attemptIndex + 1, MAX_CONFIRMATION)
-      doSend(attemptIndex)
-      armTimer()
+      if (doSend(attemptIndex)) armTimer()
     }
 
-    function doSend(confirmation: number): void {
+    /**
+     * Returns whether the send was actually dispatched (`true`) vs. failed
+     * synchronously and already settled the promise via `finish()`
+     * (`false`) — callers must skip re-arming the timer in the `false`
+     * case, otherwise a dangling timer is left running after the promise
+     * has already rejected (harmless, since `finish()`'s `settled` guard
+     * no-ops it when it eventually fires, but wasteful and confusing to
+     * leave outstanding).
+     */
+    function doSend(confirmation: number): boolean {
       // Encoding is synchronous and (for COMMAND_LONG's always-numeric
       // fields) shouldn't throw, but this call site is reached both from
       // inside the Promise executor (doSend(0) below) and from a
@@ -212,14 +261,14 @@ export function sendCommand(
         payload = encodeCommandLong(target, cmd, confirmation)
       } catch (err) {
         finish(() => reject(err))
-        return
+        return false
       }
       router.send({ msgid: COMMAND_LONG_MSGID, payload }).catch((err: unknown) => {
         finish(() => reject(err))
       })
+      return true
     }
 
-    doSend(0)
-    armTimer()
+    if (doSend(0)) armTimer()
   })
 }
