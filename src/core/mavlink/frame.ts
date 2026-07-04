@@ -38,8 +38,19 @@ const CRC_LEN = 2
 const SIGNATURE_LEN = 13
 const MAVLINK_IFLAG_SIGNED = 0x01
 
+/**
+ * Concatenates `a` (previously-retained bytes, already owned by this
+ * module) with `b` (the caller's just-pushed chunk), always returning a
+ * buffer this module owns exclusively. The empty-`a` fast path still
+ * copies `b` (via `.slice()`) rather than returning it directly: a
+ * fixed-buffer read loop (`port.read(sharedBuf)`) commonly reuses/overwrites
+ * `sharedBuf` immediately after `push()` returns, and if a partial frame is
+ * retained by reference into that buffer, the next read silently corrupts
+ * it. Copying here is the one place that ownership boundary is crossed, so
+ * every other subarray/slice derived from the result is safe to retain.
+ */
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
-  if (a.length === 0) return b
+  if (a.length === 0) return b.slice()
   const out = new Uint8Array(a.length + b.length)
   out.set(a, 0)
   out.set(b, a.length)
@@ -56,8 +67,12 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
  * "signed") is discarded by advancing exactly one byte past its magic byte
  * and rescanning for the next magic byte — this guarantees a genuine frame
  * immediately following garbage/corruption is never lost. `stats.dropped`
- * counts every discarded frame regardless of reason; `crcErrors`/`badMsgId`
- * are the specific-reason subsets of that same total.
+ * counts every rejected sync candidate (a magic byte that turned out not to
+ * start a valid frame), not raw discarded bytes — a multi-byte garbage run
+ * between two good frames is scanned byte-by-byte but only increments
+ * `dropped` once it lands on something that looks like a frame candidate
+ * (a 0xFD/0xFE byte) and that candidate then fails validation.
+ * `crcErrors`/`badMsgId` are the specific-reason subsets of that same total.
  */
 export class FrameParser {
   private buf: Uint8Array = new Uint8Array(0)
@@ -65,6 +80,13 @@ export class FrameParser {
 
   constructor(private readonly defs: CrcExtraLookup) {}
 
+  /**
+   * Ownership contract: `bytes` is only read during this call. `push()`
+   * never retains a reference to the caller's array (any bytes it needs to
+   * buffer for the next call are copied first, see `concat()`) — the
+   * caller is free to mutate or reuse `bytes` (e.g. a fixed-buffer read
+   * loop) immediately after `push()` returns.
+   */
   push(bytes: Uint8Array): MavFrame[] {
     this.buf = concat(this.buf, bytes)
     const out: MavFrame[] = []

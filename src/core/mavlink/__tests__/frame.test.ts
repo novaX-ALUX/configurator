@@ -112,6 +112,30 @@ describe('FrameParser: round trip', () => {
     expect(third).toHaveLength(1)
     expect(third[0].seq).toBe(3)
   })
+
+  it('does not corrupt a retained partial frame when the caller reuses/overwrites its read buffer after push() returns', () => {
+    // Regression test: a fixed-buffer read loop (e.g. `port.read(sharedBuf)`)
+    // hands push() a *view* onto a buffer it intends to immediately reuse for
+    // the next read. If FrameParser retains that exact memory (rather than a
+    // copy) across calls, the caller's next read silently corrupts the
+    // buffered partial frame. Reproduces the reviewer's exact scenario: a
+    // 5-byte partial header delivered from a shared, subsequently-overwritten
+    // buffer, followed by the remainder from an unrelated buffer.
+    const encoded = encodeFrame(defs, { msgid: HEARTBEAT_MSGID, payload: heartbeatPayload() }, 3, 1, 1)
+    const parser = new FrameParser(defs)
+
+    const shared = new Uint8Array(5)
+    shared.set(encoded.subarray(0, 5))
+    const first = parser.push(shared) // FrameParser must not retain `shared` itself
+    expect(first).toHaveLength(0)
+
+    shared.fill(0xee) // caller reuses/overwrites its read buffer, as a real read loop would
+
+    const rest = parser.push(encoded.subarray(5)) // delivered from an unrelated buffer
+    expect(rest).toHaveLength(1)
+    expect(rest[0].seq).toBe(3)
+    expect(Array.from(rest[0].payload)).toEqual([0, 0, 0, 0, 6, 8, 0, 0, 3])
+  })
 })
 
 describe('FrameParser: resync and error accounting', () => {
@@ -174,6 +198,29 @@ describe('FrameParser: resync and error accounting', () => {
 
     expect(frames).toHaveLength(1)
     expect(frames[0].seq).toBe(2)
+  })
+
+  it('resyncs past a garbage run that coincidentally contains a 0xFD byte (a false frame-start candidate), recovering the following good frame', () => {
+    // Named risk 2(c): garbage isn't guaranteed to avoid the magic byte
+    // value. findMagic() will land on the embedded 0xFD, treat it as a
+    // frame candidate, and read the following garbage/frame bytes as if
+    // they were a real header — here that reads as a disallowed incompat
+    // flag bit, so it's rejected before CRC is even checked. Whatever the
+    // specific rejection reason, the parser must resync past *that* byte
+    // too rather than getting stuck or skipping the genuine frame after it.
+    const garbage = Uint8Array.from([0x11, 0xfd, 0x22, 0x33]) // 0xfd at index 1 is not a real frame start
+    const encoded = encodeFrame(defs, { msgid: HEARTBEAT_MSGID, payload: heartbeatPayload() }, 13, 1, 1)
+
+    const combined = new Uint8Array(garbage.length + encoded.length)
+    combined.set(garbage, 0)
+    combined.set(encoded, garbage.length)
+
+    const parser = new FrameParser(defs)
+    const frames = parser.push(combined)
+
+    expect(frames).toHaveLength(1)
+    expect(frames[0].seq).toBe(13)
+    expect(parser.stats.dropped).toBeGreaterThanOrEqual(1)
   })
 
   it('buffers (does not discard) a frame whose claimed length exceeds the bytes delivered so far, then completes it once the rest arrives', () => {
