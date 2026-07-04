@@ -37,12 +37,22 @@ describe('TopBar', () => {
     expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
   })
 
-  it('lost: shows the link-lost chip', () => {
-    useConnectionStore.setState({ phase: 'lost' })
+  it('lost: shows the link-lost chip and still offers Disconnect', () => {
+    const disconnectCalls: number[] = []
+    useConnectionStore.setState({
+      phase: 'lost',
+      disconnect: () => {
+        disconnectCalls.push(1)
+        return Promise.resolve()
+      },
+    })
 
     render(<TopBar />)
 
     expect(screen.getByText('Link lost — retrying…')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
+    expect(disconnectCalls).toEqual([1])
   })
 
   it('connected with a known board: shows board id + fw version chip, port info, and Disconnect', () => {

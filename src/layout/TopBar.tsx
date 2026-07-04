@@ -109,19 +109,26 @@ export function TopBar() {
       )}
 
       {phase === 'connected' && (
-        <>
-          <span className="inline-flex items-center gap-2 rounded-full bg-nvx-successSoft px-3 py-1.5">
-            <span className="h-[7px] w-[7px] animate-nvxPulse rounded-full bg-nvx-success" />
-            <span className="text-[12.5px] font-bold text-nvx-successText">
-              {identity?.vehicleName ??
-                (identity?.boardId !== undefined
-                  ? `${t('topbar.boardIdLabel')} ${identity.boardId}`
-                  : t('topbar.unknownBoard'))}
-            </span>
-            {identity?.fwVersion && (
-              <span className="font-mono text-[10.5px] text-nvx-successMuted">{identity.fwVersion}</span>
-            )}
+        <span className="inline-flex items-center gap-2 rounded-full bg-nvx-successSoft px-3 py-1.5">
+          <span className="h-[7px] w-[7px] animate-nvxPulse rounded-full bg-nvx-success" />
+          <span className="text-[12.5px] font-bold text-nvx-successText">
+            {identity?.vehicleName ??
+              (identity?.boardId !== undefined
+                ? `${t('topbar.boardIdLabel')} ${identity.boardId}`
+                : t('topbar.unknownBoard'))}
           </span>
+          {identity?.fwVersion && (
+            <span className="font-mono text-[10.5px] text-nvx-successMuted">{identity.fwVersion}</span>
+          )}
+        </span>
+      )}
+
+      {/* Disconnect is available whenever a session exists, not just while
+          fully 'connected' — 'lost' still has an open transport/router
+          (store.disconnect() works there too), so the user must be able to
+          give up on a stalled link instead of being stuck until it recovers. */}
+      {(phase === 'connected' || phase === 'lost') && (
+        <>
           {portLabel(portInfo) && (
             <span className="rounded-lg border border-nvx-border bg-nvx-field px-2.5 py-1.5 font-mono text-[11px] text-nvx-muted">
               {portLabel(portInfo)} · {baud}
