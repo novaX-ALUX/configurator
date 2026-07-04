@@ -4,6 +4,7 @@ import { TopBar } from './layout/TopBar'
 import { PagePlaceholder } from './layout/PagePlaceholder'
 import { DisconnectToast } from './layout/DisconnectToast'
 import { StatusPanel } from './features/debug/StatusPanel'
+import { ParamsPage } from './features/params/ParamsPage'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
 
 function App() {
@@ -17,6 +18,8 @@ function App() {
       <main className="col-start-2 row-start-2 min-w-0 overflow-auto">
         {activePage === 'debug' ? (
           <StatusPanel />
+        ) : activePage === 'parameters' ? (
+          <ParamsPage />
         ) : (
           page && <PagePlaceholder titleKey={page.labelKey} />
         )}
