@@ -2,6 +2,7 @@ import './i18n'
 import { Sidebar } from './layout/Sidebar'
 import { TopBar } from './layout/TopBar'
 import { PagePlaceholder } from './layout/PagePlaceholder'
+import { StatusPanel } from './features/debug/StatusPanel'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
 
 function App() {
@@ -13,7 +14,11 @@ function App() {
       <TopBar />
       <Sidebar />
       <main className="col-start-2 row-start-2 min-w-0 overflow-auto">
-        {page && <PagePlaceholder titleKey={page.labelKey} />}
+        {activePage === 'debug' ? (
+          <StatusPanel />
+        ) : (
+          page && <PagePlaceholder titleKey={page.labelKey} />
+        )}
       </main>
     </div>
   )
