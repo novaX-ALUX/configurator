@@ -102,8 +102,24 @@ interface USBOutTransferResult {
   status: USBTransferStatus
 }
 
+/** One alternate setting of a `USBInterface` (added for task 3.3's DFU engine — the DfuSe alt-0 "Internal Flash" interface's `interfaceName` carries the flash sector-layout string). */
+interface USBAlternateInterface {
+  readonly alternateSetting: number
+  readonly interfaceClass: number
+  readonly interfaceSubclass: number
+  readonly interfaceProtocol: number
+  readonly interfaceName: string
+}
+
+/** Added for task 3.3's DFU engine (`dfu.ts`), which finds the DFU interface (`interfaceClass === 0xfe`) and reads its alt-0 `interfaceName`. */
+interface USBInterface {
+  readonly interfaceNumber: number
+  readonly alternates: USBAlternateInterface[]
+}
+
 interface USBConfiguration {
   configurationValue: number
+  interfaces: USBInterface[]
 }
 
 interface USBDevice extends EventTarget {
