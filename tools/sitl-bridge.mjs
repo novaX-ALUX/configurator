@@ -68,6 +68,10 @@ wss.on('connection', (ws) => {
   })
   socket.on('data', (chunk) => {
     bytesTcpToWs += chunk.length
+    // No backpressure handling: `ws.send()`/`socket.write()` return values
+    // (and `ws.bufferedAmount`/socket 'drain') are ignored on both sides
+    // below. Accepted for this dev-only, low-rate (MAVLink over a local
+    // link) tool — not something to rely on for a high-throughput bridge.
     if (ws.readyState === ws.OPEN) ws.send(chunk)
   })
   socket.on('error', (err) => {
@@ -101,6 +105,12 @@ wss.on('error', (err) => {
 
 function shutdown() {
   log('SIGINT received, shutting down')
+  // Best-effort: `client.terminate()` and each paired TCP `socket.destroy()`
+  // (triggered asynchronously by the ws 'close' handler above) may not have
+  // finished before `process.exit(0)` runs once `wss.close()`'s callback
+  // fires — acceptable for a manually-launched dev tool the OS will finish
+  // tearing down regardless, not something a script consuming this bridge
+  // should depend on for ordering.
   for (const client of wss.clients) client.terminate()
   wss.close(() => process.exit(0))
 }

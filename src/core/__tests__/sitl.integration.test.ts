@@ -95,20 +95,51 @@ describe.skipIf(process.env.SITL !== '1')('SITL integration (real ArduPilot via 
 
           const original = store.get(TEST_PARAM)
           expect(original).toBeDefined()
+          const originalValue = original!.value
 
           // Toggle the low bit: always a different, still-valid int32
           // bitmask value, regardless of what SITL's default happens to be.
-          const candidateValue = original!.value ^ 1
+          const candidateValue = originalValue ^ 1
 
-          const written = await store.set(TEST_PARAM, candidateValue)
-          expect(written.value).toBe(candidateValue)
-          expect(store.get(TEST_PARAM)?.value).toBe(candidateValue)
-          console.info(`SITL integration: ${TEST_PARAM} ${original!.value} -> ${written.value} (set confirmed)`)
-
-          const restored = await store.set(TEST_PARAM, original!.value)
-          expect(restored.value).toBe(original!.value)
-          expect(store.get(TEST_PARAM)?.value).toBe(original!.value)
-          console.info(`SITL integration: ${TEST_PARAM} restored to ${restored.value}`)
+          // Non-pollution is the whole point of this test (see spec §8's
+          // write-safety rule, cited in params.ts's own module doc) — so the
+          // restore below must run even if an assertion in between throws,
+          // and a failure during that best-effort restore must never mask
+          // the original failure it's trying to clean up after. `succeeded`
+          // is only set true right before the `finally`, so anything that
+          // throws first (the `set()` call itself, or either `expect()`)
+          // takes the swallow-and-log branch instead of the assert branch.
+          let succeeded = false
+          try {
+            const written = await store.set(TEST_PARAM, candidateValue)
+            console.info(`SITL integration: ${TEST_PARAM} ${originalValue} -> ${written.value} (set confirmed)`)
+            expect(written.value).toBe(candidateValue)
+            expect(store.get(TEST_PARAM)?.value).toBe(candidateValue)
+            succeeded = true
+          } finally {
+            if (succeeded) {
+              // Happy path: restoring (and confirming it) is itself part of
+              // what this test asserts, so a failure here is a real test
+              // failure, not something to swallow.
+              const restored = await store.set(TEST_PARAM, originalValue)
+              console.info(`SITL integration: ${TEST_PARAM} restored to ${restored.value}`)
+              expect(restored.value).toBe(originalValue)
+              expect(store.get(TEST_PARAM)?.value).toBe(originalValue)
+            } else {
+              // Something above already threw — restore best-effort and log
+              // rather than throw, so the original failure (the one the
+              // caller actually needs to see) still propagates.
+              try {
+                await store.set(TEST_PARAM, originalValue)
+                console.info(`SITL integration: ${TEST_PARAM} restored to ${originalValue} (best-effort, after an earlier failure)`)
+              } catch (restoreErr) {
+                console.error(
+                  `SITL integration: FAILED to restore ${TEST_PARAM} to ${originalValue} after an earlier failure — SITL's eeprom.bin may be left modified`,
+                  restoreErr,
+                )
+              }
+            }
+          }
         } finally {
           store.dispose()
         }
