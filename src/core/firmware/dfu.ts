@@ -56,6 +56,7 @@ export interface DfuFlashInfo {
   sectors: DfuSector[]
 }
 
+/** `total` is always 1000 (a fixed permille scale spanning erase 0-300 + write 300-1000) — NOT raw bytes like `px4bl.ts`'s `Progress` (same name, different module, different units; each is independent, not a shared type). */
 export type Progress = (done: number, total: number) => void
 
 export class DfuError extends Error {}
@@ -67,7 +68,10 @@ function isXferError(err: unknown): boolean {
   return name === 'NetworkError' || /transfer error|stall|babble|DNLOAD/i.test(message)
 }
 
-/** Parses a DfuSe interface name, e.g. `"@Internal Flash /0x08000000/04*016Kg,01*064Kg,07*128Kg"`. */
+/** Real STM32 DfuSe layouts have at most a few dozen sectors — this bounds a malformed/spoofed descriptor string (the device is USB-authorized by the user, but its descriptor content isn't otherwise trusted) from driving an unbounded loop/allocation here. */
+const MAX_SECTORS = 4096
+
+/** Parses a DfuSe interface name, e.g. `"@Internal Flash /0x08000000/04*016Kg,01*064Kg,07*128Kg"`. Returns `[]` (unresolvable) rather than a partial layout if the descriptor implies more than `MAX_SECTORS`. */
 function parseMemoryLayout(name: string): DfuSector[] {
   const match = name.match(/\/0x([0-9a-fA-F]+)\/(.+)$/)
   if (!match) return []
@@ -80,6 +84,7 @@ function parseMemoryLayout(name: string): DfuSector[] {
     const unit = sectorMatch[3] === 'K' ? 1024 : sectorMatch[3] === 'M' ? 1024 * 1024 : 1
     const size = parseInt(sectorMatch[2], 10) * unit
     for (let i = 0; i < count; i++) {
+      if (out.length >= MAX_SECTORS) return []
       out.push({ start: addr, size })
       addr += size
     }
@@ -106,7 +111,19 @@ export class Stm32Dfu {
 
   constructor(private readonly dev: USBDevice) {}
 
-  /** Idempotent/memoized: opens the device, claims the DFU interface, and resolves its flash layout, exactly once. */
+  /**
+   * Idempotent/memoized: opens the device, claims the DFU interface, and
+   * resolves its flash layout, exactly once — triggered lazily by the
+   * first `flashInfo()` call rather than an eager `open()`-style
+   * constructor/factory step (contrast `SerialTransport`, which opens
+   * eagerly per `open()` call). This mirrors `flashInfo()`'s own signature
+   * being async (`Promise<DfuFlashInfo>`, unlike the reference
+   * `STM32Dfu.flashInfo()`'s synchronous getter): the string-descriptor
+   * fallback (see module doc) needs a `controlTransferIn` round trip, so
+   * layout resolution is unavoidably async, and doing it lazily on first
+   * use avoids requiring a separate async static factory before
+   * construction just to open/claim/resolve up front.
+   */
   private async ensureOpen(): Promise<void> {
     if (this.sectors) return
     if (!this.opening) this.opening = this.doOpen()
@@ -206,16 +223,9 @@ export class Stm32Dfu {
     throw new DfuError('status poll timeout')
   }
 
-  /** Best-effort: clears a latched error and ABORTs back to idle after a failed transfer. */
+  /** Best-effort: clears a latched error (via `clearIfError()`) and ABORTs back to idle after a failed transfer. */
   private async recover(): Promise<void> {
-    try {
-      const st = await this.getStatus()
-      if (st.state === DFU_STATE_ERROR) {
-        await this.dev.controlTransferOut({ requestType: 'class', recipient: 'interface', request: CLRSTATUS, value: 0, index: this.iface })
-      }
-    } catch {
-      // Best-effort.
-    }
+    await this.clearIfError()
     try {
       await this.dev.controlTransferOut({ requestType: 'class', recipient: 'interface', request: ABORT, value: 0, index: this.iface })
     } catch {
@@ -228,15 +238,10 @@ export class Stm32Dfu {
     }
   }
 
-  /** DfuSe special command (Set Address 0x21 / Erase page 0x41). */
+  /** DfuSe special command (Set Address 0x21 / Erase page 0x41). Also used directly for a plain address-pointer set (`dfuseCmd(0x21, addr)`) — there is no separate `setAddress()`. */
   private async dfuseCmd(cmd: number, addr?: number): Promise<void> {
     const payload = addr === undefined ? new Uint8Array([cmd]) : new Uint8Array([cmd, addr & 0xff, (addr >>> 8) & 0xff, (addr >>> 16) & 0xff, (addr >>> 24) & 0xff])
     await this.dnload(0, payload)
-    await this.pollIdle()
-  }
-
-  private async setAddress(addr: number): Promise<void> {
-    await this.dnload(0, new Uint8Array([0x21, addr & 0xff, (addr >>> 8) & 0xff, (addr >>> 16) & 0xff, (addr >>> 24) & 0xff]))
     await this.pollIdle()
   }
 
@@ -275,9 +280,9 @@ export class Stm32Dfu {
     const base = info.sectors[0].start
     const totalSize = info.sectors.reduce((a, s) => a + s.size, 0)
 
-    if (hex.maxAddress > base + totalSize) {
+    if (hex.minAddress < base || hex.maxAddress > base + totalSize) {
       throw new DfuError(
-        `Chip mismatch — flash aborted, nothing erased. This firmware writes up to 0x${hex.maxAddress.toString(16)}, but the connected chip's flash is only ${info.flashKB} KB (up to 0x${(base + totalSize).toString(16)}).`,
+        `Chip mismatch — flash aborted, nothing erased. This firmware writes 0x${hex.minAddress.toString(16)}-0x${hex.maxAddress.toString(16)}, outside the connected chip's flash range 0x${base.toString(16)}-0x${(base + totalSize).toString(16)} (${info.flashKB} KB).`,
       )
     }
     if (expectedFamily && info.family !== 'unknown' && expectedFamily !== info.family) {
@@ -300,7 +305,7 @@ export class Stm32Dfu {
         const addr = seg.addr + off
         const chunk = new Uint8Array(seg.data.subarray(off, off + size))
         try {
-          await this.setAddress(addr)
+          await this.dfuseCmd(0x21, addr)
           await this.dnload(2, chunk)
           await this.pollIdle()
           off += size

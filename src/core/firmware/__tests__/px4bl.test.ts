@@ -181,6 +181,16 @@ describe('Px4Flasher.flash guards (must run before erase)', () => {
     expect(flasher.state).toBe('failed')
     expect(transport.sent.some((b) => b[0] === CHIP_ERASE)).toBe(false)
   })
+
+  it('rejects a bootloader reporting 0 bytes of flash — capacity cannot be verified, so it fails closed instead of skipping the check', async () => {
+    transport.flashSize = 0
+    const flasher = new Px4Flasher(transport)
+
+    await expect(flasher.flash(makeApj(), vi.fn())).rejects.toThrow(/flash capacity unknown/i)
+
+    expect(flasher.state).toBe('failed')
+    expect(transport.sent.some((b) => b[0] === CHIP_ERASE)).toBe(false)
+  })
 })
 
 describe('Px4Flasher.flash happy path', () => {

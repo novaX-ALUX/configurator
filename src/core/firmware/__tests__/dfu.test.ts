@@ -183,6 +183,15 @@ describe('Stm32Dfu.flashInfo', () => {
 
     await expect(dfu.flashInfo()).rejects.toThrow(/could not determine the flash layout/i)
   })
+
+  it('treats an absurd sector count in the descriptor as unresolvable, rather than looping unbounded', async () => {
+    // A malformed/hostile descriptor claiming e.g. 999999 * 16K sectors — must not hang or
+    // allocate unbounded memory; treated the same as "no usable descriptor".
+    const dev = new FakeStm32Device('@Internal Flash /0x08000000/999999*016Kg')
+    const dfu = new Stm32Dfu(dev as unknown as USBDevice)
+
+    await expect(dfu.flashInfo()).rejects.toThrow(/could not determine the flash layout/i)
+  })
 })
 
 describe('Stm32Dfu.flash chip guard (must run before erase)', () => {
@@ -201,6 +210,15 @@ describe('Stm32Dfu.flash chip guard (must run before erase)', () => {
     const hex = makeHex()
 
     await expect(dfu.flash(hex, vi.fn(), 'H7')).rejects.toThrow(/chip mismatch/i)
+    expect(dev.eraseCalls).toHaveLength(0)
+  })
+
+  it('rejects a hex file whose lowest address is below the chip flash base — chip mismatch, nothing erased', async () => {
+    const dev = makeF4Device()
+    const dfu = new Stm32Dfu(dev as unknown as USBDevice)
+    const hex = makeHex({ minAddress: 0x08000000 - 0x10 })
+
+    await expect(dfu.flash(hex, vi.fn())).rejects.toThrow(/chip mismatch/i)
     expect(dev.eraseCalls).toHaveLength(0)
   })
 

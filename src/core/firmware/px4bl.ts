@@ -175,6 +175,7 @@ export interface Px4Identify {
   blRev: number
 }
 
+/** `done`/`total` are raw bytes of the (4-byte-padded) image programmed so far — NOT a 0-1000 permille scale like `dfu.ts`'s `Progress` (same name, different module, different units; each is independent, not a shared type). */
 export type Progress = (done: number, total: number) => void
 
 export class Px4Flasher {
@@ -317,7 +318,18 @@ export class Px4Flasher {
         `Wrong firmware — flash aborted, nothing erased. This firmware is for board ID ${apj.boardId}, but the connected board is ID ${info.boardId}.`,
       )
     }
-    if (info.flashSize && apj.image.length > info.flashSize) {
+    if (info.flashSize === 0) {
+      // Fail closed rather than silently skip the capacity check: a real PX4 bootloader
+      // never reports 0 bytes of flash, so this means either a malfunctioning device or one
+      // that isn't actually a PX4 bootloader — either way, capacity cannot be verified, and
+      // "image fits flashSize" (the hard gate) cannot be satisfied by an unknown capacity.
+      await this.rebootToApp()
+      this.state_ = 'failed'
+      throw new Px4FlashError(
+        'Flash capacity unknown — flash aborted, nothing erased. The bootloader reported 0 bytes of flash (INFO_FLASH_SIZE), so the image-fits-flash guard cannot be verified.',
+      )
+    }
+    if (apj.image.length > info.flashSize) {
       await this.rebootToApp()
       this.state_ = 'failed'
       throw new Px4FlashError(
