@@ -258,6 +258,17 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
         cleanupFns.push(unsubStatusText)
 
         const unsubIdentity = router.subscribe({ msgid: AUTOPILOT_VERSION_MSGID }, (msg) => {
+          // `product_id` -> `boardId` is a plausible-but-unverified mapping,
+          // not something confirmed against ArduPilot firmware source: the
+          // MAVLink common spec only describes vendor_id/product_id as
+          // generic "USB-style IDs", but Mission Planner/QGroundControl-style
+          // GCS tools are known to display ArduPilot's product_id as a
+          // "board ID". If real-hardware verification ever shows this field
+          // means something else (or is always 0) on some firmware, this is
+          // the only line to change — identity is display-only either way
+          // (decisions-m1: board_id from AUTOPILOT_VERSION never gates
+          // anything), so a wrong/absent value here cannot break anything
+          // else, only mislabel the topbar chip.
           const productId = Number(msg.fields.product_id)
           set({
             identity: {
