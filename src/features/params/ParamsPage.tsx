@@ -26,6 +26,9 @@ type LoadState =
 /** Top ~12 groups by count (task brief), plus an "All" chip the component adds itself. */
 const GROUP_CHIP_MAX = 12
 
+/** How long a successful write's 'ok' row stays visible in the drawer before it clears (spec: per-row status includes 'ok', not an immediate vanish). */
+const WRITE_OK_DISPLAY_MS = 2000
+
 // ParamFetchBusyError (a second concurrent fetchAll()) isn't special-cased
 // here: handleLoad's only callers are the idle/error states' own buttons,
 // neither of which renders while a fetch is already in flight, so this UI
@@ -96,6 +99,13 @@ export function ParamsPage() {
   const [discardedNotice, setDiscardedNotice] = useState<number | null>(null)
 
   const prevParamStoreRef = useRef(paramStore)
+  // Mirrors `writeStatus` for the scheduled ok-then-clear timeout below to
+  // read the *current* state without itself being a dependency that would
+  // force re-registering that timeout — see handleWriteAll.
+  const writeStatusRef = useRef(writeStatus)
+  useEffect(() => {
+    writeStatusRef.current = writeStatus
+  }, [writeStatus])
 
   // A fresh ParamStore (new connect() generation — never reused, per
   // router.ts's own architectural fact) or its disappearance (disconnect)
@@ -221,8 +231,21 @@ export function ParamsPage() {
       setWriteStatus((s) => new Map(s).set(name, { kind: 'writing' }))
       try {
         await paramStore.set(name, value)
-        setPending((p) => withoutKey(p, name))
-        setWriteStatus((s) => withoutKey(s, name))
+        // Show "Written and verified" for a moment rather than vanishing the
+        // row immediately (spec: per-row status is writing/ok/mismatch/
+        // timeout/busy — 'ok' is a real state, not just an instant clear).
+        // Scheduled, not awaited: a fixed per-row delay must not slow down
+        // the rest of the sequential batch.
+        setWriteStatus((s) => new Map(s).set(name, { kind: 'ok' }))
+        setTimeout(() => {
+          // Skip the clear if this name's status is no longer 'ok' by the
+          // time this fires — the user re-staged (stage() clears writeStatus)
+          // or discarded it in the meantime, and clearing `pending` here
+          // would silently wipe out that newer edit.
+          if (writeStatusRef.current.get(name)?.kind !== 'ok') return
+          setPending((p) => withoutKey(p, name))
+          setWriteStatus((s) => withoutKey(s, name))
+        }, WRITE_OK_DISPLAY_MS)
       } catch (err) {
         if (err instanceof ParamStoreDisposedError) break // disposed while *this* set() was in flight — same reasoning as above
         setWriteStatus((s) => new Map(s).set(name, writeErrorStatus(err)))
@@ -275,7 +298,7 @@ export function ParamsPage() {
   }
 
   if (load.kind === 'loading') {
-    const pct = load.total ? Math.min(100, Math.round((load.got / load.total) * 100)) : undefined
+    const pct = load.total !== undefined ? Math.min(100, Math.round((load.got / load.total) * 100)) : undefined
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 px-5">
         <div className="font-heading text-[19px] font-bold text-nvx-text">{t('params.title')}</div>

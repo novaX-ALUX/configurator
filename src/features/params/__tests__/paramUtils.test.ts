@@ -50,6 +50,10 @@ describe('deriveGroup', () => {
   it('falls back to the whole name when there is no underscore', () => {
     expect(deriveGroup('SINGLETON')).toBe('SINGLETON')
   })
+
+  it('falls back to the whole name for a leading underscore, instead of an empty-string group', () => {
+    expect(deriveGroup('_FOO_BAR')).toBe('_FOO_BAR')
+  })
 })
 
 describe('topGroups', () => {

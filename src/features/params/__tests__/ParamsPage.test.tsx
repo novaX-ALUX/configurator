@@ -292,6 +292,53 @@ describe('ParamsPage', () => {
       expect(screen.getByText('Editor matches the board — edit any value to queue a change.')).toBeInTheDocument()
     })
 
+    it('a successful write shows "Written and verified" before the row clears from the drawer', async () => {
+      const { transport, paramStore } = await renderLoaded([{ name: 'THR_MIN', value: 0 }])
+      const input = screen.getByDisplayValue('0')
+      fireEvent.change(input, { target: { value: '0.5' } })
+      fireEvent.blur(input)
+      fireEvent.click(screen.getByRole('button', { name: 'Review & write' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+
+      transport.feed(paramValueFrame({ name: 'THR_MIN', value: 0.5, count: 1, index: 0 }))
+      await tick()
+
+      expect(within(screen.getByRole('dialog')).getByText('Written and verified')).toBeInTheDocument()
+      expect(screen.getByText('1 unsaved — the board still has the old values')).toBeInTheDocument() // still pending until the display window elapses
+
+      await tick(2000) // the transient 'ok' display window elapses
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument() // nothing left to review — the drawer auto-closes
+      expect(screen.getByText('Editor matches the board — edit any value to queue a change.')).toBeInTheDocument()
+      expect(paramStore.get('THR_MIN')?.value).toBeCloseTo(0.5, 5)
+    })
+
+    it('does not silently drop a fresh re-stage that lands during a prior success\'s "ok" display window', async () => {
+      const { transport } = await renderLoaded([{ name: 'THR_MIN', value: 0 }])
+      const input = screen.getByDisplayValue('0')
+      fireEvent.change(input, { target: { value: '0.5' } })
+      fireEvent.blur(input)
+      fireEvent.click(screen.getByRole('button', { name: 'Review & write' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'THR_MIN', value: 0.5, count: 1, index: 0 }))
+      await tick() // THR_MIN now shows the transient 'ok' status, with a pending clear scheduled 2s out
+
+      // The user edits it again before that 2s clear fires.
+      const reeditedInput = screen.getByDisplayValue('0.5')
+      fireEvent.change(reeditedInput, { target: { value: '0.75' } })
+      fireEvent.blur(reeditedInput)
+      expect(screen.getByText('1 unsaved — the board still has the old values')).toBeInTheDocument()
+
+      await tick(2000) // the earlier write's scheduled clear fires now
+
+      // The fresh 0.75 edit must survive — the stale scheduled clear must not
+      // have wiped it out just because it shares the same param name.
+      expect(screen.getByText('1 unsaved — the board still has the old values')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('0.75')).toBeInTheDocument()
+    })
+
     it('write flow with mixed results: ok clears the row, mismatch/timeout stay marked red in the drawer', async () => {
       const { transport } = await renderLoaded([
         { name: 'OK_PARAM', value: 0 },
@@ -317,16 +364,23 @@ describe('ParamsPage', () => {
       const okSet = decodeSent(transport.sent.find((b) => decodeSent(b).msgid === PARAM_SET_MSGID && decodeSent(b).fields.param_id === 'OK_PARAM')!)
       expect(okSet.fields.param_value).toBeCloseTo(1, 5)
       transport.feed(paramValueFrame({ name: 'OK_PARAM', value: 1, count: 3, index: 0 }))
-      await tick() // OK_PARAM's echo lands -> row clears, MISMATCH_PARAM's PARAM_SET goes out
+      await tick() // OK_PARAM's echo lands -> shows a transient 'ok' status (not cleared yet); MISMATCH_PARAM's PARAM_SET goes out
+
+      // Per-row status is writing/ok/mismatch/timeout/busy — a success shows
+      // "Written and verified" for a moment rather than vanishing instantly.
+      expect(within(screen.getByRole('dialog')).getByText('OK_PARAM')).toBeInTheDocument()
+      expect(within(screen.getByRole('dialog')).getByText('Written and verified')).toBeInTheDocument()
 
       transport.feed(paramValueFrame({ name: 'MISMATCH_PARAM', value: 999, count: 3, index: 1 })) // FC clamped
       await tick() // mismatch resolves -> TIMEOUT_PARAM's PARAM_SET goes out
 
       await tick(1500) // default setTimeoutMs elapses with no echo for TIMEOUT_PARAM
+      await tick(2000) // OK_PARAM's transient 'ok' display window elapses -> it clears
 
-      // OK_PARAM cleared entirely from the drawer (successes clear) — only the
-      // two failures remain listed there; OK_PARAM's *table* row is untouched
-      // (it still exists, just no longer highlighted as pending).
+      // OK_PARAM cleared entirely from the drawer (successes clear, after their
+      // brief 'ok' display) — only the two failures remain listed there;
+      // OK_PARAM's *table* row is untouched (it still exists, just no longer
+      // highlighted as pending).
       const dialog = screen.getByRole('dialog')
       expect(within(dialog).queryByText('OK_PARAM')).not.toBeInTheDocument()
       expect(within(dialog).getByText('MISMATCH_PARAM')).toBeInTheDocument()

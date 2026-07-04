@@ -47,10 +47,16 @@ export function paramPageSize(): number {
   return PAGE_SIZE
 }
 
-/** First `_`-segment of a parameter name (e.g. `ATC_RAT_PIT_P` -> `ATC`); the whole name if there's no `_` at all. */
+/**
+ * First `_`-segment of a parameter name (e.g. `ATC_RAT_PIT_P` -> `ATC`); the
+ * whole name if there's no `_` at all, or if `_` is the very first character
+ * (a leading underscore, e.g. `_FOO_BAR`) — an empty-string group would
+ * render as a nameless "_ (N)" chip, so that case falls back to the same
+ * "no delimiter" behavior as a name with no underscore at all.
+ */
 export function deriveGroup(name: string): string {
   const idx = name.indexOf('_')
-  return idx === -1 ? name : name.slice(0, idx)
+  return idx <= 0 ? name : name.slice(0, idx)
 }
 
 export interface GroupChip {

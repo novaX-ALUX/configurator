@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 
 export type DiffRowStatus =
   | { kind: 'writing' }
+  | { kind: 'ok' }
   | { kind: 'mismatch'; requested: number; actual: number }
   | { kind: 'timeout' }
   | { kind: 'busy' }
@@ -41,6 +42,8 @@ export function DiffDrawer({ rows, writing, onDiscard, onWriteAll, onClose }: Di
     switch (status.kind) {
       case 'writing':
         return t('params.writing')
+      case 'ok':
+        return t('params.statusOk')
       case 'mismatch':
         return t('params.statusMismatch', { requested: status.requested, actual: status.actual })
       case 'timeout':
@@ -74,13 +77,19 @@ export function DiffDrawer({ rows, writing, onDiscard, onWriteAll, onClose }: Di
             <span />
           </div>
           {rows.map((row) => {
-            const failed = row.status && row.status.kind !== 'writing'
+            // Three tones: no status yet (or still writing) is neutral/amber
+            // like an ordinary pending edit, 'ok' is green (written and
+            // verified — about to clear), anything else is a failure (red,
+            // stays listed, never auto-retried).
+            const tone = !row.status || row.status.kind === 'writing' ? 'pending' : row.status.kind === 'ok' ? 'ok' : 'failed'
             return (
               <div key={row.name} className="border-t border-nvx-border px-3.5 py-2">
                 <div className="grid grid-cols-[1.4fr_1fr_1fr_70px] items-center gap-2 font-mono text-[12.5px]">
                   <span className="font-semibold text-nvx-muted">{row.name}</span>
                   <span className="text-nvx-faint">{row.current}</span>
-                  <span className={`font-bold ${failed ? 'text-nvx-danger' : 'text-nvx-warningText'}`}>{row.next}</span>
+                  <span className={`font-bold ${tone === 'failed' ? 'text-nvx-danger' : tone === 'ok' ? 'text-nvx-successText' : 'text-nvx-warningText'}`}>
+                    {row.next}
+                  </span>
                   {!writing && (
                     <button
                       type="button"
@@ -92,7 +101,15 @@ export function DiffDrawer({ rows, writing, onDiscard, onWriteAll, onClose }: Di
                   )}
                 </div>
                 {row.status && row.status.kind !== 'writing' && (
-                  <div className="mt-1 text-[11px] text-nvx-danger">{statusMessage(row.status)}</div>
+                  <div className={`mt-1 flex items-center gap-1 text-[11px] ${tone === 'ok' ? 'text-nvx-successText' : 'text-nvx-danger'}`}>
+                    {tone === 'ok' && (
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="8.25" />
+                        <path d="M8.5 12.3l2.4 2.4 4.6-5" />
+                      </svg>
+                    )}
+                    {statusMessage(row.status)}
+                  </div>
                 )}
               </div>
             )

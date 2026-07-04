@@ -66,6 +66,16 @@ describe('DiffDrawer', () => {
     expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument()
   })
 
+  it('shows an "ok" row as written-and-verified rather than vanishing it immediately', () => {
+    render(
+      <DiffDrawer rows={[row({ status: { kind: 'ok' } })]} writing={false} onDiscard={vi.fn()} onWriteAll={vi.fn()} onClose={vi.fn()} />,
+    )
+
+    expect(screen.getByText('Written and verified')).toBeInTheDocument()
+    // Still a row like any other while it's visible — same affordances, not treated as a failure.
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument()
+  })
+
   it('shows a mismatch row in red with requested vs actual, and it stays listed (not auto-retried)', () => {
     render(
       <DiffDrawer
