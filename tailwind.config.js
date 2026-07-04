@@ -22,6 +22,25 @@ export default {
           primaryHover: '#2450C7',
           primarySoft: '#E7EDFC',
           primarySoftText: '#23479F',
+          infoBorder: '#B9C9F5',
+          success: '#1E9E6A',
+          successText: '#14603F',
+          successMuted: '#3F8A65',
+          successSoft: '#E4F5EC',
+          warning: '#D97706',
+          warningText: '#8A5A0B',
+          warningSoft: '#FDF6E9',
+          warningBorder: '#F0C98A',
+          danger: '#DC2626',
+          dangerHover: '#B91C1C',
+          // Not lifted verbatim from the design file (unlike the tokens above) — the
+          // design only ever uses #DC2626/#B91C1C as solid banner/button backgrounds,
+          // never as a soft row tint. Task 3.1 needs a light "error" row background for
+          // STATUSTEXT severity coloring (design only demonstrates warning/default
+          // tiers), so this is a same-lightness-relationship interpolation from
+          // warningSoft/warningBorder onto the danger hue. Documented in task-3.1-report.md.
+          dangerSoft: '#FBEAEA',
+          dangerBorder: '#F3B9B9',
           scrollThumb: '#D3DAE3',
         },
       },
