@@ -68,6 +68,9 @@ const NAV_ICONS: Record<PageId, ReactNode> = {
 export function Sidebar() {
   const { t } = useTranslation()
   const activePage = useNavigationStore((s) => s.activePage)
+  // The unsaved-changes guard lives inside setActivePage itself (navigation.ts)
+  // rather than here, so every caller gets the same protection — not just
+  // Sidebar's click handler.
   const setActivePage = useNavigationStore((s) => s.setActivePage)
 
   return (

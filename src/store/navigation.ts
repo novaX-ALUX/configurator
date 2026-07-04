@@ -31,9 +31,25 @@ export const NAV_PAGES: NavPage[] = [
 interface NavigationState {
   activePage: PageId
   setActivePage: (page: PageId) => void
+  /**
+   * Optional check consulted before a page switches away — a page with
+   * unsaved state (Task 3.2's parameter edits) registers one to intercept
+   * navigation; returning `false` keeps `activePage` unchanged. `null` (the
+   * default, and what a page must restore on unmount) means "navigate
+   * freely", so only one page needs to care about this at a time.
+   */
+  guardNavigation: ((next: PageId) => boolean) | null
+  setGuardNavigation: (guard: ((next: PageId) => boolean) | null) => void
 }
 
-export const useNavigationStore = create<NavigationState>((set) => ({
+export const useNavigationStore = create<NavigationState>((set, get) => ({
   activePage: 'firmware',
-  setActivePage: (page) => set({ activePage: page }),
+  guardNavigation: null,
+  setActivePage: (page) => {
+    const { activePage, guardNavigation } = get()
+    if (page === activePage) return // re-clicking the current page is a no-op, same as before the guard existed — never worth a confirm prompt
+    if (guardNavigation && !guardNavigation(page)) return
+    set({ activePage: page })
+  },
+  setGuardNavigation: (guard) => set({ guardNavigation: guard }),
 }))
