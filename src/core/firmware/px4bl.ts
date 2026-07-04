@@ -196,7 +196,7 @@ export class Px4Flasher {
   private boardId = 0
   private flashSize = 0
   private blRev = 0
-  /** Set by `identify()` once INFO_BL_REV has actually been queried — `erase()` asserts this is true (see `Px4InvariantError`). */
+  /** Set by `identify()` once INFO_BL_REV has actually been queried — `erase()` asserts this is true (see `Px4InvariantError`). Intentionally never reset back to `false`: once queried for this bootloader session it stays queried (sticky-true matches the bootloader-session semantics — a fresh `Px4Flasher` is constructed per transport generation, so there is no "re-entered a fresh bootloader" case for this same instance to track). */
   private blRevQueried = false
 
   constructor(private readonly transport: Transport) {

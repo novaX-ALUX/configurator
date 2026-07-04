@@ -1,7 +1,4 @@
 {
-  "app": {
-    "title": "novaX Configurator"
-  },
   "nav": {
     "ariaLabel": "Primary navigation",
     "firmware": "Firmware",
@@ -15,8 +12,6 @@
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",
-    "port": "シリアルポート",
-    "noPort": "ポート未選択",
     "baud": "ボーレート",
     "connect": "Connect",
     "connecting": "接続中 · ボードを識別しています…",
@@ -94,8 +89,7 @@
     "statusTimeout": "ボードからの確認応答なし（タイムアウト）",
     "statusBusy": "このパラメータは書き込み処理中です",
     "statusPrecision": "値が大きすぎて正確に保存できません — 送信されませんでした",
-    "statusError": "書き込みに失敗しました:{{message}}",
-    "close": "閉じる"
+    "statusError": "書き込みに失敗しました:{{message}}"
   },
   "firmware": {
     "title": "ファームウェア",
@@ -170,6 +164,7 @@
 
     "dfuDropTitle": "ローカルの *_with_bl.hex ファイル",
     "dfuDropHint": "*_with_bl.hex ファイルをここにドラッグするか、クリックして選択してください",
+    "dfuChecksumNote": "ローカルファイルはチェックサム検証されません（オンラインダウンロードは検証されます）。",
     "dfuParsed": "{{fileName}} · {{size}}",
     "dfuParseError": "このファイルを読み込めませんでした:{{message}}",
 

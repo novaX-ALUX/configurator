@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
-import { fetchManifest, type BoardFirmware, type FirmwareFile, type FirmwareManifest } from '../../core/firmware/manifest'
+import { fetchManifest, matchBoards, type BoardFirmware, type FirmwareFile, type FirmwareManifest } from '../../core/firmware/manifest'
 import { parseApj, type ParsedApj } from '../../core/firmware/apj'
 import { FlashLog } from './FlashLog'
 import { DfuRecovery } from './DfuRecovery'
@@ -143,7 +143,7 @@ export function FirmwarePage() {
 
   function startLocalUpdate(): void {
     if (localApj.kind !== 'parsed') return
-    const matched = manifestLoad.kind === 'loaded' ? manifestLoad.manifest.boards.find((b) => b.apjBoardId === localApj.apj.boardId) : undefined
+    const matched = manifestLoad.kind === 'loaded' ? matchBoards(manifestLoad.manifest, localApj.apj.boardId)[0] : undefined
     const target: FlashTarget = {
       boardName: matched?.boardName ?? t('firmware.localBoardName', { boardId: localApj.apj.boardId }),
       version: matched?.version ?? localApj.fileName,

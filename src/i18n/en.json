@@ -1,7 +1,4 @@
 {
-  "app": {
-    "title": "novaX Configurator"
-  },
   "nav": {
     "ariaLabel": "Primary navigation",
     "firmware": "Firmware",
@@ -15,8 +12,6 @@
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",
-    "port": "Serial port",
-    "noPort": "No port selected",
     "baud": "Baud rate",
     "connect": "Connect",
     "connecting": "Connecting · identifying board…",
@@ -94,8 +89,7 @@
     "statusTimeout": "No confirmation from the board (timed out)",
     "statusBusy": "Write already in progress for this parameter",
     "statusPrecision": "Value too large to store exactly — not sent",
-    "statusError": "Write failed: {{message}}",
-    "close": "Close"
+    "statusError": "Write failed: {{message}}"
   },
   "firmware": {
     "title": "Firmware",
@@ -170,6 +164,7 @@
 
     "dfuDropTitle": "Local *_with_bl.hex file",
     "dfuDropHint": "Drag a *_with_bl.hex file here, or click to choose one",
+    "dfuChecksumNote": "Local files aren't checksum-verified (online downloads are).",
     "dfuParsed": "{{fileName}} · {{size}}",
     "dfuParseError": "Couldn't read this file: {{message}}",
 

@@ -1,7 +1,4 @@
 {
-  "app": {
-    "title": "novaX Configurator"
-  },
   "nav": {
     "ariaLabel": "Primary navigation",
     "firmware": "Firmware",
@@ -15,8 +12,6 @@
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",
-    "port": "串口",
-    "noPort": "未选择串口",
     "baud": "波特率",
     "connect": "Connect",
     "connecting": "连接中 · 识别板型…",
@@ -94,8 +89,7 @@
     "statusTimeout": "飞控未确认（已超时）",
     "statusBusy": "该参数正在写入中",
     "statusPrecision": "数值过大，无法精确存储 — 未发送",
-    "statusError": "写入失败:{{message}}",
-    "close": "关闭"
+    "statusError": "写入失败:{{message}}"
   },
   "firmware": {
     "title": "固件",
@@ -170,6 +164,7 @@
 
     "dfuDropTitle": "本地 *_with_bl.hex 文件",
     "dfuDropHint": "将 *_with_bl.hex 文件拖到此处，或点击选择文件",
+    "dfuChecksumNote": "本地文件不会做校验和校验（在线下载会）。",
     "dfuParsed": "{{fileName}} · {{size}}",
     "dfuParseError": "无法读取此文件:{{message}}",
 

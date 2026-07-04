@@ -1,10 +1,5 @@
 import type { FlashLogEntry } from './flashSession'
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  const pad = (n: number): string => n.toString().padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
+import { formatTime } from '../../utils/time'
 
 /**
  * Dark scrollable log console (design file's black `flashLog` box, lines

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore, type StatusTextEntry } from '../../store/connection'
+import { formatTime } from '../../utils/time'
 
 /**
  * MAV_SEVERITY (0 EMERGENCY .. 7 DEBUG) collapsed into the 4 visual tiers this
@@ -28,12 +29,6 @@ const ROW_CLASSES: Record<SeverityTier, string> = {
 }
 
 const STATUSTEXT_CAP = 500
-
-function formatTime(ts: number): string {
-  const d = new Date(ts)
-  const pad = (n: number): string => n.toString().padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
 
 function StatusRow({ entry }: { entry: StatusTextEntry }) {
   const tier = severityTier(entry.severity)

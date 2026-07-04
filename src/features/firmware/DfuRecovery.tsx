@@ -4,7 +4,7 @@ import { useConnectionStore } from '../../store/connection'
 import { STM32_DFU_PRODUCT_ID, STM32_DFU_VENDOR_ID, Stm32Dfu, type DfuFlashInfo } from '../../core/firmware/dfu'
 import { parseIntelHex, type ParsedHex } from '../../core/firmware/intelhex'
 import { sendEnterRomDfu } from '../../core/firmware/px4bl'
-import type { FirmwareManifest } from '../../core/firmware/manifest'
+import { matchBoards, type FirmwareManifest } from '../../core/firmware/manifest'
 import { DFU_CANCELLABLE_STEPS, createDfuFlashSession, type Stm32DfuLike } from './flashSession'
 import { FlashLog } from './FlashLog'
 import { formatBytes } from './firmwareUtils'
@@ -175,7 +175,7 @@ export function DfuRecovery({
   // is a hardware-universal STM32 feature, not board-specific, and it's
   // exactly the path a bricked board with no working manifest lookup still
   // needs.
-  const matchedBoard = manifest?.boards.find((b) => identity?.boardId !== undefined && b.apjBoardId === identity.boardId)
+  const matchedBoard = manifest && identity?.boardId !== undefined ? matchBoards(manifest, identity.boardId)[0] : undefined
   const softwareDfuAvailable = phase === 'connected' && !!matchedBoard?.softwareDfuAllowed
   // Neither entry point may run while this tab's own DFU flash is already
   // erasing/programming (picking a new device or re-entering DFU mid-flash
@@ -326,6 +326,7 @@ export function DfuRecovery({
         >
           <span className="text-[12px] font-bold text-nvx-text">{t('firmware.dfuDropTitle')}</span>
           <span className="text-[11px] text-nvx-faint">{t('firmware.dfuDropHint')}</span>
+          <span className="text-[10.5px] text-nvx-faint">{t('firmware.dfuChecksumNote')}</span>
           {localHex.kind === 'parsed' && (
             <span className="font-mono text-[11px] text-nvx-primarySoftText">{t('firmware.dfuParsed', { fileName: localHex.fileName, size: formatBytes(localHex.size) })}</span>
           )}
