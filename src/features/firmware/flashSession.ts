@@ -1,0 +1,563 @@
+/**
+ * Firmware-update orchestrator — pure state machine + injected effects, no
+ * React. `FirmwarePage`/`DfuRecovery` render from the store this creates and
+ * call its actions; every actual side effect (network, transport, engine)
+ * comes in through `effects` so this module (and its tests) never touch
+ * `navigator.serial`/`navigator.usb`/`fetch` directly.
+ *
+ * Two sessions live here because the two tabs drive genuinely different
+ * engines (`Px4Flasher` over a reopened serial `Transport`, vs `Stm32Dfu`
+ * over an already-picked `USBDevice`) but share the same shape of problem
+ * (confirm -> destructive flash -> done/failed, cancel-before-erase, no
+ * auto-retry) — small enough to not be worth a shared abstraction beyond the
+ * `FlashLogEntry` type both use.
+ *
+ * `createFlashSession` (Tab 1, normal update) follows the sequence fixed by
+ * the task brief: idle -> confirming -> downloading -> verifying ->
+ * rebooting -> connecting -> identifying -> erasing -> programming ->
+ * verifying-flash -> done | failed(step, error). Decisions-m1.md decisions
+ * 4/5 (same-origin mirror, no cross-origin fallback) mean `downloading` only
+ * ever calls `firmwareFileUrl()`; a local `.apj` drop skips
+ * downloading/verifying entirely (already parsed, see `FlashSource`).
+ *
+ * The connection store's `takeoverForFlash()` is what makes "pause telemetry
+ * -> flash -> resume" possible: `rebooting` calls it to get the live
+ * transport, sends the MAVLink reboot-to-bootloader command over it (which
+ * also closes it, per px4bl.ts), and `connecting` opens a *fresh* `Transport`
+ * for the re-enumerated bootloader — `identifying`'s `createFlasher()` then
+ * builds a brand new `Px4Flasher` around that fresh transport, never reusing
+ * one across a transport generation (task 3.3's carried-forward architectural
+ * fact).
+ *
+ * Cancellation is cooperative/checkpoint-based, not a hard abort: `cancel()`
+ * only takes effect at the *next* checkpoint after whichever effect is
+ * in-flight resolves — this is fine because nothing before `erasing` is
+ * destructive (a reboot into the bootloader is recoverable by a power cycle;
+ * no chip has been erased). Once `flash()` has been called, `cancel()` is a
+ * no-op (see `CANCELLABLE_STEPS`): there is no way to safely interrupt an
+ * erase/program/verify cycle already in flight.
+ *
+ * `Px4Flasher.flash()`/`Stm32Dfu.flash()` are monolithic (identify/erase/
+ * program/verify all inside one call) and don't expose a phase-changed hook
+ * beyond `onProgress`, so a failure thrown from inside either engine is
+ * classified by message pattern + "did onProgress ever fire" rather than by
+ * asking the engine which phase it was in — see `classifyPx4Failure` (the DFU
+ * session inlines the equivalent, simpler logic directly in its own catch
+ * block, since it only has two candidate steps). This is a deliberate,
+ * documented heuristic: the known guard-failure message patterns (wrong
+ * board, image too large, chip mismatch, ...) are the exact strings
+ * px4bl.ts/dfu.ts throw today.
+ */
+import { create } from 'zustand'
+import type { Transport } from '../../core/transport/types'
+import { SerialTransport } from '../../core/transport/serial'
+import { parseApj, verifyImageSha256, type ParsedApj } from '../../core/firmware/apj'
+import { firmwareFileUrl, type BoardFirmware, type FirmwareFile } from '../../core/firmware/manifest'
+import type { ParsedHex } from '../../core/firmware/intelhex'
+import type { StmFamily } from '../../core/firmware/dfu'
+import { Px4Flasher, sendRebootToBootloader } from '../../core/firmware/px4bl'
+import { useConnectionStore } from '../../store/connection'
+
+export interface FlashLogEntry {
+  ts: number
+  text: string
+}
+
+// ---------------------------------------------------------------------------
+// Tab 1: normal update (Px4Flasher over a reopened serial Transport)
+// ---------------------------------------------------------------------------
+
+export type FlashStep =
+  | 'idle'
+  | 'confirming'
+  | 'downloading'
+  | 'verifying'
+  | 'rebooting'
+  | 'connecting'
+  | 'identifying'
+  | 'erasing'
+  | 'programming'
+  | 'verifying-flash'
+  | 'done'
+  | 'failed'
+
+/** Steps where nothing destructive has happened yet — `cancel()` is only honored from one of these (see module doc). */
+const CANCELLABLE_STEPS: readonly FlashStep[] = ['confirming', 'downloading', 'verifying', 'rebooting', 'connecting', 'identifying']
+
+export type FlashSource =
+  | { kind: 'online'; board: BoardFirmware; file: FirmwareFile }
+  | { kind: 'local'; fileName: string; apj: ParsedApj }
+
+export interface FlashTarget {
+  boardName: string
+  version: string
+  apjBoardId: number
+  source: FlashSource
+}
+
+export interface Px4IdentifyLike {
+  boardId: number
+  flashSize: number
+  blRev: number
+}
+
+/** Structural subset of `Px4Flasher` (src/core/firmware/px4bl.ts) this module depends on. */
+export interface Px4FlasherLike {
+  identify(): Promise<Px4IdentifyLike>
+  flash(apj: ParsedApj, onProgress: (done: number, total: number) => void): Promise<void>
+}
+
+export interface FlashSessionEffects {
+  fetchFn: typeof fetch
+  /** `store.takeoverForFlash()` — hands off the live MAVLink transport, or `null` if not connected. */
+  takeoverTransport: () => Transport | null
+  /** `sendRebootToBootloader` (px4bl.ts) — sends the MAVLink command and closes `transport`. */
+  rebootToBootloader: (transport: Transport) => Promise<void>
+  /** Opens a fresh `Transport` once the board has re-enumerated in bootloader mode (`navigator.serial`-backed in production; a scripted fake in tests). */
+  openBootloaderTransport: () => Promise<Transport>
+  /** Fresh `Px4Flasher` per transport generation — never reused across a reconnect (task 3.3/router.ts's architectural fact). */
+  createFlasher: (transport: Transport) => Px4FlasherLike
+  now: () => number
+}
+
+class FlashStepError extends Error {
+  constructor(
+    readonly step: FlashStep,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+/** Message patterns px4bl.ts's `Px4Flasher.flash()` guard checks throw before ever erasing — see that module's doc. */
+const PX4_GUARD_FAILURE = /wrong firmware|image too large|flash capacity unknown|empty image/i
+const PX4_VERIFY_FAILURE = /crc verify failed/i
+/** A dropped serial connection surfaces as one of these from `ByteReader`/`Transport` — see px4bl.ts. */
+const DISCONNECTED_PATTERN = /serial port closed|transport is not open/i
+
+function classifyPx4Failure(err: unknown, sawProgress: boolean): { step: FlashStep; disconnected: boolean } {
+  const message = err instanceof Error ? err.message : String(err)
+  const disconnected = DISCONNECTED_PATTERN.test(message)
+  if (PX4_GUARD_FAILURE.test(message)) return { step: 'identifying', disconnected }
+  if (PX4_VERIFY_FAILURE.test(message)) return { step: 'verifying-flash', disconnected }
+  return { step: sawProgress ? 'programming' : 'erasing', disconnected }
+}
+
+export interface FlashSessionState {
+  step: FlashStep
+  target: FlashTarget | null
+  progress: { done: number; total: number } | null
+  identify: Px4IdentifyLike | null
+  failedStep: FlashStep | null
+  error: string | null
+  /** True only when a `failed` state was caused by the connection dropping mid-flash — the page uses this to show reconnect guidance instead of a generic error, and `retry()` knows to redo the `connecting` step rather than reuse a dead transport. */
+  disconnected: boolean
+  log: FlashLogEntry[]
+
+  /** Loads a target and moves to `confirming` — does not start flashing. */
+  prepare: (target: FlashTarget) => void
+  /** Starts the flash from `confirming`; a no-op from any other step. */
+  confirm: () => void
+  /** Safe abort — only takes effect from a step in `CANCELLABLE_STEPS`; a no-op once erasing/programming has started. */
+  cancel: () => void
+  /** Resumes from `failed`, picking up after whatever already-completed, non-destructive work is still valid (never re-sends the reboot-to-bootloader command once it has gone out, never re-downloads a file already verified). Never called automatically. */
+  retry: () => void
+  reset: () => void
+}
+
+/**
+ * Factory (mirrors `createConnectionStore`) so tests inject fake effects; the
+ * page constructs its own instance wired to real effects (fetch,
+ * `useConnectionStore.takeoverForFlash`, `sendRebootToBootloader`, a
+ * `navigator.serial`-backed reconnect poll, `(t) => new Px4Flasher(t)`).
+ */
+export function createFlashSession(effects: FlashSessionEffects) {
+  return create<FlashSessionState>((set, get) => {
+    // Per-attempt session state, deliberately kept outside the reactive
+    // `FlashSessionState` (mirrors connection.ts's own transportRef/etc.
+    // pattern) — `retry()` reads these to skip already-completed,
+    // non-destructive work instead of redoing it.
+    let runGeneration = 0
+    let apjRef: ParsedApj | null = null
+    /** Set the instant `rebootToBootloader()` succeeds and never cleared until `prepare()`/`reset()`/`cancel()` starts a new attempt — once the running app has been told to reboot into its bootloader, there is no app left to receive that MAVLink command again, so a retry after this point must never re-send it (see `classifyPx4Failure`'s `disconnected` handling, which only clears `bootloaderTransportRef`, not this). */
+    let rebootSent = false
+    let bootloaderTransportRef: Transport | null = null
+
+    function log(text: string): void {
+      set((s) => ({ log: [...s.log, { ts: effects.now(), text }] }))
+    }
+
+    /** Best-effort, fire-and-forget close — used whenever a transport is being discarded (superseded by a newer generation, or no longer usable after a failure/success) rather than handed to whatever comes next. */
+    function closeBootloaderTransport(): void {
+      if (!bootloaderTransportRef) return
+      void bootloaderTransportRef.close()
+      bootloaderTransportRef = null
+    }
+
+    async function run(): Promise<void> {
+      const gen = ++runGeneration
+      const isCurrent = (): boolean => gen === runGeneration
+      let sawProgress = false
+      try {
+        if (!apjRef) {
+          const target = get().target
+          if (!target) throw new FlashStepError('confirming', 'No firmware selected.')
+          set({ step: 'downloading' })
+          log('Downloading firmware…')
+
+          if (target.source.kind === 'local') {
+            apjRef = target.source.apj
+          } else {
+            const { file } = target.source
+            let res: Response
+            try {
+              res = await effects.fetchFn(firmwareFileUrl(file))
+            } catch (err) {
+              throw new FlashStepError('downloading', `Download failed: ${err instanceof Error ? err.message : String(err)}`)
+            }
+            if (!isCurrent()) return
+            if (!res.ok) throw new FlashStepError('downloading', `Download failed: HTTP ${res.status}. The firmware mirror may not be synced yet — try again shortly.`)
+            const bytes = await res.arrayBuffer()
+            if (!isCurrent()) return
+
+            set({ step: 'verifying' })
+            log('Verifying checksum…')
+            const ok = await verifyImageSha256(new Uint8Array(bytes), file.sha256)
+            if (!isCurrent()) return
+            if (!ok) throw new FlashStepError('verifying', 'Downloaded firmware failed checksum verification. Try again, or use a local firmware file instead.')
+            const parsed = await parseApj(bytes)
+            // Checked again right after this last await, before writing the
+            // shared `apjRef` — a `cancel()` mid-parse must not let a stale
+            // run's result land in a fresh attempt's state (see flashSession
+            // review notes: this is the same "supersede -> don't adopt into
+            // shared state" discipline BaseTransport.doOpen() documents).
+            if (!isCurrent()) return
+            apjRef = parsed
+          }
+        }
+        if (!isCurrent()) return
+
+        if (!rebootSent) {
+          set({ step: 'rebooting' })
+          log('Rebooting the board into its bootloader…')
+          const liveTransport = effects.takeoverTransport()
+          if (!liveTransport) throw new FlashStepError('rebooting', 'Not connected — connect to the board before updating its firmware.')
+          try {
+            await effects.rebootToBootloader(liveTransport)
+          } catch (err) {
+            throw new FlashStepError('rebooting', `Reboot-to-bootloader failed: ${err instanceof Error ? err.message : String(err)}`)
+          }
+          if (!isCurrent()) return
+          rebootSent = true
+        }
+        if (!isCurrent()) return
+
+        if (!bootloaderTransportRef) {
+          set({ step: 'connecting' })
+          log('Waiting for the bootloader to reconnect…')
+          let transport: Transport
+          try {
+            transport = await effects.openBootloaderTransport()
+          } catch (err) {
+            throw new FlashStepError('connecting', err instanceof Error ? err.message : String(err))
+          }
+          if (!isCurrent()) {
+            void transport.close() // superseded — don't adopt into shared state, release it directly
+            return
+          }
+          bootloaderTransportRef = transport
+        }
+        if (!isCurrent()) return
+
+        const flasher = effects.createFlasher(bootloaderTransportRef)
+        set({ step: 'identifying' })
+        log('Identifying the board…')
+        let identity: Px4IdentifyLike
+        try {
+          identity = await flasher.identify()
+        } catch (err) {
+          // Tagged distinctly from classifyPx4Failure's heuristics below: this
+          // is `identify()` itself failing (sync lost, timeout, ...), not one
+          // of `flash()`'s guard checks — conflating the two previously
+          // reported every identify()-level failure as an 'erasing' failure.
+          throw new FlashStepError('identifying', err instanceof Error ? err.message : String(err))
+        }
+        if (!isCurrent()) return
+        set({ identify: identity })
+
+        set({ step: 'erasing', progress: null })
+        log('Erasing and programming…')
+        const apj = apjRef
+        await flasher.flash(apj, (done, total) => {
+          if (!isCurrent()) return // an abandoned run's device-side bytes are still real, but nothing here should still be mutating shared state
+          sawProgress = true
+          set({ step: 'programming', progress: { done, total } })
+        })
+        if (!isCurrent()) return
+
+        set({ step: 'done' })
+        log('Flashed and verified.')
+        // The board just rebooted back into its app (Px4Flasher.flash()'s own
+        // final step) — this transport can no longer talk bootloader
+        // protocol, so it must not be left open (blocking a future connect())
+        // or handed to a future retry().
+        closeBootloaderTransport()
+      } catch (err) {
+        if (!isCurrent()) return
+        if (err instanceof FlashStepError) {
+          // A guard failure inside `flash()` (wrong board/oversized image/
+          // capacity unknown) already reboots the device back to its app
+          // before throwing, and a failed `identify()` at minimum means this
+          // transport isn't currently talking to a cooperative bootloader —
+          // in both cases, force `retry()` to redo `connecting` from scratch
+          // rather than risk reusing a transport that no longer speaks the
+          // bootloader protocol (fails safe: worst case is one extra
+          // reconnect wait, not a confusing hang against a dead link).
+          if (err.step === 'identifying') closeBootloaderTransport()
+          set({ step: 'failed', failedStep: err.step, error: err.message, disconnected: false })
+          log(`Failed: ${err.message}`)
+          return
+        }
+        const { step, disconnected } = classifyPx4Failure(err, sawProgress)
+        // A dropped connection means the bootloader transport handed to the
+        // (now-failed) flasher is dead — clear it so a later retry() redoes
+        // `connecting` instead of reusing it. Never triggered automatically:
+        // retry() is only ever called by an explicit user action.
+        if (disconnected || step === 'identifying') closeBootloaderTransport()
+        const message = err instanceof Error ? err.message : String(err)
+        set({ step: 'failed', failedStep: step, error: message, disconnected })
+        log(`Failed: ${message}`)
+      }
+    }
+
+    return {
+      step: 'idle',
+      target: null,
+      progress: null,
+      identify: null,
+      failedStep: null,
+      error: null,
+      disconnected: false,
+      log: [],
+
+      prepare(target) {
+        apjRef = target.source.kind === 'local' ? target.source.apj : null
+        rebootSent = false
+        closeBootloaderTransport() // abandoning any still-open transport from a previous (failed) attempt on a different target, not just dropping the reference
+        runGeneration++ // invalidates any stale in-flight run from a previous target
+        set({
+          step: 'confirming',
+          target,
+          progress: null,
+          identify: null,
+          failedStep: null,
+          error: null,
+          disconnected: false,
+          log: [],
+        })
+      },
+
+      confirm() {
+        if (get().step !== 'confirming') return
+        void run()
+      },
+
+      cancel() {
+        if (!CANCELLABLE_STEPS.includes(get().step)) return
+        runGeneration++ // the in-flight run notices at its next checkpoint and returns without touching state
+        apjRef = null
+        rebootSent = false
+        closeBootloaderTransport()
+        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false })
+      },
+
+      retry() {
+        if (get().step !== 'failed') return
+        set({ failedStep: null, error: null, disconnected: false })
+        void run() // resumes using whatever apjRef/rebootSent/bootloaderTransportRef survived the failure (see classifyPx4Failure's disconnected handling) — never re-sends the reboot-to-bootloader command once rebootSent is true
+      },
+
+      reset() {
+        runGeneration++
+        apjRef = null
+        rebootSent = false
+        closeBootloaderTransport()
+        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, log: [] })
+      },
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Tab 2: DFU recovery (Stm32Dfu over an already-picked USBDevice)
+// ---------------------------------------------------------------------------
+
+export type DfuStep = 'idle' | 'confirming' | 'erasing' | 'programming' | 'done' | 'failed'
+
+export interface DfuTarget {
+  fileName: string
+  hex: ParsedHex
+  /** Compared against the connected chip's classified family inside `Stm32Dfu.flash()`'s guard — `undefined` when the family is unknown (e.g. a dropped file with no board context), matching that guard's own "unknown family -> capacity-only" fallback. */
+  expectedFamily?: StmFamily
+}
+
+/** Structural subset of `Stm32Dfu` (src/core/firmware/dfu.ts) this module depends on. Constructed once around a user-picked `USBDevice` by the page (WebUSB's permission gesture lives there, not here) and passed in via `effects.flasher`. */
+export interface Stm32DfuLike {
+  flash(hex: ParsedHex, onProgress: (done: number, total: number) => void, expectedFamily?: StmFamily): Promise<void>
+}
+
+export interface DfuSessionEffects {
+  flasher: Stm32DfuLike
+  now: () => number
+}
+
+/** dfu.ts's `Progress` is a fixed 0-1000 permille scale, erase = first 0-300, write = 300-1000 (see that module's doc) — this is how erase/programming are distinguished here, since `Stm32Dfu.flash()` is one call with no phase-changed hook of its own. */
+const DFU_ERASE_PERMILLE_CEILING = 300
+
+export interface DfuSessionState {
+  step: DfuStep
+  target: DfuTarget | null
+  progress: { done: number; total: number } | null
+  failedStep: DfuStep | null
+  error: string | null
+  log: FlashLogEntry[]
+
+  prepare: (target: DfuTarget) => void
+  confirm: () => void
+  /** Only takes effect from `confirming` — DFU has no earlier non-destructive steps to cancel out of (no download/reboot dance; the device is already in DFU mode by the time a target exists). */
+  cancel: () => void
+  retry: () => void
+  reset: () => void
+}
+
+export function createDfuFlashSession(effects: DfuSessionEffects) {
+  return create<DfuSessionState>((set, get) => {
+    let runGeneration = 0
+
+    function log(text: string): void {
+      set((s) => ({ log: [...s.log, { ts: effects.now(), text }] }))
+    }
+
+    async function run(): Promise<void> {
+      const gen = ++runGeneration
+      const isCurrent = (): boolean => gen === runGeneration
+      const target = get().target
+      if (!target) return
+      let sawProgress = false
+      try {
+        set({ step: 'erasing', progress: null })
+        log('Erasing and programming…')
+        await effects.flasher.flash(
+          target.hex,
+          (done, total) => {
+            sawProgress = true
+            if (!isCurrent()) return
+            set({ step: done < DFU_ERASE_PERMILLE_CEILING ? 'erasing' : 'programming', progress: { done, total } })
+          },
+          target.expectedFamily,
+        )
+        if (!isCurrent()) return
+        set({ step: 'done' })
+        log('Flashed.')
+      } catch (err) {
+        if (!isCurrent()) return
+        const message = err instanceof Error ? err.message : String(err)
+        set({ step: 'failed', failedStep: sawProgress ? 'programming' : 'erasing', error: message })
+        log(`Failed: ${message}`)
+      }
+    }
+
+    return {
+      step: 'idle',
+      target: null,
+      progress: null,
+      failedStep: null,
+      error: null,
+      log: [],
+
+      prepare(target) {
+        runGeneration++
+        set({ step: 'confirming', target, progress: null, failedStep: null, error: null, log: [] })
+      },
+
+      confirm() {
+        if (get().step !== 'confirming') return
+        void run()
+      },
+
+      cancel() {
+        if (get().step !== 'confirming') return
+        runGeneration++
+        set({ step: 'idle', target: null, progress: null, failedStep: null, error: null })
+      },
+
+      retry() {
+        if (get().step !== 'failed') return
+        set({ failedStep: null, error: null })
+        void run()
+      },
+
+      reset() {
+        runGeneration++
+        set({ step: 'idle', target: null, progress: null, failedStep: null, error: null, log: [] })
+      },
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Real effects wiring for the app's Tab-1 singleton (mirrors
+// store/connection.ts's own `useConnectionStore = createConnectionStore()`
+// pattern) — DFU's `Stm32Dfu` is bound to a runtime-picked `USBDevice`
+// instead, so `DfuRecovery.tsx` constructs its own `createDfuFlashSession`
+// once a device is selected rather than using a fixed singleton.
+// ---------------------------------------------------------------------------
+
+const RECONNECT_TIMEOUT_MS = 8000
+const RECONNECT_POLL_MS = 300
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Polls already-authorized serial ports (`navigator.serial.getPorts()` —
+ * never `requestPort()`, which needs a user gesture this reconnect doesn't
+ * have) for one that opens successfully at the flashing baud, up to
+ * `RECONNECT_TIMEOUT_MS`. The bootloader may re-enumerate as the very same
+ * `SerialPort` object the app was just using, or a different one Chrome
+ * already granted this origin access to earlier — either way this never
+ * prompts. If nothing opens in time, throws with user-facing guidance; the
+ * page surfaces this as the `connecting` failure (see `FlashSessionState`).
+ * Real-hardware re-enumeration timing is unverified in this environment (no
+ * board attached) — flagged for Phase 4's real-machine verification pass.
+ */
+async function openBootloaderTransport(): Promise<Transport> {
+  const deadline = Date.now() + RECONNECT_TIMEOUT_MS
+  for (;;) {
+    const ports = await navigator.serial.getPorts()
+    for (const port of ports) {
+      const transport = new SerialTransport(port, useConnectionStore.getState().baud)
+      try {
+        await transport.open()
+        return transport
+      } catch {
+        // Not the bootloader, or not ready yet — try the next port, or wait and re-poll.
+      }
+    }
+    if (Date.now() > deadline) {
+      throw new Error('The board did not reappear after rebooting into its bootloader. Reconnect the USB cable and try again.')
+    }
+    await sleep(RECONNECT_POLL_MS)
+  }
+}
+
+/** The app-wide singleton for Tab 1 (normal update), using real effects. */
+export const useFlashSession = createFlashSession({
+  fetchFn: fetch,
+  takeoverTransport: () => useConnectionStore.getState().takeoverForFlash(),
+  rebootToBootloader: sendRebootToBootloader,
+  openBootloaderTransport,
+  createFlasher: (transport) => new Px4Flasher(transport),
+  now: () => Date.now(),
+})
