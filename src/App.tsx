@@ -5,6 +5,7 @@ import { PagePlaceholder } from './layout/PagePlaceholder'
 import { DisconnectToast } from './layout/DisconnectToast'
 import { StatusPanel } from './features/debug/StatusPanel'
 import { ParamsPage } from './features/params/ParamsPage'
+import { FirmwarePage } from './features/firmware/FirmwarePage'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
 
 function App() {
@@ -20,6 +21,8 @@ function App() {
           <StatusPanel />
         ) : activePage === 'parameters' ? (
           <ParamsPage />
+        ) : activePage === 'firmware' ? (
+          <FirmwarePage />
         ) : (
           page && <PagePlaceholder titleKey={page.labelKey} />
         )}
