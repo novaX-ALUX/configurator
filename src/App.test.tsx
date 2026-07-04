@@ -15,10 +15,12 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: 'Dashboard' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Console' })).toBeDisabled()
 
-    // Top bar shows the disconnected state: port/baud pickers and Connect are
-    // present but disabled until Task 3.1 wires up real connection logic.
-    expect(screen.getByRole('button', { name: 'Connect' })).toBeDisabled()
-    expect(screen.getByLabelText('Serial port')).toBeDisabled()
-    expect(screen.getByLabelText('Baud rate')).toBeDisabled()
+    // Top bar shows the disconnected state: baud rate + "Any device" fallback
+    // + Connect are all live controls now that Task 3.1 wired up the
+    // connection store (Web Serial itself has no port enumeration to back a
+    // "Serial port" selector — see TopBar.tsx's own doc).
+    expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+    expect(screen.getByLabelText('Baud rate')).toBeEnabled()
+    expect(screen.getByRole('checkbox', { name: 'Any device' })).toBeInTheDocument()
   })
 })
