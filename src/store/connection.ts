@@ -1,15 +1,19 @@
 /**
- * Global connection store: owns the transport/router/ParamStore lifecycle for
- * exactly one MAVLink session at a time, plus the state Task 3.1's UI (TopBar,
- * StatusPanel) reads.
+ * Global connection store: owns the transport/router/ParamStore/Telemetry
+ * lifecycle for exactly one MAVLink session at a time, plus the state Task
+ * 3.1's UI (TopBar, StatusPanel) reads.
  *
  * ARCHITECTURAL FACT (Task 2.3, `router.ts`'s own module doc): `MavRouter` is
  * single-shot per transport-open generation — it is never reused across a
  * disconnect/reconnect cycle. This store follows that contract literally:
- * `connect()` builds a brand new `Transport` + `MavRouter` + `ParamStore` every
- * time, and teardown (`disconnect()` or an unplug) disposes the `ParamStore`,
- * drops the `MavRouter` reference, and closes the `Transport` — nothing is
- * kept around for the next `connect()` to reuse.
+ * `connect()` builds a brand new `Transport` + `MavRouter` + `ParamStore` +
+ * `Telemetry` every time, and teardown (`disconnect()` or an unplug) disposes
+ * the `Telemetry` and `ParamStore`, drops the `MavRouter` reference, and
+ * closes the `Transport` — nothing is kept around for the next `connect()` to
+ * reuse. `session` (Task 5.4, `core/mavlink/session.ts`) bundles all four
+ * (`router`/`target`/`paramStore`/`telemetry`) for M2's feature modules and
+ * follows the exact same lifecycle — non-null only while connected, rebuilt
+ * fresh every generation.
  *
  * Testability: `navigator.serial` doesn't exist in jsdom, so the actual
  * `requestPort()` call is isolated behind an injectable `PortPicker`
@@ -23,6 +27,8 @@ import { SerialTransport } from '../core/transport/serial'
 import { defs } from '../core/mavlink/defs'
 import { MavRouter, type MavRouterStats } from '../core/mavlink/router'
 import { ParamStore } from '../core/mavlink/params'
+import { Telemetry } from '../core/mavlink/telemetry'
+import type { MavSession } from '../core/mavlink/session'
 import { sendCommand } from '../core/mavlink/command'
 
 const NOVAX_USB_VENDOR_ID = 0x1209
@@ -128,6 +134,15 @@ export interface ConnectionState {
   lastDisconnectReason: string | null
   /** Built once the link reaches 'connected' for the first time this generation; `null` before that and after teardown. Task 3.2 (parameter table) consumes this. */
   paramStore: ParamStore | null
+  /**
+   * Bundles `router`/`target`/`paramStore`/`telemetry` for M2's feature
+   * modules (calibration, motor test, dashboard) so they don't each reach
+   * into the store's internals separately. Built alongside `paramStore` once
+   * the link reaches 'connected' for the first time this generation; `null`
+   * before that and after teardown. `session.paramStore` is always the same
+   * instance as this state's own `paramStore` (Task 5.4).
+   */
+  session: MavSession | null
 
   setBaud: (baud: number) => void
   connect: (baud: number, opts?: { anyDevice?: boolean }) => Promise<void>
@@ -157,12 +172,13 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
   return create<ConnectionState>((set, get) => {
     // Per-generation session state, never reused across a disconnect/reconnect
     // cycle (see module doc's architectural fact) — deliberately kept outside
-    // the reactive `ConnectionState` for the transport/router themselves
-    // (only `paramStore` is exposed there, for Task 3.2).
+    // the reactive `ConnectionState` for the transport itself (`paramStore`
+    // and the `session` bundle built around it, Task 5.4, are exposed there).
     let transportRef: Transport | undefined
     let cleanupFns: Array<() => void> = []
     let statsTimer: ReturnType<typeof setInterval> | undefined
     let paramStoreRef: ParamStore | undefined
+    let telemetryRef: Telemetry | undefined
     let identityRequested = false
     // Captured so `takeoverForFlash()` can unsubscribe `teardown` from the
     // transport being handed off — without this, the flash session's own
@@ -187,6 +203,8 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
         clearInterval(statsTimer)
         statsTimer = undefined
       }
+      telemetryRef?.dispose()
+      telemetryRef = undefined
       paramStoreRef?.dispose()
       paramStoreRef = undefined
       transportRef = undefined
@@ -197,6 +215,7 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
         portInfo: null,
         linkStats: null,
         paramStore: null,
+        session: null,
         ...(reason !== undefined ? { lastDisconnectReason: reason } : {}),
       })
     }
@@ -215,6 +234,7 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
       linkStats: null,
       lastDisconnectReason: null,
       paramStore: null,
+      session: null,
 
       setBaud(baud) {
         set({ baud })
@@ -262,9 +282,15 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
             identityRequested = true
             const [target] = router.getComponents().values()
             if (target) {
-              const store = new ParamStore(router, { sysid: target.sysid, compid: target.compid })
+              const targetIds = { sysid: target.sysid, compid: target.compid }
+              const store = new ParamStore(router, targetIds)
               paramStoreRef = store
-              set({ paramStore: store })
+              const telemetry = new Telemetry(router, targetIds)
+              telemetryRef = telemetry
+              set({
+                paramStore: store,
+                session: { router, target: targetIds, paramStore: store, telemetry },
+              })
               // Graceful absence tolerance (task brief): a board that never
               // answers (or this request being unsupported) just leaves
               // `identity` as-is — never awaited, never blocks anything.

@@ -367,6 +367,113 @@ describe('connection store', () => {
     })
   })
 
+  describe('session', () => {
+    it('is assembled once connected: router/target/paramStore/telemetry all set, paramStore is the same instance the store exposes', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      const { session, paramStore } = store.getState()
+      expect(session).not.toBeNull()
+      expect(session!.router).toBeDefined()
+      expect(session!.target).toEqual({ sysid: 1, compid: 1 })
+      expect(session!.paramStore).toBe(paramStore)
+      expect(session!.telemetry).toBeDefined()
+    })
+
+    it('is null before connecting', () => {
+      const store = createConnectionStore(async () => {
+        throw new Error('should never be called')
+      })
+      expect(store.getState().session).toBeNull()
+    })
+
+    it('disposes telemetry alongside paramStore on disconnect(), and clears session', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      const { session } = store.getState()
+      const telemetryDisposeSpy = vi.spyOn(session!.telemetry, 'dispose')
+      const paramStoreDisposeSpy = vi.spyOn(session!.paramStore, 'dispose')
+
+      await store.getState().disconnect()
+
+      expect(telemetryDisposeSpy).toHaveBeenCalledTimes(1)
+      expect(paramStoreDisposeSpy).toHaveBeenCalledTimes(1)
+      expect(store.getState().session).toBeNull()
+    })
+
+    it('disposes telemetry alongside paramStore on an unplug', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      const { session } = store.getState()
+      const telemetryDisposeSpy = vi.spyOn(session!.telemetry, 'dispose')
+
+      transport.simulateDisconnect('device unplugged')
+      await flush()
+
+      expect(telemetryDisposeSpy).toHaveBeenCalledTimes(1)
+      expect(store.getState().session).toBeNull()
+    })
+
+    it('disposes telemetry on takeoverForFlash() same as paramStore', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      const { session } = store.getState()
+      const telemetryDisposeSpy = vi.spyOn(session!.telemetry, 'dispose')
+
+      store.getState().takeoverForFlash()
+
+      expect(telemetryDisposeSpy).toHaveBeenCalledTimes(1)
+      expect(store.getState().session).toBeNull()
+    })
+
+    it('rebuilds a fresh session (new instances) on reconnect', async () => {
+      const transports = [new MockTransport(), new MockTransport()]
+      let calls = 0
+      const picker: PortPicker = async () => {
+        const transport = transports[calls]
+        calls++
+        return { transport, portInfo: {} }
+      }
+      const store = createConnectionStore(picker)
+
+      await store.getState().connect(115200)
+      transports[0].feed(heartbeatFrame())
+      await flush()
+      const firstSession = store.getState().session
+      await store.getState().disconnect()
+
+      await store.getState().connect(115200)
+      transports[1].feed(heartbeatFrame())
+      await flush()
+
+      const secondSession = store.getState().session
+      expect(secondSession).not.toBeNull()
+      expect(secondSession).not.toBe(firstSession)
+      expect(secondSession!.router).not.toBe(firstSession!.router)
+      expect(secondSession!.paramStore).not.toBe(firstSession!.paramStore)
+      expect(secondSession!.telemetry).not.toBe(firstSession!.telemetry)
+    })
+  })
+
   describe('linkStats', () => {
     it('is populated immediately on connect and refreshed every second while connected', async () => {
       const transport = new MockTransport()
