@@ -96,6 +96,11 @@ describe('FS_THROTTLE_FIELD (FS_THR_ENABLE)', () => {
     expect(byLabel['setup.failsafes.throttle.options.land']).toBe(3)
     expect(byLabel['setup.failsafes.throttle.options.disabled']).toBe(0)
   })
+
+  it('flags only "Continue in Auto" (removed in ArduPilot 4.0+) as legacy -- not the other three, current options', () => {
+    const legacyLabels = FS_THROTTLE_FIELD.options.filter((o) => o.legacy).map((o) => o.labelKey)
+    expect(legacyLabels).toEqual(['setup.failsafes.throttle.options.continueAuto'])
+  })
 })
 
 describe('BATT_FS_LOW_FIELD (BATT_FS_LOW_ACT)', () => {
@@ -115,6 +120,10 @@ describe('BATT_FS_LOW_FIELD (BATT_FS_LOW_ACT)', () => {
   it('never uses value 3 (that integer means "SmartRTL or RTL" on the real firmware, not "SmartRTL, else Land")', () => {
     expect(values(BATT_FS_LOW_FIELD)).not.toContain(3)
   })
+
+  it('never flags any option as legacy -- value 2 here is "RTL", a current, valid option, unlike the other two failsafe fields\' value 2 (calibration review finding)', () => {
+    expect(BATT_FS_LOW_FIELD.options.some((o) => o.legacy)).toBe(false)
+  })
 })
 
 describe('FS_GCS_FIELD (FS_GCS_ENABLE)', () => {
@@ -123,6 +132,11 @@ describe('FS_GCS_FIELD (FS_GCS_ENABLE)', () => {
     expect(byLabel['setup.failsafes.gcs.options.rtl']).toBe(1)
     expect(byLabel['setup.failsafes.gcs.options.continueAuto']).toBe(2)
     expect(byLabel['setup.failsafes.gcs.options.disabled']).toBe(0)
+  })
+
+  it('flags only "Continue in Auto" (removed in ArduPilot 4.0+) as legacy', () => {
+    const legacyLabels = FS_GCS_FIELD.options.filter((o) => o.legacy).map((o) => o.labelKey)
+    expect(legacyLabels).toEqual(['setup.failsafes.gcs.options.continueAuto'])
   })
 })
 

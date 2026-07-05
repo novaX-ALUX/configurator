@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../../i18n'
 import { SetupPage } from '../SetupPage'
@@ -157,6 +157,26 @@ describe('SetupPage', () => {
       expect(screen.getByLabelText('FS_THR_ENABLE')).toHaveValue('1')
       expect(screen.getByLabelText('BATT_FS_LOW_ACT')).toHaveValue('2')
       expect(screen.getByLabelText('FS_GCS_ENABLE')).toHaveValue('1')
+    })
+  })
+
+  describe('failsafe legacy tagging (Task 7.1 review finding, scoped per field)', () => {
+    it('tags value=2 as legacy on FS_THR_ENABLE/FS_GCS_ENABLE (removed in ArduPilot 4.0+), but NOT on BATT_FS_LOW_ACT (2=RTL, a current, valid option)', async () => {
+      // Regression test (calibration review finding): the old code tagged
+      // "legacy" by raw value (===2) across all three dropdowns. BATT_FS_LOW_ACT
+      // never had a value 2 removed in 4.0+ -- it's "RTL", still fully valid --
+      // so it must never get the legacy suffix just because it shares the
+      // number 2 with the two fields that actually do have a removed option.
+      await renderLoaded()
+
+      const thrSelect = screen.getByLabelText('FS_THR_ENABLE')
+      const gcsSelect = screen.getByLabelText('FS_GCS_ENABLE')
+      const battSelect = screen.getByLabelText('BATT_FS_LOW_ACT')
+
+      expect(within(thrSelect).getByText(/Continue in Auto, else RTL/)).toHaveTextContent(/legacy/i)
+      expect(within(gcsSelect).getByText(/Continue in Auto, else RTL/)).toHaveTextContent(/legacy/i)
+      // Exact text match -- fails if a legacy suffix got appended.
+      expect(within(battSelect).getByText('Return-to-Launch')).not.toHaveTextContent(/legacy/i)
     })
   })
 

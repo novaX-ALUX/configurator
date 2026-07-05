@@ -50,6 +50,8 @@ export type SetupControlType = 'enum-dropdown' | 'enum-chips' | 'enum-tiles' | '
 export interface EnumOption {
   value: number
   labelKey: string
+  /** Still offered (valid on older firmware) but removed in a later ArduPilot version -- `Failsafes.tsx`'s `FailsafeSelect` flags these with a legacy suffix. A property of this specific option, not derivable from its `value` alone: e.g. `BATT_FS_LOW_FIELD`'s value `2` ("RTL") is current, while `FS_THROTTLE_FIELD`/`FS_GCS_FIELD`'s value `2` ("Continue in Auto") is not (Task 7.1 review finding) -- two fields can assign the same numeric value to unrelated, differently-aged options. */
+  legacy?: boolean
 }
 
 /** A motor's position within a frame tile's mini-diagram, as a percentage offset (0-100) from the tile's top-left corner — sourced from the design mock's own `frameOpts[].ms` layout coordinates. Index in the array is the motor number (index + 1), matching ArduPilot's own 1-based motor numbering. Purely a visual layout hint: nothing here is written to the flight controller, unlike every other value in this file. */
@@ -204,7 +206,7 @@ export const FS_THROTTLE_FIELD: EnumFieldMeta = {
   param: 'FS_THR_ENABLE',
   options: [
     { value: 1, labelKey: 'setup.failsafes.throttle.options.rtl' },
-    { value: 2, labelKey: 'setup.failsafes.throttle.options.continueAuto' },
+    { value: 2, labelKey: 'setup.failsafes.throttle.options.continueAuto', legacy: true },
     { value: 3, labelKey: 'setup.failsafes.throttle.options.land' },
     { value: 0, labelKey: 'setup.failsafes.throttle.options.disabled' },
   ],
@@ -230,7 +232,7 @@ export const FS_GCS_FIELD: EnumFieldMeta = {
   param: 'FS_GCS_ENABLE',
   options: [
     { value: 1, labelKey: 'setup.failsafes.gcs.options.rtl' },
-    { value: 2, labelKey: 'setup.failsafes.gcs.options.continueAuto' },
+    { value: 2, labelKey: 'setup.failsafes.gcs.options.continueAuto', legacy: true },
     { value: 0, labelKey: 'setup.failsafes.gcs.options.disabled' },
   ],
 }

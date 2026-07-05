@@ -10,14 +10,6 @@ interface FailsafesProps {
   onGcsChange: (value: number, label: string) => void
 }
 
-/**
- * `FS_THR_ENABLE=2` and `FS_GCS_ENABLE=2` ("Continue in Auto, else RTL") were
- * removed in ArduPilot 4.0+ (Task 7.1 review finding) — still offered here
- * since they're valid on older firmware, but flagged with a subtle legacy
- * suffix rather than silently presenting them as equally current options.
- */
-const LEGACY_VALUE = 2
-
 interface FailsafeSelectProps {
   field: EnumFieldMeta
   value: number | undefined
@@ -43,7 +35,12 @@ function FailsafeSelect({ field, value, onChange }: FailsafeSelectProps) {
         {field.options.map((opt) => (
           <option key={opt.value} value={opt.value}>
             {t(opt.labelKey)}
-            {opt.value === LEGACY_VALUE ? ` — ${t('setup.failsafes.legacyBadge')}` : ''}
+            {/* `legacy` lives on the option itself (paramEnums.ts), not a raw
+                value match here -- e.g. BATT_FS_LOW_ACT=2 ("RTL") is a
+                current, valid option, unlike FS_THR_ENABLE/FS_GCS_ENABLE=2
+                ("Continue in Auto", removed in ArduPilot 4.0+, Task 7.1
+                review finding), even though all three share the number 2. */}
+            {opt.legacy ? ` — ${t('setup.failsafes.legacyBadge')}` : ''}
           </option>
         ))}
       </select>
