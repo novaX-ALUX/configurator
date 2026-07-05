@@ -33,9 +33,10 @@
  *    both for calibration and after completion") — every successful
  *    `start()` call causes this real, persisted param write on the FC,
  *    entirely outside the `DO_ACCEPT_MAG_CAL` review gate. `start()` below
- *    fires `onLearnDisclosure` with a fixed message *before* sending
- *    anything, so a caller that wires it up can never miss this — see that
- *    method's own doc for why a callback (not a return value) was chosen.
+ *    fires `onLearnDisclosure` *before* sending anything, so a caller that
+ *    wires it up can never miss this — see that method's own doc for why a
+ *    no-payload callback (not a return value, not a message string) was
+ *    chosen.
  *
  * 3. **After a report, nothing is written yet — and once it is, the echo's
  *    timing is unpredictable relative to the ACK.** `send_mag_cal_report`
@@ -150,10 +151,6 @@ export const MAG_CAL_FAILED = 5
 export const MAG_CAL_BAD_ORIENTATION = 6
 export const MAG_CAL_BAD_RADIUS = 7
 
-/** Fixed disclosure message `onLearnDisclosure` fires with — see module doc point 2. */
-export const COMPASS_LEARN_DISCLOSURE_MESSAGE =
-  'Starting compass calibration sets COMPASS_LEARN=0 (in-flight compass learning disabled) — an implicit parameter write the FC makes on its own, separate from the offsets/diagonals/scale review gate below.'
-
 export interface MagCalProgress {
   compassId: number
   calMask: number
@@ -218,6 +215,23 @@ export class MagCalUndoError extends Error {
   }
 }
 
+/**
+ * Thrown by `accept()` specifically when the `DO_ACCEPT_MAG_CAL` ACK itself
+ * is non-accepted — i.e. nothing was written, safe to retry (module doc
+ * point 3/`accept()`'s own doc). A distinct type (not a plain `Error` with a
+ * matchable message) so callers like `useCompassCalibration.ts`'s
+ * `classifyAcceptFailure` can distinguish this from the *other* accept
+ * failure mode (the post-ACK `paramStore.fetchAll()` confirm call failing)
+ * by `instanceof`, not by regexing `.message` — a message string is
+ * incidental copy, not a contract a caller should parse.
+ */
+export class MagCalAcceptRejectedError extends Error {
+  constructor(public readonly result: number) {
+    super(`MagCalibration.accept: DO_ACCEPT_MAG_CAL rejected (result=${result})`)
+    this.name = 'MagCalAcceptRejectedError'
+  }
+}
+
 /** `compass_id` 0 has no numeric suffix; 1 and 2 append `2`/`3` — see module doc point 6. */
 function compassParamSuffix(compassId: number): string {
   return compassId === 0 ? '' : String(compassId + 1)
@@ -243,7 +257,7 @@ export class MagCalibration {
 
   private readonly progressListeners = new Set<(p: MagCalProgress) => void>()
   private readonly reportListeners = new Set<(r: MagCalReport) => void>()
-  private readonly learnDisclosureListeners = new Set<(message: string) => void>()
+  private readonly learnDisclosureListeners = new Set<() => void>()
 
   constructor(
     private readonly session: MavSession,
@@ -284,7 +298,7 @@ export class MagCalibration {
    * `MAV_RESULT_ACCEPTED`.
    */
   async start(): Promise<void> {
-    for (const cb of this.learnDisclosureListeners) cb(COMPASS_LEARN_DISCLOSURE_MESSAGE)
+    for (const cb of this.learnDisclosureListeners) cb()
 
     await this.setMessageInterval(MAG_CAL_PROGRESS_MSGID, this.streamIntervalUs())
     await this.setMessageInterval(MAG_CAL_REPORT_MSGID, this.streamIntervalUs())
@@ -338,15 +352,19 @@ export class MagCalibration {
 
   /**
    * Registers a callback fired once per `start()` call, synchronously
-   * before anything is sent, disclosing that `COMPASS_LEARN` is about to be
-   * implicitly set to 0 (module doc point 2). A callback (mirroring this
+   * before anything is sent, signaling that `COMPASS_LEARN` is about to be
+   * implicitly set to 0 (module doc point 2). Deliberately a no-payload
+   * event, not a message string: this module has no i18n of its own, so the
+   * user-facing copy belongs to the caller's UI layer (`CompassCard`), which
+   * renders its own localized copy every time this fires rather than
+   * displaying this layer's English text raw. A callback (mirroring this
    * codebase's established `onXxx` event idiom — `accelCal.ts`'s
    * `onFacePrompt`/`onComplete`, `params.ts`'s `onChange`,
    * `router.ts`'s `onLinkState`) rather than a `start()` return value, so a
    * caller can wire up logging/UI disclosure once and have it fire for
    * every `start()`, not just the first. Returns an unsubscribe function.
    */
-  onLearnDisclosure(cb: (message: string) => void): () => void {
+  onLearnDisclosure(cb: () => void): () => void {
     this.learnDisclosureListeners.add(cb)
     return () => {
       this.learnDisclosureListeners.delete(cb)
@@ -404,9 +422,10 @@ export class MagCalibration {
    * racing that echo (or trusting the pre-accept cache) can't reliably
    * confirm anything; actively re-requesting the table can. A rejection
    * from the `fetchAll()` call means the FC-side write already happened but
-   * this layer couldn't confirm it; a rejection from the ACK itself means
-   * nothing was written. Callers distinguishing the two should catch and
-   * inspect which step actually threw.
+   * this layer couldn't confirm it; a rejection from the ACK itself throws
+   * the typed `MagCalAcceptRejectedError` and means nothing was written.
+   * Callers distinguishing the two should catch and check `instanceof
+   * MagCalAcceptRejectedError`, not regex the rejection's `.message`.
    */
   async accept(): Promise<void> {
     const ack = await this.sendCommandFn(
@@ -416,7 +435,7 @@ export class MagCalibration {
       { timeoutMs: this.commandTimeoutMs },
     )
     if (ack.result !== MAV_RESULT_ACCEPTED) {
-      throw new Error(`MagCalibration.accept: DO_ACCEPT_MAG_CAL rejected (result=${ack.result})`)
+      throw new MagCalAcceptRejectedError(ack.result)
     }
     await this.paramStore.fetchAll()
   }

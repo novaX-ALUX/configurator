@@ -11,7 +11,7 @@ import { ParamStore } from '../params'
 import type { CommandAck } from '../command'
 import type { MavSession } from '../session'
 import {
-  COMPASS_LEARN_DISCLOSURE_MESSAGE,
+  MagCalAcceptRejectedError,
   MagCalibration,
   MagCalUndoError,
   snapshotFromDiffs,
@@ -107,12 +107,14 @@ describe('MagCalibration', () => {
   describe('start()', () => {
     it('requests MAG_CAL_PROGRESS(191)+MAG_CAL_REPORT(192) intervals, sends DO_START_MAG_CAL with autosave=0, and fires onLearnDisclosure synchronously', async () => {
       const cal = new MagCalibration(session, paramStore)
-      const disclosures: string[] = []
-      cal.onLearnDisclosure((m) => disclosures.push(m))
+      let disclosureCount = 0
+      cal.onLearnDisclosure(() => {
+        disclosureCount++
+      })
 
       const promise = cal.start()
       // Fired synchronously, before any await inside start() -- see module doc.
-      expect(disclosures).toEqual([COMPASS_LEARN_DISCLOSURE_MESSAGE])
+      expect(disclosureCount).toBe(1)
 
       await flush()
       let cmds = decodeCommandLongs(transport.sent)
@@ -324,6 +326,22 @@ describe('MagCalibration', () => {
 
       await rejection
       expect(fetchAllSpy).not.toHaveBeenCalled()
+      cal.dispose()
+    })
+
+    it('rejects with the typed MagCalAcceptRejectedError (not a plain Error) when the ACK is not accepted -- classifyAcceptFailure keys off this type, not the message string', async () => {
+      const cal = new MagCalibration(session, paramStore)
+      const promise = cal.accept()
+      const rejection = promise.catch((err: unknown) => {
+        expect(err).toBeInstanceOf(MagCalAcceptRejectedError)
+        expect((err as MagCalAcceptRejectedError).result).toBe(MAV_RESULT_FAILED)
+      })
+
+      await flush()
+      transport.feed(ackFrame({ command: MAV_CMD_DO_ACCEPT_MAG_CAL, result: MAV_RESULT_FAILED }))
+      await flush()
+
+      await rejection
       cal.dispose()
     })
   })
