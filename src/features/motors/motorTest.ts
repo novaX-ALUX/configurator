@@ -150,6 +150,29 @@ export interface MotorTestOpts {
   commandTimeoutMs?: number
 }
 
+/**
+ * Thrown (synchronously by `runMotorTest`, as a rejection by the `async`
+ * `stopMotorTest`) for a caller/programming error — `motorSeq` that isn't a
+ * positive integer. Deliberately not silently clamped/defaulted: sending a
+ * garbage motor index to the FC is a bug in the caller, and silently
+ * "fixing" it would hide that bug instead of surfacing it (mirrors
+ * `command.ts`'s `CommandUsageError` convention).
+ */
+export class MotorTestUsageError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MotorTestUsageError'
+  }
+}
+
+function assertValidMotorSeq(motorSeq: number, fnName: string): void {
+  if (!Number.isInteger(motorSeq) || motorSeq < 1) {
+    throw new MotorTestUsageError(
+      `${fnName}: motorSeq must be a positive integer (1-based test-order number, see module doc point 3), got ${motorSeq}`,
+    )
+  }
+}
+
 function clampPercent(v: number): number {
   return Math.min(MOTOR_TEST_MAX_PERCENT, Math.max(0, v))
 }
@@ -161,12 +184,16 @@ function clampPercent(v: number): number {
  * stops it on its own. `retries` stay forced to 0 (`DANGEROUS_COMMANDS`).
  * Resolves with the `CommandAck` for any final result (including a rejected
  * one) — same contract as `sendCommand` itself; only a timeout rejects.
+ *
+ * Throws `MotorTestUsageError` synchronously (nothing sent) if `motorSeq`
+ * isn't a positive integer.
  */
 export function runMotorTest(
   session: MavSession,
   params: RunMotorTestParams,
   opts: MotorTestOpts = {},
 ): Promise<CommandAck> {
+  assertValidMotorSeq(params.motorSeq, 'runMotorTest')
   const sendCommandFn = opts.sendCommandFn ?? sendCommand
   const timeoutS = params.timeoutS ?? DEFAULT_TIMEOUT_S
   const commandTimeoutMs = opts.commandTimeoutMs ?? Math.round(timeoutS * 1000) + ACK_TIMEOUT_PADDING_MS
@@ -200,13 +227,17 @@ export function runMotorTest(
  * server-driven, independent of the ACK round trip), and the safety layer
  * (`motorSafety.ts`) must never be blocked from completing a stop sequence
  * by an unconfirmable ACK. Any other rejection (a genuine caller/programming
- * error, e.g. `CommandUsageError`) still propagates.
+ * error, e.g. `CommandUsageError`, or an invalid `motorSeq`) still propagates.
+ *
+ * Rejects with `MotorTestUsageError` (nothing sent) if `motorSeq` isn't a
+ * positive integer.
  */
 export async function stopMotorTest(
   session: MavSession,
   motorSeq = 1,
   opts: MotorTestOpts = {},
 ): Promise<CommandAck | undefined> {
+  assertValidMotorSeq(motorSeq, 'stopMotorTest')
   const sendCommandFn = opts.sendCommandFn ?? sendCommand
   try {
     return await sendCommandFn(
@@ -229,6 +260,12 @@ export async function stopMotorTest(
   }
 }
 
+/** One motor's `stopMotorTest` call failing with something other than an ACK timeout (which `stopMotorTest` already swallows) -- see `stopAllMotors`. */
+export interface MotorStopFailure {
+  motorSeq: number
+  error: unknown
+}
+
 /**
  * Stops every motor 1..`motorCount` (1-based, module doc point 3) by looping
  * `stopMotorTest` — `MAV_CMD_DO_MOTOR_TEST` is inherently per-motor (no
@@ -237,15 +274,29 @@ export async function stopMotorTest(
  * own doc notes `COMMAND_ACK` carries no nonce, so concurrent same-command
  * calls against the same target can have their ACKs cross-resolve — for a
  * safety-critical "stop everything" path, avoiding that ambiguity is worth
- * more than the small time saved by parallelizing. Never throws: each
- * `stopMotorTest` call is already best-effort (timeouts resolve `undefined`).
+ * more than the small time saved by parallelizing.
+ *
+ * Never throws and never aborts early: this is the emergency "stop
+ * everything" path, so a single motor's non-timeout failure (e.g. a
+ * transport error) must not leave the remaining motors unstopped. Every
+ * motor 1..`motorCount` is attempted regardless of earlier failures (ACK
+ * timeouts are already swallowed by `stopMotorTest` itself and never reach
+ * here). Resolves with the list of motors whose stop call actually failed
+ * (empty = every motor's stop either succeeded or best-effort resolved) —
+ * callers that need to know can retry just those.
  */
 export async function stopAllMotors(
   session: MavSession,
   motorCount: number,
   opts: MotorTestOpts = {},
-): Promise<void> {
+): Promise<MotorStopFailure[]> {
+  const failures: MotorStopFailure[] = []
   for (let seq = 1; seq <= motorCount; seq++) {
-    await stopMotorTest(session, seq, opts)
+    try {
+      await stopMotorTest(session, seq, opts)
+    } catch (error) {
+      failures.push({ motorSeq: seq, error })
+    }
   }
+  return failures
 }

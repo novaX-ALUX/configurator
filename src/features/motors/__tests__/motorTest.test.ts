@@ -11,6 +11,7 @@ import { CommandTimeoutError, type CommandAck } from '../../../core/mavlink/comm
 import type { MavSession } from '../../../core/mavlink/session'
 import {
   MOTOR_TEST_MAX_PERCENT,
+  MotorTestUsageError,
   runMotorTest,
   stopAllMotors,
   stopMotorTest,
@@ -149,6 +150,14 @@ describe('motorTest', () => {
       // Only the initial send -- no retransmits for a DANGEROUS_COMMAND.
       expect(decodeCommandLongs(transport.sent)).toHaveLength(1)
     })
+
+    it.each([0, -1, 1.5, Number.NaN])(
+      'throws MotorTestUsageError synchronously (nothing sent) for an invalid motorSeq=%s',
+      (motorSeq) => {
+        expect(() => runMotorTest(session, { motorSeq, throttlePercent: 10 })).toThrow(MotorTestUsageError)
+        expect(transport.sent).toHaveLength(0)
+      },
+    )
   })
 
   describe('stopMotorTest', () => {
@@ -196,6 +205,12 @@ describe('motorTest', () => {
       })
       await expect(stopMotorTest(session, 1, { sendCommandFn })).rejects.toThrow('boom')
     })
+
+    it.each([0, -1, 2.5, Number.NaN])('rejects with MotorTestUsageError for an invalid explicit motorSeq=%s, without sending', async (motorSeq) => {
+      await expect(stopMotorTest(session, motorSeq)).rejects.toBeInstanceOf(MotorTestUsageError)
+      await flush()
+      expect(transport.sent).toHaveLength(0)
+    })
   })
 
   describe('stopAllMotors', () => {
@@ -215,13 +230,27 @@ describe('motorTest', () => {
       expect(cmds.every((c) => c.param3 === 0 && c.param4 === 0)).toBe(true)
     })
 
-    it('does not throw even if every stop in the loop times out', async () => {
+    it('does not throw even if every stop in the loop times out (stopMotorTest already swallows those, so no failures are reported)', async () => {
       const promise = stopAllMotors(session, 2)
       await flush()
       await vi.advanceTimersByTimeAsync(5000)
       await flush()
       await vi.advanceTimersByTimeAsync(5000)
-      await expect(promise).resolves.toBeUndefined()
+      await expect(promise).resolves.toEqual([])
+    })
+
+    it('continues past a non-timeout failure on one motor -- every motor is still attempted', async () => {
+      const sendCommandFn = vi.fn(async (_router, _target, cmd): Promise<CommandAck> => {
+        if (cmd.param1 === 2) throw new Error('boom on motor 2')
+        return { command: MAV_CMD_DO_MOTOR_TEST, result: MAV_RESULT_ACCEPTED, progress: 0, resultParam2: 0 }
+      })
+
+      const failures = await stopAllMotors(session, 4, { sendCommandFn })
+
+      // All 4 motors attempted, in order, despite motor 2's failure.
+      expect(sendCommandFn).toHaveBeenCalledTimes(4)
+      expect(sendCommandFn.mock.calls.map((c) => c[2].param1)).toEqual([1, 2, 3, 4])
+      expect(failures).toEqual([{ motorSeq: 2, error: expect.any(Error) }])
     })
   })
 
