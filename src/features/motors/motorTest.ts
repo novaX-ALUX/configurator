@@ -121,6 +121,16 @@ export const MOTOR_TEST_MAX_PERCENT = 30
 const DEFAULT_TIMEOUT_S = 1.0
 
 /**
+ * Hard cap on `timeoutS`, enforced by `runMotorTest` regardless of caller
+ * input — same defense-in-depth rationale as `MOTOR_TEST_MAX_PERCENT`: a
+ * safety command that spins a real motor shouldn't accept an unbounded
+ * FC-side output duration. Matches `motorSafety.ts`'s own documented "0.5-1s
+ * short-timeout range" (`FC_COMMAND_MAX_TIMEOUT_MS`, design doc §8) — the
+ * upper bound the renewal model is designed around, not an arbitrary number.
+ */
+export const MOTOR_TEST_MAX_TIMEOUT_S = 1.0
+
+/**
  * Padding added on top of `timeoutS*1000` for the `sendCommand` ACK-wait
  * timeout, so a real (fast, synchronous-accept per module doc point 5) ACK
  * is never raced against — and, more importantly, is never cut short by — a
@@ -177,13 +187,18 @@ function clampPercent(v: number): number {
   return Math.min(MOTOR_TEST_MAX_PERCENT, Math.max(0, v))
 }
 
+function clampTimeoutS(v: number): number {
+  return Math.min(MOTOR_TEST_MAX_TIMEOUT_S, Math.max(0, v))
+}
+
 /**
  * Sends `MAV_CMD_DO_MOTOR_TEST` to spin one motor at `throttlePercent`
  * (percent, hard-clamped to `[0, MOTOR_TEST_MAX_PERCENT]`) for up to
- * `timeoutS` seconds (default short, see `DEFAULT_TIMEOUT_S`) before the FC
- * stops it on its own. `retries` stay forced to 0 (`DANGEROUS_COMMANDS`).
- * Resolves with the `CommandAck` for any final result (including a rejected
- * one) — same contract as `sendCommand` itself; only a timeout rejects.
+ * `timeoutS` seconds (default short, see `DEFAULT_TIMEOUT_S`; hard-clamped to
+ * `[0, MOTOR_TEST_MAX_TIMEOUT_S]` same as the throttle) before the FC stops
+ * it on its own. `retries` stay forced to 0 (`DANGEROUS_COMMANDS`). Resolves
+ * with the `CommandAck` for any final result (including a rejected one) —
+ * same contract as `sendCommand` itself; only a timeout rejects.
  *
  * Throws `MotorTestUsageError` synchronously (nothing sent) if `motorSeq`
  * isn't a positive integer.
@@ -195,7 +210,7 @@ export function runMotorTest(
 ): Promise<CommandAck> {
   assertValidMotorSeq(params.motorSeq, 'runMotorTest')
   const sendCommandFn = opts.sendCommandFn ?? sendCommand
-  const timeoutS = params.timeoutS ?? DEFAULT_TIMEOUT_S
+  const timeoutS = clampTimeoutS(params.timeoutS ?? DEFAULT_TIMEOUT_S)
   const commandTimeoutMs = opts.commandTimeoutMs ?? Math.round(timeoutS * 1000) + ACK_TIMEOUT_PADDING_MS
 
   return sendCommandFn(

@@ -11,6 +11,7 @@ import { CommandTimeoutError, type CommandAck } from '../../../core/mavlink/comm
 import type { MavSession } from '../../../core/mavlink/session'
 import {
   MOTOR_TEST_MAX_PERCENT,
+  MOTOR_TEST_MAX_TIMEOUT_S,
   MotorTestUsageError,
   runMotorTest,
   stopAllMotors,
@@ -126,6 +127,29 @@ describe('motorTest', () => {
       await flush()
       const cmds = decodeCommandLongs(transport.sent)
       expect(cmds[0].param3).toBe(0)
+
+      transport.feed(ackFrame({ command: MAV_CMD_DO_MOTOR_TEST, result: MAV_RESULT_ACCEPTED }))
+      await flush()
+      await promise
+    })
+
+    it('hard-clamps timeoutS above MOTOR_TEST_MAX_TIMEOUT_S down to it -- a safety command must not accept an unbounded FC-side spin duration', async () => {
+      const promise = runMotorTest(session, { motorSeq: 1, throttlePercent: 10, timeoutS: 30 })
+      await flush()
+      const cmds = decodeCommandLongs(transport.sent)
+      expect(Number(cmds[0].param4)).toBeCloseTo(MOTOR_TEST_MAX_TIMEOUT_S, 5)
+      expect(MOTOR_TEST_MAX_TIMEOUT_S).toBe(1)
+
+      transport.feed(ackFrame({ command: MAV_CMD_DO_MOTOR_TEST, result: MAV_RESULT_ACCEPTED }))
+      await flush()
+      await promise
+    })
+
+    it('hard-clamps negative timeoutS up to 0', async () => {
+      const promise = runMotorTest(session, { motorSeq: 1, throttlePercent: 10, timeoutS: -2 })
+      await flush()
+      const cmds = decodeCommandLongs(transport.sent)
+      expect(Number(cmds[0].param4)).toBe(0)
 
       transport.feed(ackFrame({ command: MAV_CMD_DO_MOTOR_TEST, result: MAV_RESULT_ACCEPTED }))
       await flush()
