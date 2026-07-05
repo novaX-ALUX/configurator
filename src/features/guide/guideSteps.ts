@@ -17,6 +17,23 @@ import type { PageId } from '../../store/navigation'
  * frame/ESC -> calibrate -> motor test -> failsafes. Note step ② and ⑤ both
  * route to `'setup'` (frame/ESC and failsafes are both fields on the same
  * Setup page) -- not a typo, matches the design mock's own `go` targets.
+ *
+ * **Known limitation: 4 of 5 `done` flags are session-scoped, not
+ * board-derived.** `frameEscTouched`/`fsTouched` (Task 7.2), `accelDone`/
+ * `compassApplied` (`calibrationProgress.ts`), and `motorsTested`
+ * (`motorTestStore.ts`) are all plain booleans latched by *this session's*
+ * UI actions and never reset on disconnect/reconnect -- inherited from Task
+ * 7.2's own precedent (that module's doc explicitly chose this over a
+ * board read). Only step ①'s `paramCount` and step ②'s frame/ESC *labels*
+ * (not its `done` flag) are actual live reads of the connected board. A
+ * board swap mid-session (disconnect one flight controller, connect a
+ * different one without reloading the page) will still show steps ②-④ as
+ * done from the *previous* board -- the guide's read-only promise stays
+ * true (nothing is written), but this is a known staleness gap, not
+ * "detected from the board" in the literal sense. A future fix would need
+ * genuine board-side detection (e.g. reading `INS_ACCOFFS_*`/
+ * `COMPASS_OFS_*` non-default, or clearing these flags on a new `session`
+ * identity) -- out of scope for Task 10.1.
  */
 export type GuideStepId = 'connect' | 'frameEsc' | 'calibrate' | 'motorTest' | 'failsafes'
 

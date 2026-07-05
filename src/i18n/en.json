@@ -434,7 +434,7 @@
   "guide": {
     "openButton": "Setup Guide",
     "title": "First-flight Setup Guide",
-    "subtitle": "Five checks between a fresh board and a safe first hover. Progress is detected from the board — skip anything you've done elsewhere.",
+    "subtitle": "Five checks between a fresh board and a safe first hover. Progress is tracked for this session — skip anything you've done elsewhere.",
     "progress": "{{done}} / {{total}}",
     "close": "Close",
     "skip": "Skip for now",
