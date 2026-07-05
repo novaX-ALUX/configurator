@@ -26,6 +26,32 @@ Both files are committed to the repo (CI does not need pymavlink to run the
 test suite; this script is a dev-time generator only, re-run it after
 editing the frame list below).
 
+Task 5.3 (M2) adds a *companion* fixture pair, deliberately kept separate
+from the M1 files above rather than appended to them, because
+router.test.ts's M1 integration test asserts the exact ordered list of
+message names decoded from frames.bin (and an exact component count) --
+appending frames there would silently break that assertion. The companion
+pair covers the M2 telemetry/calibration/motor-test message set:
+
+  - src/core/mavlink/__tests__/fixtures/frames-m2.bin
+      HEARTBEAT (disarmed), HEARTBEAT (armed), ATTITUDE, SYS_STATUS (normal),
+      SYS_STATUS (battery_remaining=-1 sentinel), GPS_RAW_INT (normal),
+      GPS_RAW_INT (eph=65535 sentinel), RC_CHANNELS, SERVO_OUTPUT_RAW,
+      COMMAND_LONG cmd=42429 (ACCELCAL_VEHICLE_POS) once per face value plus
+      the success/failure sentinels, MAG_CAL_PROGRESS x2 (compass_id 0 and
+      1), MAG_CAL_REPORT x2 (compass_id 0 and 1), and a COMMAND_ACK for
+      DO_MOTOR_TEST (209) with result=ACCEPTED. No injected garbage bytes
+      (frames-m2.bin is one real frame after another).
+
+  - src/core/mavlink/__tests__/fixtures/frames-m2.expected.json
+      Same schema as frames.expected.json above, one entry per frame in
+      frames-m2.bin.
+
+  ACCELCAL_VEHICLE_POS's param1 face/success/failure values are pymavlink's
+  own `ACCELCAL_VEHICLE_POS_*` enum (ardupilotmega dialect): LEVEL=1,
+  LEFT=2, RIGHT=3, NOSEDOWN=4, NOSEUP=5, BACK=6, SUCCESS=16777215,
+  FAILED=16777216.
+
 Requires: pymavlink (developed/tested against 2.4.49 -- `pip install
 pymavlink` if not already installed).
 
@@ -99,6 +125,17 @@ def decode_entry(version, wire_bytes):
     }
 
 
+def write_fixture(bin_name, json_name, stream, entries):
+    (FIXTURES_DIR / bin_name).write_bytes(bytes(stream))
+    manifest = {
+        'generatedBy': 'scripts/gen-fixtures.py',
+        'pymavlinkVersion': pymavlink.__version__,
+        'frames': entries,
+    }
+    (FIXTURES_DIR / json_name).write_text(json.dumps(manifest, indent=2) + '\n')
+    print(f'wrote {len(stream)} bytes to {bin_name}, {len(entries)} frame entries to {json_name}')
+
+
 def main():
     FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
     stream = bytearray()
@@ -155,15 +192,102 @@ def main():
     # 7. MAVLink1 HEARTBEAT
     emit_v1(6, 2, 2, v1_factory.heartbeat_encode(6, 8, 0, 0, 0))
 
-    (FIXTURES_DIR / 'frames.bin').write_bytes(bytes(stream))
-    manifest = {
-        'generatedBy': 'scripts/gen-fixtures.py',
-        'pymavlinkVersion': pymavlink.__version__,
-        'frames': entries,
-    }
-    (FIXTURES_DIR / 'frames.expected.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    write_fixture('frames.bin', 'frames.expected.json', stream, entries)
 
-    print(f'wrote {len(stream)} bytes to frames.bin, {len(entries)} frame entries to frames.expected.json')
+    # --- Task 5.3 (M2): companion fixture pair, see module doc ------------
+    stream_m2 = bytearray()
+    entries_m2 = []
+
+    def emit_m2(seq, sysid, compid, msg):
+        sink = ByteSink()
+        mav = mavlink2.MAVLink(sink, srcSystem=sysid, srcComponent=compid)
+        mav.seq = seq
+        mav.send(msg)
+        wire = bytes(sink.data)
+        stream_m2.extend(wire)
+        entries_m2.append(decode_entry(2, wire))
+
+    seq = 0
+
+    def next_seq():
+        nonlocal seq
+        seq = (seq + 1) % 256
+        return seq - 1
+
+    # -- Telemetry (sysid=1, compid=1, "the FC") ----------------------------
+    # 1. HEARTBEAT, disarmed (base_mode bit 0x80 clear).
+    emit_m2(next_seq(), 1, 1, v2_factory.heartbeat_encode(2, 3, 0x41, 0, 3))
+    # 2. HEARTBEAT, armed (base_mode bit 0x80 set).
+    emit_m2(next_seq(), 1, 1, v2_factory.heartbeat_encode(2, 3, 0xC1, 5, 4))
+    # 3. ATTITUDE (~0.05rad roll, per the task brief).
+    emit_m2(next_seq(), 1, 1, v2_factory.attitude_encode(123456, 0.05, -0.03, 1.2, 0.001, -0.002, 0.0015))
+    # 4. SYS_STATUS, realistic non-sentinel values.
+    emit_m2(next_seq(), 1, 1, v2_factory.sys_status_encode(
+        0x1fff, 0x1fff, 0x1fff, 300, 12600, 150, 87, 0, 0, 0, 0, 0, 0,
+    ))
+    # 5. SYS_STATUS, battery_remaining=-1 ("unknown") sentinel.
+    emit_m2(next_seq(), 1, 1, v2_factory.sys_status_encode(
+        0x1fff, 0x1fff, 0x1fff, 300, 11800, 120, -1, 0, 0, 0, 0, 0, 0,
+    ))
+    # 6. GPS_RAW_INT, realistic 3D fix.
+    emit_m2(next_seq(), 1, 1, v2_factory.gps_raw_int_encode(
+        123456789, 3, 473977420, 85455940, 488000, 120, 150, 350, 9000, 14,
+    ))
+    # 7. GPS_RAW_INT, eph=65535 ("unknown" hdop) sentinel, no fix.
+    emit_m2(next_seq(), 1, 1, v2_factory.gps_raw_int_encode(
+        123457789, 0, 473977420, 85455940, 488000, 65535, 65535, 0, 0, 0,
+    ))
+    # 8. RC_CHANNELS (8 channels populated, 9-18 unused).
+    emit_m2(next_seq(), 1, 1, v2_factory.rc_channels_encode(
+        123456, 8, 1500, 1600, 1000, 1900, 1100, 1700, 1300, 1450,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 200,
+    ))
+    # 9. SERVO_OUTPUT_RAW (8 outputs populated, 9-16 unused).
+    emit_m2(next_seq(), 1, 1, v2_factory.servo_output_raw_encode(
+        123456789, 0, 1500, 1520, 1480, 1600, 1400, 1550, 1600, 1450,
+    ))
+
+    # -- Inbound COMMAND_LONG cmd=42429 (ACCELCAL_VEHICLE_POS), FC -> GCS ---
+    # param1 values are pymavlink's own ACCELCAL_VEHICLE_POS_* enum (see
+    # module doc): one frame per face, plus the success/failure sentinels.
+    ACCELCAL_VEHICLE_POS_CMD = 42429
+    accelcal_positions = [
+        mavlink2.ACCELCAL_VEHICLE_POS_LEVEL,
+        mavlink2.ACCELCAL_VEHICLE_POS_LEFT,
+        mavlink2.ACCELCAL_VEHICLE_POS_RIGHT,
+        mavlink2.ACCELCAL_VEHICLE_POS_NOSEDOWN,
+        mavlink2.ACCELCAL_VEHICLE_POS_NOSEUP,
+        mavlink2.ACCELCAL_VEHICLE_POS_BACK,
+        mavlink2.ACCELCAL_VEHICLE_POS_SUCCESS,
+        mavlink2.ACCELCAL_VEHICLE_POS_FAILED,
+    ]
+    for param1 in accelcal_positions:
+        emit_m2(next_seq(), 1, 1, v2_factory.command_long_encode(
+            255, 0, ACCELCAL_VEHICLE_POS_CMD, 0, float(param1), 0, 0, 0, 0, 0, 0,
+        ))
+
+    # -- Compass cal: MAG_CAL_PROGRESS/MAG_CAL_REPORT, compass_id 0 and 1 --
+    # (fan-out: a board with 2 compasses calibrating both at once.)
+    for compass_id, direction in ((0, (0.5, 0.2, -0.1)), (1, (0.3, 0.4, -0.2))):
+        emit_m2(next_seq(), 1, 1, v2_factory.mag_cal_progress_encode(
+            compass_id, 0x03, mavlink2.MAG_CAL_RUNNING_STEP_TWO, 1, 45,
+            [255, 255, 255, 255, 0, 0, 0, 0, 0, 0], *direction,
+        ))
+    for compass_id, offsets in ((0, (15.2, -8.7, 22.1)), (1, (10.1, 5.4, -3.2))):
+        emit_m2(next_seq(), 1, 1, v2_factory.mag_cal_report_encode(
+            compass_id, 0x03, mavlink2.MAG_CAL_SUCCESS, 1, 1.25,
+            *offsets, 1.002, 0.998, 1.001, 0.01, -0.02, 0.005,
+            orientation_confidence=0.95, old_orientation=0, new_orientation=0, scale_factor=1.0,
+        ))
+
+    # -- Motor test ACK: COMMAND_ACK for DO_MOTOR_TEST (209), ACCEPTED. -----
+    DO_MOTOR_TEST_CMD = 209
+    MAV_RESULT_ACCEPTED = 0
+    emit_m2(next_seq(), 1, 1, v2_factory.command_ack_encode(
+        DO_MOTOR_TEST_CMD, MAV_RESULT_ACCEPTED, target_system=1, target_component=1,
+    ))
+
+    write_fixture('frames-m2.bin', 'frames-m2.expected.json', stream_m2, entries_m2)
 
 
 if __name__ == '__main__':
