@@ -326,7 +326,46 @@ describe('AccelCalibration with injected sendCommandFn', () => {
     const sendCommandFn = vi.fn(async (): Promise<CommandAck> => ({ command: MAV_CMD_PREFLIGHT_CALIBRATION, result: MAV_RESULT_ACCEPTED, progress: 0, resultParam2: 0 }))
     const cal = new AccelCalibration(session, { sendCommandFn })
     await cal.start()
-    expect(sendCommandFn).toHaveBeenCalledWith(router, target, { command: MAV_CMD_PREFLIGHT_CALIBRATION, param5: 1 })
+    expect(sendCommandFn).toHaveBeenCalledWith(
+      router,
+      target,
+      { command: MAV_CMD_PREFLIGHT_CALIBRATION, param5: 1 },
+      { timeoutMs: 5000 }, // DEFAULT_COMMAND_TIMEOUT_MS, when commandTimeoutMs isn't overridden
+    )
+    cal.dispose()
+    vi.useRealTimers()
+  })
+
+  it('threads a caller-supplied commandTimeoutMs through to sendCommandFn for both start() and captureFace() (retries stay forced to 0 -- both commands are DANGEROUS_COMMANDS, only the timeout changes)', async () => {
+    vi.useFakeTimers()
+    const transport = new MockTransport()
+    const router = new MavRouter(transport, defs, {})
+    await transport.open()
+    router.start()
+    const target = { sysid: 1, compid: 1 }
+    const session: MavSession = { router, target, paramStore: {} as MavSession['paramStore'], telemetry: {} as MavSession['telemetry'] }
+
+    const sendCommandFn = vi.fn(async (): Promise<CommandAck> => ({ command: MAV_CMD_PREFLIGHT_CALIBRATION, result: MAV_RESULT_ACCEPTED, progress: 0, resultParam2: 0 }))
+    const cal = new AccelCalibration(session, { sendCommandFn, commandTimeoutMs: 9000 })
+
+    await cal.start()
+    expect(sendCommandFn).toHaveBeenLastCalledWith(
+      router,
+      target,
+      { command: MAV_CMD_PREFLIGHT_CALIBRATION, param5: 1 },
+      { timeoutMs: 9000 },
+    )
+
+    transport.feed(accelcalPosFrame(1))
+    await flush()
+    await cal.captureFace()
+    expect(sendCommandFn).toHaveBeenLastCalledWith(
+      router,
+      target,
+      { command: MAV_CMD_ACCELCAL_VEHICLE_POS, param1: 1 },
+      { timeoutMs: 9000 },
+    )
+
     cal.dispose()
     vi.useRealTimers()
   })

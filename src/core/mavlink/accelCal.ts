@@ -25,10 +25,13 @@
  *    (`AP_AccelCal.cpp:112-117`), which is `GCS_MAVLINK::send_accelcal_vehicle_position`
  *    — a `COMMAND_LONG` with `command=MAV_CMD_ACCELCAL_VEHICLE_POS`,
  *    `param1=step` (`GCS_Common.cpp:3332-3344`). Step values 1..6 map
- *    level/left/right/nosedown/noseup/back
- *    (`AP_AccelCal.cpp:85-102`, `ardupilotmega.h` `ACCELCAL_VEHICLE_POS_*`
- *    enum) — this is an **inbound** COMMAND_LONG, not an ACK, and this
- *    module drives `onFacePrompt` straight off it.
+ *    level/left/right/nosedown/noseup/back per the switch in
+ *    `AP_AccelCal.cpp:85-102` (which only *uses* the enum); the values
+ *    themselves are defined in
+ *    `modules/mavlink/message_definitions/v1.0/ardupilotmega.xml:14-19`
+ *    (`ACCELCAL_VEHICLE_POS_LEVEL`=1 .. `_BACK`=6) — this is an **inbound**
+ *    COMMAND_LONG, not an ACK, and this module drives `onFacePrompt`
+ *    straight off it.
  *
  * 3. **Capture confirm (the "advance" mechanism) — verified, NOT the old
  *    ACK-snoop path.** The GCS confirms "vehicle is posed, capture now" by
@@ -60,9 +63,11 @@
  *    ACCELCAL_VEHICLE_POS_SUCCESS)` / `..._FAILED` (`AP_AccelCal.cpp:166-183`)
  *    — the **same** inbound `COMMAND_LONG` 42429 channel as face prompts,
  *    just with `param1` set to the sentinel `16777215` (success) or
- *    `16777216` (failure) instead of a step 1-6
- *    (`ardupilotmega.h` `ACCELCAL_VEHICLE_POS_SUCCESS`/`_FAILED`, confirmed
- *    against this project's own `frames-m2` fixtures). `STATUSTEXT` carries
+ *    `16777216` (failure) instead of a step 1-6 — `ACCELCAL_VEHICLE_POS_SUCCESS`/
+ *    `_FAILED`, defined in the MAVLink dialect source
+ *    `modules/mavlink/message_definitions/v1.0/ardupilotmega.xml:20-21`
+ *    (not `AP_AccelCal.cpp` — that file only *uses* the enum, it doesn't
+ *    define it), confirmed against this project's own `frames-m2` fixtures. `STATUSTEXT` carries
  *    the human-readable "Calibration successful"/"Calibration FAILED"
  *    (`AP_AccelCal.cpp:215`, `:241`) at `MAV_SEVERITY_CRITICAL` — the app
  *    already has a general STATUSTEXT feed (`src/store/connection.ts`,
@@ -102,7 +107,7 @@ import type { MavSession } from './session'
 const COMMAND_LONG_MSGID = 76
 const MAV_RESULT_ACCEPTED = 0
 
-/** `ACCELCAL_VEHICLE_POS_*` step values (`AP_AccelCal.cpp:85-102` / the MAVLink `ardupilotmega` enum), in prompt order. */
+/** `ACCELCAL_VEHICLE_POS_*` step values, in prompt order — defined in `modules/mavlink/message_definitions/v1.0/ardupilotmega.xml:14-19` (not `AP_AccelCal.cpp`, which only uses them, see module doc). */
 export type AccelFace = 'level' | 'left' | 'right' | 'nosedown' | 'noseup' | 'back'
 
 const FACE_FOR_STEP: Readonly<Record<number, AccelFace>> = {
@@ -131,9 +136,24 @@ const ACCELCAL_VEHICLE_POS_FAILED = 16777216
  */
 export type AccelCalStatus = 'idle' | 'running' | 'busy' | 'done' | 'failed'
 
+/**
+ * Default `timeoutMs` passed to `sendCommand` for `start()`/`captureFace()`
+ * — well above `sendCommand`'s own 1500ms default. Real firmware runs
+ * `calibrate_gyros()` synchronously inside the `PREFLIGHT_CALIBRATION`
+ * handler *before* it ACKs (`GCS_Common.cpp:4716-4726`, see module doc
+ * point 1), which can take longer than 1500ms — a plain default-timeout
+ * `sendCommand` could reject client-side (`CommandTimeoutError`) while the
+ * FC is actually still proceeding toward `MAV_RESULT_ACCEPTED`. Both
+ * commands are in `DANGEROUS_COMMANDS`, so retries stay forced to 0
+ * regardless — only the single attempt's timeout window changes.
+ */
+const DEFAULT_COMMAND_TIMEOUT_MS = 5000
+
 export interface AccelCalibrationOpts {
   /** Injectable in place of the real `sendCommand` (`command.ts`), for tests. */
   sendCommandFn?: typeof sendCommand
+  /** `timeoutMs` passed to `sendCommand` for `start()`/`captureFace()`. Default `DEFAULT_COMMAND_TIMEOUT_MS` (5000) — see that constant's doc for why the 1500ms `sendCommand` default isn't safe here. */
+  commandTimeoutMs?: number
 }
 
 /** Thrown by `captureFace()` when called with no outstanding face prompt (nothing to confirm yet). */
@@ -146,6 +166,7 @@ export class AccelCalUsageError extends Error {
 
 export class AccelCalibration {
   private readonly sendCommandFn: NonNullable<AccelCalibrationOpts['sendCommandFn']>
+  private readonly commandTimeoutMs: number
   private readonly unsubscribe: () => void
 
   private readonly facePromptListeners = new Set<(face: AccelFace) => void>()
@@ -159,6 +180,7 @@ export class AccelCalibration {
     opts: AccelCalibrationOpts = {},
   ) {
     this.sendCommandFn = opts.sendCommandFn ?? sendCommand
+    this.commandTimeoutMs = opts.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS
 
     this.unsubscribe = session.router.subscribe(
       { msgid: COMMAND_LONG_MSGID, sysid: session.target.sysid, compid: session.target.compid },
@@ -173,7 +195,7 @@ export class AccelCalibration {
     return this._status
   }
 
-  /** Sends `MAV_CMD_PREFLIGHT_CALIBRATION` with `param5=1` (-> `COMMAND_INT.x==1` FC-side) to enter the 6-position accel cal. Rejects (status -> `failed`) on a non-accepted/timed-out ACK — this is this call's own outcome, separate from the inbound-42429-driven `onComplete`. */
+  /** Sends `MAV_CMD_PREFLIGHT_CALIBRATION` with `param5=1` (-> `COMMAND_INT.x==1` FC-side) to enter the 6-position accel cal, waiting up to `commandTimeoutMs` (constructor opt, default `DEFAULT_COMMAND_TIMEOUT_MS`) for its ACK. Rejects (status -> `failed`) on a non-accepted/timed-out ACK — this is this call's own outcome, separate from the inbound-42429-driven `onComplete`. */
   async start(): Promise<void> {
     this._status = 'busy'
     try {
@@ -181,6 +203,7 @@ export class AccelCalibration {
         this.session.router,
         this.session.target,
         { command: MAV_CMD_PREFLIGHT_CALIBRATION, param5: 1 },
+        { timeoutMs: this.commandTimeoutMs },
       )
       if (ack.result !== MAV_RESULT_ACCEPTED) {
         if (this._status === 'busy') this._status = 'failed'
@@ -232,6 +255,7 @@ export class AccelCalibration {
         this.session.router,
         this.session.target,
         { command: MAV_CMD_ACCELCAL_VEHICLE_POS, param1: step },
+        { timeoutMs: this.commandTimeoutMs },
       )
       if (ack.result !== MAV_RESULT_ACCEPTED) {
         // Guarded the same way as the catch block below: only revert if
@@ -272,7 +296,12 @@ export class AccelCalibration {
   private handleVehiclePos(param1: number): void {
     // Ignore stray/late signals once idle (post-abandon) or terminal
     // (done/failed) -- see abandon()'s doc: the FC may keep broadcasting
-    // after the UI has stopped watching.
+    // after the UI has stopped watching. Processing while 'busy' (which
+    // includes start()'s own busy window, before its ACK has arrived) is
+    // safe: handle_command_long ACKs PREFLIGHT_CALIBRATION synchronously,
+    // *before* AP_AccelCal::update() ever gets a chance to broadcast a
+    // 42429 face prompt (module doc point 1), so a real FC never sends one
+    // ahead of that ACK -- there's no order to get wrong here.
     if (this._status !== 'running' && this._status !== 'busy') return
 
     if (param1 === ACCELCAL_VEHICLE_POS_SUCCESS) {
