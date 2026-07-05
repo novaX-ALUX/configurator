@@ -7,6 +7,7 @@ import { StatusPanel } from './features/debug/StatusPanel'
 import { ParamsPage } from './features/params/ParamsPage'
 import { FirmwarePage } from './features/firmware/FirmwarePage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
+import { SetupPage } from './features/setup/SetupPage'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
 
 function App() {
@@ -26,6 +27,8 @@ function App() {
           <FirmwarePage />
         ) : activePage === 'dashboard' ? (
           <DashboardPage />
+        ) : activePage === 'setup' ? (
+          <SetupPage />
         ) : (
           page && <PagePlaceholder titleKey={page.labelKey} />
         )}

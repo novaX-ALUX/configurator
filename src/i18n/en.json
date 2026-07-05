@@ -139,6 +139,87 @@
       "noData": "No RC channel telemetry yet."
     }
   },
+  "setup": {
+    "notConnectedTitle": "Setup needs a connected board",
+    "notConnectedBody": "Frame type, ESC protocol, battery monitoring and failsafes are read from — and written to — the flight controller.",
+    "connectCta": "Connect flight controller",
+    "subtitleNote": "Nothing is written until you review & write",
+    "subtitleBody": "Each setting shows the ArduPilot parameter it controls. Changes queue in the bar below.",
+    "frame": {
+      "title": "FRAME",
+      "options": {
+        "quadX": "Quad X",
+        "quadPlus": "Quad +",
+        "hexX": "Hex X",
+        "octoX": "Octo X"
+      }
+    },
+    "esc": {
+      "title": "ESC PROTOCOL",
+      "note": "DShot needs no throttle calibration",
+      "options": {
+        "pwm": "PWM",
+        "oneShot125": "OneShot125",
+        "dshot150": "DShot150",
+        "dshot300": "DShot300",
+        "dshot600": "DShot600"
+      }
+    },
+    "battery": {
+      "sectionTitle": "BATTERY MONITOR",
+      "monitor": {
+        "title": "Monitoring",
+        "options": {
+          "analogVoltageCurrent": "Analog Voltage & Current",
+          "analogVoltageOnly": "Analog Voltage only",
+          "disabled": "Disabled"
+        }
+      },
+      "capacity": {
+        "title": "Capacity",
+        "suffix": "mAh"
+      },
+      "lowVolt": {
+        "title": "Low voltage threshold",
+        "suffix": "V — triggers low battery failsafe"
+      }
+    },
+    "failsafes": {
+      "sectionTitle": "FAILSAFES",
+      "sectionSubtitle": "What the vehicle does when a link or battery fails",
+      "legacyBadge": "legacy, removed in ArduPilot 4.0+",
+      "throttle": {
+        "title": "RC signal loss",
+        "options": {
+          "rtl": "Always Return-to-Launch",
+          "continueAuto": "Continue in Auto, else RTL",
+          "land": "Always Land",
+          "disabled": "Disabled (not recommended)"
+        }
+      },
+      "battLow": {
+        "title": "Low battery action",
+        "options": {
+          "land": "Land",
+          "rtl": "Return-to-Launch",
+          "smartRtlElseLand": "SmartRTL, else Land",
+          "none": "None (warn only)"
+        }
+      },
+      "gcs": {
+        "title": "GCS link loss",
+        "options": {
+          "rtl": "Always Return-to-Launch",
+          "continueAuto": "Continue in Auto, else RTL",
+          "disabled": "Disabled"
+        }
+      }
+    },
+    "pendingBadge": "{{count}} pending — nothing written yet",
+    "revert": "Revert",
+    "discardedOnDisconnect": "{{count}} unsaved setup change(s) were discarded — they don't persist across sessions.",
+    "errorNonNegative": "Must be zero or greater"
+  },
   "firmware": {
     "title": "Firmware",
     "subtitle": "Driverless flashing over Web Serial",

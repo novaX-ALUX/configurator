@@ -1,13 +1,7 @@
 import { useTranslation } from 'react-i18next'
+import { diffStatusMessage, type DiffRowStatus } from './paramUtils'
 
-export type DiffRowStatus =
-  | { kind: 'writing' }
-  | { kind: 'ok' }
-  | { kind: 'mismatch'; requested: number; actual: number }
-  | { kind: 'timeout' }
-  | { kind: 'busy' }
-  | { kind: 'precision' }
-  | { kind: 'error'; message: string }
+export type { DiffRowStatus }
 
 export interface DiffRow {
   name: string
@@ -37,25 +31,6 @@ interface DiffDrawerProps {
  */
 export function DiffDrawer({ rows, writing, onDiscard, onWriteAll, onClose }: DiffDrawerProps) {
   const { t } = useTranslation()
-
-  function statusMessage(status: DiffRowStatus): string {
-    switch (status.kind) {
-      case 'writing':
-        return t('params.writing')
-      case 'ok':
-        return t('params.statusOk')
-      case 'mismatch':
-        return t('params.statusMismatch', { requested: status.requested, actual: status.actual })
-      case 'timeout':
-        return t('params.statusTimeout')
-      case 'busy':
-        return t('params.statusBusy')
-      case 'precision':
-        return t('params.statusPrecision')
-      case 'error':
-        return t('params.statusError', { message: status.message })
-    }
-  }
 
   return (
     <>
@@ -108,7 +83,7 @@ export function DiffDrawer({ rows, writing, onDiscard, onWriteAll, onClose }: Di
                         <path d="M8.5 12.3l2.4 2.4 4.6-5" />
                       </svg>
                     )}
-                    {statusMessage(row.status)}
+                    {diffStatusMessage(row.status, t)}
                   </div>
                 )}
               </div>

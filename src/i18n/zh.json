@@ -139,6 +139,87 @@
       "noData": "暂无遥控通道遥测数据。"
     }
   },
+  "setup": {
+    "notConnectedTitle": "设置需要已连接的飞控",
+    "notConnectedBody": "机架类型、电调协议、电池监测与失控保护均从飞控读取，并写回飞控。",
+    "connectCta": "连接飞控",
+    "subtitleNote": "写入飞控前不会有任何改动",
+    "subtitleBody": "每项设置都标注了它对应的 ArduPilot 参数，修改会加入下方的变更队列。",
+    "frame": {
+      "title": "机架",
+      "options": {
+        "quadX": "四旋翼 X",
+        "quadPlus": "四旋翼 +",
+        "hexX": "六旋翼 X",
+        "octoX": "八旋翼 X"
+      }
+    },
+    "esc": {
+      "title": "电调协议",
+      "note": "DShot 无需油门校准",
+      "options": {
+        "pwm": "PWM",
+        "oneShot125": "OneShot125",
+        "dshot150": "DShot150",
+        "dshot300": "DShot300",
+        "dshot600": "DShot600"
+      }
+    },
+    "battery": {
+      "sectionTitle": "电池监测",
+      "monitor": {
+        "title": "监测方式",
+        "options": {
+          "analogVoltageCurrent": "模拟电压与电流",
+          "analogVoltageOnly": "仅模拟电压",
+          "disabled": "禁用"
+        }
+      },
+      "capacity": {
+        "title": "容量",
+        "suffix": "mAh"
+      },
+      "lowVolt": {
+        "title": "低电压阈值",
+        "suffix": "V — 触发低电量失控保护"
+      }
+    },
+    "failsafes": {
+      "sectionTitle": "失控保护",
+      "sectionSubtitle": "链路或电池故障时机体的应对方式",
+      "legacyBadge": "旧版选项，ArduPilot 4.0+ 已移除",
+      "throttle": {
+        "title": "遥控信号丢失",
+        "options": {
+          "rtl": "始终返航",
+          "continueAuto": "自动模式下继续，否则返航",
+          "land": "始终降落",
+          "disabled": "禁用（不推荐）"
+        }
+      },
+      "battLow": {
+        "title": "低电量动作",
+        "options": {
+          "land": "降落",
+          "rtl": "返航",
+          "smartRtlElseLand": "智能返航，否则降落",
+          "none": "无（仅警告）"
+        }
+      },
+      "gcs": {
+        "title": "地面站链路丢失",
+        "options": {
+          "rtl": "始终返航",
+          "continueAuto": "自动模式下继续，否则返航",
+          "disabled": "禁用"
+        }
+      }
+    },
+    "pendingBadge": "{{count}} 项待处理 — 尚未写入",
+    "revert": "还原",
+    "discardedOnDisconnect": "{{count}} 项未保存的设置修改已被丢弃 — 设置修改不会在会话间保留。",
+    "errorNonNegative": "必须为零或正数"
+  },
   "firmware": {
     "title": "固件",
     "subtitle": "通过 Web Serial 免驱动刷写",

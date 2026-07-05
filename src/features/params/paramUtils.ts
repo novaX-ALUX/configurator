@@ -11,8 +11,82 @@
  * reuses `params.ts`'s own exported `INTEGER_PARAM_TYPES` rather than
  * re-declaring the same set here, so there's exactly one place that decides
  * which MAV_PARAM_TYPEs are integers.
+ *
+ * `DiffRowStatus`/`writeErrorStatus`/`fetchErrorMessage`/`withoutKey` (Task
+ * 7.2) also live here, not just in `ParamsPage`: `features/setup`'s
+ * `setupStore`/`SetupPage`/`SetupDirtyBar` stage-and-write against the same
+ * `ParamStore` with the exact same five write outcomes and the exact same
+ * `fetchAll()` failure modes, so this is the one place both features import
+ * that mapping from, rather than each carrying its own copy that could
+ * silently drift apart.
  */
-import { INTEGER_PARAM_TYPES, type Param } from '../../core/mavlink/params'
+import type { TFunction } from 'i18next'
+import {
+  INTEGER_PARAM_TYPES,
+  ParamCountDriftError,
+  ParamFetchError,
+  ParamFetchNoResponseError,
+  ParamPrecisionLossError,
+  ParamWriteBusyError,
+  ParamWriteMismatchError,
+  ParamWriteTimeoutError,
+  type Param,
+} from '../../core/mavlink/params'
+
+/** Every outcome a staged `ParamStore.set()` can settle to, shared by `features/params`' `DiffDrawer` and `features/setup`'s `SetupDirtyBar`. */
+export type DiffRowStatus =
+  | { kind: 'writing' }
+  | { kind: 'ok' }
+  | { kind: 'mismatch'; requested: number; actual: number }
+  | { kind: 'timeout' }
+  | { kind: 'busy' }
+  | { kind: 'precision' }
+  | { kind: 'error'; message: string }
+
+/** Maps a rejected `ParamStore.set()` to the `DiffRowStatus` a row should show. */
+export function writeErrorStatus(err: unknown): DiffRowStatus {
+  if (err instanceof ParamWriteMismatchError) return { kind: 'mismatch', requested: err.requested, actual: err.actual }
+  if (err instanceof ParamWriteTimeoutError) return { kind: 'timeout' }
+  if (err instanceof ParamWriteBusyError) return { kind: 'busy' }
+  if (err instanceof ParamPrecisionLossError) return { kind: 'precision' }
+  return { kind: 'error', message: err instanceof Error ? err.message : String(err) }
+}
+
+/** Renders a `DiffRowStatus` as the same user-facing sentence in every consumer (`params.*` i18n keys — the wording doesn't differ between the parameter table and the Setup page, both describe the same `ParamStore.set()` outcome). */
+export function diffStatusMessage(status: DiffRowStatus, t: TFunction): string {
+  switch (status.kind) {
+    case 'writing':
+      return t('params.writing')
+    case 'ok':
+      return t('params.statusOk')
+    case 'mismatch':
+      return t('params.statusMismatch', { requested: status.requested, actual: status.actual })
+    case 'timeout':
+      return t('params.statusTimeout')
+    case 'busy':
+      return t('params.statusBusy')
+    case 'precision':
+      return t('params.statusPrecision')
+    case 'error':
+      return t('params.statusError', { message: status.message })
+  }
+}
+
+/** Maps a rejected `ParamStore.fetchAll()` to a user-facing message — same failure modes regardless of which page triggered the fetch. */
+export function fetchErrorMessage(err: unknown, t: TFunction): string {
+  if (err instanceof ParamFetchNoResponseError) return t('params.errorNoResponse')
+  if (err instanceof ParamFetchError) return t('params.errorMissing', { count: err.missing.length })
+  if (err instanceof ParamCountDriftError) return t('params.errorDrift')
+  return t('params.errorGeneric', { message: err instanceof Error ? err.message : String(err) })
+}
+
+/** Removes `key` from a `Map`, returning the same reference untouched if it was already absent (cheap no-op for React/Zustand setters). */
+export function withoutKey<K, V>(map: Map<K, V>, key: K): Map<K, V> {
+  if (!map.has(key)) return map
+  const next = new Map(map)
+  next.delete(key)
+  return next
+}
 
 /** MAV_PARAM_TYPE 1-10, display labels only (see module doc for why this isn't imported from mavlink-mappings). */
 export const PARAM_TYPE_LABELS: Record<number, string> = {

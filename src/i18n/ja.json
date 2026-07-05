@@ -139,6 +139,87 @@
       "noData": "RC チャンネルのテレメトリーはまだありません。"
     }
   },
+  "setup": {
+    "notConnectedTitle": "設定にはボードの接続が必要です",
+    "notConnectedBody": "機体タイプ、ESCプロトコル、バッテリー監視、フェイルセーフはフライトコントローラーから読み込み、書き込みます。",
+    "connectCta": "フライトコントローラーに接続",
+    "subtitleNote": "確認して書き込むまで何も書き込まれません",
+    "subtitleBody": "各設定には対応するArduPilotパラメータが表示されます。変更は下のバーにキューされます。",
+    "frame": {
+      "title": "機体",
+      "options": {
+        "quadX": "クアッド X",
+        "quadPlus": "クアッド +",
+        "hexX": "ヘキサ X",
+        "octoX": "オクト X"
+      }
+    },
+    "esc": {
+      "title": "ESCプロトコル",
+      "note": "DShotはスロットルキャリブレーション不要です",
+      "options": {
+        "pwm": "PWM",
+        "oneShot125": "OneShot125",
+        "dshot150": "DShot150",
+        "dshot300": "DShot300",
+        "dshot600": "DShot600"
+      }
+    },
+    "battery": {
+      "sectionTitle": "バッテリー監視",
+      "monitor": {
+        "title": "監視方式",
+        "options": {
+          "analogVoltageCurrent": "アナログ電圧・電流",
+          "analogVoltageOnly": "アナログ電圧のみ",
+          "disabled": "無効"
+        }
+      },
+      "capacity": {
+        "title": "容量",
+        "suffix": "mAh"
+      },
+      "lowVolt": {
+        "title": "低電圧しきい値",
+        "suffix": "V — バッテリー低下フェイルセーフが作動"
+      }
+    },
+    "failsafes": {
+      "sectionTitle": "フェイルセーフ",
+      "sectionSubtitle": "リンクまたはバッテリー異常時の機体の挙動",
+      "legacyBadge": "レガシー、ArduPilot 4.0以降で廃止",
+      "throttle": {
+        "title": "RC信号ロスト",
+        "options": {
+          "rtl": "常にRTL(帰還)",
+          "continueAuto": "自動モードを継続、それ以外はRTL",
+          "land": "常に着陸",
+          "disabled": "無効（非推奨）"
+        }
+      },
+      "battLow": {
+        "title": "バッテリー低下時の動作",
+        "options": {
+          "land": "着陸",
+          "rtl": "RTL(帰還)",
+          "smartRtlElseLand": "スマートRTL、それ以外は着陸",
+          "none": "なし（警告のみ）"
+        }
+      },
+      "gcs": {
+        "title": "GCSリンクロスト",
+        "options": {
+          "rtl": "常にRTL(帰還)",
+          "continueAuto": "自動モードを継続、それ以外はRTL",
+          "disabled": "無効"
+        }
+      }
+    },
+    "pendingBadge": "{{count}} 件保留中 — まだ書き込まれていません",
+    "revert": "元に戻す",
+    "discardedOnDisconnect": "{{count}} 件の未保存の設定変更が破棄されました — 設定変更はセッション間で保持されません。",
+    "errorNonNegative": "0以上である必要があります"
+  },
   "firmware": {
     "title": "ファームウェア",
     "subtitle": "Web Serial によるドライバー不要の書き込み",

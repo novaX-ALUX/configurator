@@ -1,21 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
-import {
-  ParamCountDriftError,
-  ParamFetchError,
-  ParamFetchNoResponseError,
-  ParamPrecisionLossError,
-  ParamStoreDisposedError,
-  ParamWriteBusyError,
-  ParamWriteMismatchError,
-  ParamWriteTimeoutError,
-} from '../../core/mavlink/params'
+import { ParamStoreDisposedError } from '../../core/mavlink/params'
 import { ParamRow } from './ParamRow'
 import { DiffDrawer, type DiffRowStatus } from './DiffDrawer'
-import { filterParams, paginate, paramPageSize, topGroups, totalPages } from './paramUtils'
+import { fetchErrorMessage, filterParams, paginate, paramPageSize, topGroups, totalPages, withoutKey, writeErrorStatus } from './paramUtils'
 
 type LoadState =
   | { kind: 'idle' }
@@ -32,38 +22,18 @@ const WRITE_OK_DISPLAY_MS = 2000
 // ParamFetchBusyError (a second concurrent fetchAll()) isn't special-cased
 // here: handleLoad's only callers are the idle/error states' own buttons,
 // neither of which renders while a fetch is already in flight, so this UI
-// has no path that can ever trigger it — it falls through to the generic
-// message below, same treatment DiffDrawer's own 'busy'/'precision'
-// statuses get for the equivalent reason (see writeErrorStatus below).
-function fetchErrorMessage(err: unknown, t: TFunction): string {
-  if (err instanceof ParamFetchNoResponseError) return t('params.errorNoResponse')
-  if (err instanceof ParamFetchError) return t('params.errorMissing', { count: err.missing.length })
-  if (err instanceof ParamCountDriftError) return t('params.errorDrift')
-  return t('params.errorGeneric', { message: err instanceof Error ? err.message : String(err) })
-}
-
-// ParamWriteBusyError/ParamPrecisionLossError are handled for completeness
-// (DiffDrawer knows how to render them) but are effectively unreachable
-// through this page today: handleWriteAll only ever has one set() in
-// flight per name at a time (sequential loop), and ParamRow already blocks
-// precision-losing input before it's ever staged (paramUtils.wouldLosePrecision).
-// If writes are ever parallelized, or staging validation changes, that
-// invariant is what would make these reachable.
-function writeErrorStatus(err: unknown): DiffRowStatus {
-  if (err instanceof ParamWriteMismatchError) return { kind: 'mismatch', requested: err.requested, actual: err.actual }
-  if (err instanceof ParamWriteTimeoutError) return { kind: 'timeout' }
-  if (err instanceof ParamWriteBusyError) return { kind: 'busy' }
-  if (err instanceof ParamPrecisionLossError) return { kind: 'precision' }
-  return { kind: 'error', message: err instanceof Error ? err.message : String(err) }
-}
-
-/** Removes `key` from a `Map`, returning the same reference untouched if it was already absent (cheap no-op for React state setters). */
-function withoutKey<V>(map: Map<string, V>, key: string): Map<string, V> {
-  if (!map.has(key)) return map
-  const next = new Map(map)
-  next.delete(key)
-  return next
-}
+// has no path that can ever trigger it — it falls through to fetchErrorMessage's
+// generic message, same treatment DiffDrawer's own 'busy'/'precision'
+// statuses get for the equivalent reason below.
+//
+// ParamWriteBusyError/ParamPrecisionLossError are handled by writeErrorStatus
+// for completeness (DiffDrawer knows how to render them) but are effectively
+// unreachable through this page today: handleWriteAll only ever has one
+// set() in flight per name at a time (sequential loop), and ParamRow already
+// blocks precision-losing input before it's ever staged
+// (paramUtils.wouldLosePrecision). If writes are ever parallelized, or
+// staging validation changes, that invariant is what would make these
+// reachable.
 
 /**
  * Full parameter table: fetch (with progress + distinguishable errors),
