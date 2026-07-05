@@ -303,5 +303,78 @@
     "dfuConfirmProceed": "Erase & flash",
 
     "leaveConfirm": "A firmware flash is in progress — leaving now may brick the board. Leave anyway?"
+  },
+  "calibration": {
+    "notConnectedTitle": "Calibration needs a connected board",
+    "notConnectedBody": "Accelerometer and compass calibration run live against the flight controller's sensors.",
+    "connectCta": "Connect flight controller",
+    "title": "Sensor Calibration",
+    "titleNote": "Results are shown for review — never written silently",
+    "subtitle": "Calibrate the accelerometer once per build, the compass after any wiring or GPS-mast change.",
+    "principle": "novaX principle: calibration never writes parameters without showing you first — every write is logged in Session Activity and reversible.",
+    "orientation": {
+      "label": "AHRS_ORIENTATION",
+      "unknown": "unknown"
+    },
+    "accel": {
+      "sectionTitle": "ACCELEROMETER · 6 POSITIONS",
+      "calibratedBadge": "CALIBRATED",
+      "idleBody": "You'll place the vehicle in six orientations. Hold each one still until it's captured — about 90 seconds total.",
+      "tableWarning": "A wobbly capture ruins the result — use a table, not your hands.",
+      "startCta": "Start accel calibration",
+      "faceLabel": "FACE {{n}} / 6",
+      "faces": {
+        "level": "Level",
+        "left": "Left side",
+        "right": "Right side",
+        "nosedown": "Nose down",
+        "noseup": "Nose up",
+        "back": "On its back"
+      },
+      "hints": {
+        "level": "Place the vehicle flat and still",
+        "left": "Roll it onto its left side",
+        "right": "Roll it onto its right side",
+        "nosedown": "Point the nose straight down",
+        "noseup": "Point the nose straight up",
+        "back": "Flip it upside down"
+      },
+      "hintSuffix": "— then capture.",
+      "captureCta": "Capture this face",
+      "capturing": "Capturing…",
+      "cancelCta": "Cancel — write nothing",
+      "failed": "Calibration failed on the board. Nothing was written — you can start again.",
+      "interrupted": "Calibration was interrupted — the board disconnected mid-sequence. The result is incomplete and nothing is guaranteed either way; recheck INS_ACC* and redo all 6 faces once reconnected.",
+      "restartCta": "Restart calibration"
+    },
+    "compass": {
+      "sectionTitle": "COMPASS",
+      "appliedBadge": "OFFSETS WRITTEN",
+      "idleBody": "Rotate the vehicle slowly around all axes for about a minute. When sampling completes you'll review the new offsets before anything is written.",
+      "startCta": "Start compass calibration",
+      "samplingTitle": "Keep rotating the vehicle…",
+      "samplingBody": "Roll it nose-down, nose-up, on each side and flat — smooth, slow turns.",
+      "samplingPct": "sampling",
+      "compassLabel": "Compass {{id}}",
+      "cancelCta": "Cancel — write nothing",
+      "reviewNote": "Review before writing — nothing has been changed yet",
+      "fitnessGood": "FITNESS {{value}} · GOOD",
+      "fitnessWarn": "FITNESS {{value}} · CHECK",
+      "fitnessWarnBody": "Fitness is higher than ideal for compass {{id}} — consider redoing this calibration away from metal or wiring.",
+      "writeCta": "Write offsets to board",
+      "discardCta": "Discard result",
+      "ackRejected": "The board rejected the write — nothing was written. Safe to retry.",
+      "confirmFailed": "The write may have gone through but could not be verified — check the Parameters page before retrying.",
+      "appliedBody": "New offsets are on the board. Previous values are kept for this session, so you can roll back any time.",
+      "undoCta": "Undo — restore previous",
+      "undoError": "Couldn't restore all previous values: {{message}}",
+      "recalibrateCta": "Recalibrate",
+      "failed": "Compass calibration failed on the board (poor fit or bad orientation). Nothing was written — you can start again.",
+      "interrupted": "Compass calibration was interrupted — the board disconnected. Nothing was written yet; reconnect and recalibrate.",
+      "restartCta": "Restart calibration",
+      "columnParam": "PARAMETER",
+      "columnOnBoard": "ON BOARD",
+      "columnNew": "NEW"
+    }
   }
 }

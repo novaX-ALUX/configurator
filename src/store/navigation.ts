@@ -23,7 +23,7 @@ export const NAV_PAGES: NavPage[] = [
   { id: 'debug', labelKey: 'nav.debug', enabled: true },
   { id: 'dashboard', labelKey: 'nav.dashboard', enabled: true },
   { id: 'setup', labelKey: 'nav.setup', enabled: true },
-  { id: 'calibration', labelKey: 'nav.calibration', enabled: false },
+  { id: 'calibration', labelKey: 'nav.calibration', enabled: true },
   { id: 'motors', labelKey: 'nav.motors', enabled: false },
   { id: 'console', labelKey: 'nav.console', enabled: false },
 ]

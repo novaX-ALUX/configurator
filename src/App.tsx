@@ -8,6 +8,7 @@ import { ParamsPage } from './features/params/ParamsPage'
 import { FirmwarePage } from './features/firmware/FirmwarePage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { SetupPage } from './features/setup/SetupPage'
+import { CalibrationPage } from './features/calibration/CalibrationPage'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
 
 function App() {
@@ -29,6 +30,8 @@ function App() {
           <DashboardPage />
         ) : activePage === 'setup' ? (
           <SetupPage />
+        ) : activePage === 'calibration' ? (
+          <CalibrationPage />
         ) : (
           page && <PagePlaceholder titleKey={page.labelKey} />
         )}

@@ -303,5 +303,78 @@
     "dfuConfirmProceed": "擦除并刷写",
 
     "leaveConfirm": "固件刷写正在进行中 — 此时离开可能导致飞控变砖，仍要离开吗？"
+  },
+  "calibration": {
+    "notConnectedTitle": "校准需要先连接飞控",
+    "notConnectedBody": "加速度计和罗盘校准需要与飞控传感器实时通信。",
+    "connectCta": "连接飞控",
+    "title": "传感器校准",
+    "titleNote": "结果仅供审查 — 绝不会静默写入",
+    "subtitle": "每次组装后校准一次加速度计，每次改动接线或 GPS 支架后校准罗盘。",
+    "principle": "novaX 原则:校准绝不会在未展示给你之前写入参数 — 每次写入都会记录在会话活动中，且可撤销。",
+    "orientation": {
+      "label": "AHRS_ORIENTATION",
+      "unknown": "未知"
+    },
+    "accel": {
+      "sectionTitle": "加速度计 · 6 个姿态",
+      "calibratedBadge": "已校准",
+      "idleBody": "你将把机身摆放成六种姿态。每种姿态保持静止直到采集完成 — 总共约 90 秒。",
+      "tableWarning": "抖动会毁掉采集结果 — 请放在桌面上，不要用手扶。",
+      "startCta": "开始加速度计校准",
+      "faceLabel": "第 {{n}} / 6 面",
+      "faces": {
+        "level": "水平",
+        "left": "左侧朝下",
+        "right": "右侧朝下",
+        "nosedown": "机头朝下",
+        "noseup": "机头朝上",
+        "back": "机腹朝上"
+      },
+      "hints": {
+        "level": "将机身水平放置并保持静止",
+        "left": "将机身向左侧翻转",
+        "right": "将机身向右侧翻转",
+        "nosedown": "将机头垂直朝下",
+        "noseup": "将机头垂直朝上",
+        "back": "将机身翻转成腹部朝上"
+      },
+      "hintSuffix": "— 然后点击采集。",
+      "captureCta": "采集当前姿态",
+      "capturing": "采集中…",
+      "cancelCta": "取消 — 不写入任何内容",
+      "failed": "校准在飞控端失败。未写入任何内容 — 可以重新开始。",
+      "interrupted": "校准被中断 — 飞控在过程中断开连接。结果不完整，无法确认是否已写入任何一侧;请重新连接后重新完成全部 6 个姿态。",
+      "restartCta": "重新开始校准"
+    },
+    "compass": {
+      "sectionTitle": "罗盘",
+      "appliedBadge": "偏移量已写入",
+      "idleBody": "缓慢地绕所有轴旋转机身约一分钟。采样完成后，你会在任何内容被写入之前先审查新的偏移量。",
+      "startCta": "开始罗盘校准",
+      "samplingTitle": "请继续旋转机身…",
+      "samplingBody": "让机头朝下、朝上、每一侧以及水平，都做平稳缓慢的转动。",
+      "samplingPct": "采样中",
+      "compassLabel": "罗盘 {{id}}",
+      "cancelCta": "取消 — 不写入任何内容",
+      "reviewNote": "写入前请先审查 — 目前尚未做任何更改",
+      "fitnessGood": "拟合度 {{value}} · 良好",
+      "fitnessWarn": "拟合度 {{value}} · 请检查",
+      "fitnessWarnBody": "罗盘 {{id}} 的拟合度高于理想值 — 建议远离金属或线材后重新校准。",
+      "writeCta": "将偏移量写入飞控",
+      "discardCta": "丢弃结果",
+      "ackRejected": "飞控拒绝了此次写入 — 未写入任何内容，可放心重试。",
+      "confirmFailed": "写入可能已经生效，但无法确认 — 请重试前先到参数页面检查。",
+      "appliedBody": "新的偏移量已写入飞控。之前的数值在本次会话中仍会保留，你可以随时回滚。",
+      "undoCta": "撤销 — 恢复此前数值",
+      "undoError": "未能恢复全部此前数值:{{message}}",
+      "recalibrateCta": "重新校准",
+      "failed": "罗盘校准在飞控端失败(拟合度差或方向错误)。未写入任何内容 — 可以重新开始。",
+      "interrupted": "罗盘校准被中断 — 飞控已断开连接。尚未写入任何内容;请重新连接后重新校准。",
+      "restartCta": "重新开始校准",
+      "columnParam": "参数",
+      "columnOnBoard": "板上数值",
+      "columnNew": "新数值"
+    }
   }
 }
