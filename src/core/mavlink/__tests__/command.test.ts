@@ -12,6 +12,12 @@ import {
   sendCommand,
   type CommandLongSpec,
 } from '../command'
+import {
+  MAV_CMD_ACCELCAL_VEHICLE_POS,
+  MAV_CMD_DO_ACCEPT_MAG_CAL,
+  MAV_CMD_DO_CANCEL_MAG_CAL,
+  MAV_CMD_DO_START_MAG_CAL,
+} from '../commandIds'
 
 const COMMAND_LONG_MSGID = 76
 const COMMAND_ACK_MSGID = 77
@@ -223,6 +229,36 @@ describe('sendCommand', () => {
     ).toThrow(CommandUsageError)
     await vi.advanceTimersByTimeAsync(0)
     expect(transport.sent).toHaveLength(0)
+  })
+
+  describe.each([
+    ['MAV_CMD_DO_START_MAG_CAL', MAV_CMD_DO_START_MAG_CAL],
+    ['MAV_CMD_DO_ACCEPT_MAG_CAL', MAV_CMD_DO_ACCEPT_MAG_CAL],
+    ['MAV_CMD_DO_CANCEL_MAG_CAL', MAV_CMD_DO_CANCEL_MAG_CAL],
+    ['MAV_CMD_ACCELCAL_VEHICLE_POS', MAV_CMD_ACCELCAL_VEHICLE_POS],
+  ])('%s as a DANGEROUS_COMMANDS entry', (_name, commandId) => {
+    it('is registered in DANGEROUS_COMMANDS', () => {
+      expect(DANGEROUS_COMMANDS.has(commandId)).toBe(true)
+    })
+
+    it('throws CommandUsageError synchronously (nothing sent) if opts.retries > 0', async () => {
+      expect(() => sendCommand(router, target, { command: commandId }, { retries: 1 })).toThrow(CommandUsageError)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(transport.sent).toHaveLength(0)
+    })
+
+    it('makes a single attempt with default/0 retries and rejects with CommandTimeoutError on timeout (no retransmission)', async () => {
+      const promise = sendCommand(router, target, { command: commandId }, { timeoutMs: 100 })
+      const rejection = expect(promise).rejects.toBeInstanceOf(CommandTimeoutError)
+
+      await vi.advanceTimersByTimeAsync(0)
+      expect(transport.sent).toHaveLength(1)
+
+      await vi.advanceTimersByTimeAsync(100)
+      expect(transport.sent).toHaveLength(1) // no retransmission at all
+
+      await rejection
+    })
   })
 
   it('an already-aborted signal rejects immediately with nothing sent', async () => {
