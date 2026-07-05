@@ -343,6 +343,7 @@
       "captureCta": "Capture this face",
       "capturing": "Capturing…",
       "cancelCta": "Cancel — write nothing",
+      "cancelFinalFaceCta": "Cancel — may already be saved",
       "failed": "Calibration failed on the board. Nothing was written — you can start again.",
       "interrupted": "Calibration was interrupted — the board disconnected mid-sequence. The result is incomplete and nothing is guaranteed either way; recheck INS_ACC* and redo all 6 faces once reconnected.",
       "restartCta": "Restart calibration"
@@ -351,6 +352,7 @@
       "sectionTitle": "COMPASS",
       "appliedBadge": "OFFSETS WRITTEN",
       "idleBody": "Rotate the vehicle slowly around all axes for about a minute. When sampling completes you'll review the new offsets before anything is written.",
+      "learnDisclosure": "Starting compass calibration sets COMPASS_LEARN=0 (in-flight compass learning disabled) — an implicit parameter write the FC makes on its own, separate from the offsets/diagonals/scale review gate below.",
       "startCta": "Start compass calibration",
       "samplingTitle": "Keep rotating the vehicle…",
       "samplingBody": "Roll it nose-down, nose-up, on each side and flat — smooth, slow turns.",

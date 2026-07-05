@@ -227,6 +227,51 @@ describe('CalibrationPage: accelerometer', () => {
     expect(useCalibrationProgress.getState().accelDone).toBe(true)
   })
 
+  it('hedges the Cancel copy only in the face-6 busy window, where the FC-side save may already be in flight (minor safety-review finding)', async () => {
+    const { transport } = await connectSession()
+    render(<CalibrationPage />)
+    await startAccel(transport)
+    transport.feed(accelPosFrame(1))
+    await tick()
+
+    // Face 1's own busy window (right after capture, before the next prompt)
+    // -- nothing has been saved yet FC-side, so the plain "write nothing"
+    // copy is still accurate here.
+    fireEvent.click(screen.getByRole('button', { name: 'Capture this face' }))
+    await tick()
+    expect(screen.getByRole('button', { name: 'Cancel — write nothing' })).toBeInTheDocument()
+    transport.feed(ackFrame(MAV_CMD_ACCELCAL_VEHICLE_POS, MAV_RESULT_ACCEPTED))
+    await tick()
+
+    // Advance straight through faces 2-6's prompts to reach face 6 ("back").
+    for (const next of [2, 3, 4, 5, 6]) {
+      transport.feed(accelPosFrame(next))
+      await tick()
+      if (next < 6) {
+        fireEvent.click(screen.getByRole('button', { name: 'Capture this face' }))
+        await tick()
+        transport.feed(ackFrame(MAV_CMD_ACCELCAL_VEHICLE_POS, MAV_RESULT_ACCEPTED))
+        await tick()
+      }
+    }
+    expect(screen.getByText('FACE 6 / 6')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel — write nothing' })).toBeInTheDocument()
+
+    // Face 6's capture is confirmed -- status stays 'busy' until the
+    // terminal 42429 (success/failure) arrives, which is exactly the window
+    // where the FC may already be saving INS_ACC* server-side.
+    fireEvent.click(screen.getByRole('button', { name: 'Capture this face' }))
+    await tick()
+    transport.feed(ackFrame(MAV_CMD_ACCELCAL_VEHICLE_POS, MAV_RESULT_ACCEPTED))
+    await tick()
+    expect(screen.getByRole('button', { name: 'Cancel — may already be saved' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel — write nothing' })).not.toBeInTheDocument()
+
+    transport.feed(accelPosFrame(16777215))
+    await tick()
+    expect(screen.getByText('CALIBRATED')).toBeInTheDocument()
+  })
+
   it('disconnect mid-sequence shows the honest interrupted copy, latches across reconnect, and clears only on explicit restart', async () => {
     const { transport } = await connectSession()
     render(<CalibrationPage />)
@@ -316,6 +361,14 @@ describe('CalibrationPage: accelerometer', () => {
 })
 
 describe('CalibrationPage: compass', () => {
+  it('discloses COMPASS_LEARN=0 in the idle body too, before Start is even clicked (regression: previously only shown post-click)', async () => {
+    await connectSession()
+    render(<CalibrationPage />)
+
+    expect(screen.getByText('Start compass calibration')).toBeInTheDocument()
+    expect(screen.getByText(/COMPASS_LEARN=0/)).toBeInTheDocument()
+  })
+
   it('start discloses COMPASS_LEARN=0 (inline + Session Activity), before any progress/report', async () => {
     const { transport } = await connectSession()
     render(<CalibrationPage />)
@@ -541,6 +594,49 @@ describe('CalibrationPage: compass', () => {
     transport.feed(ackFrame(MAV_CMD_DO_ACCEPT_MAG_CAL, MAV_RESULT_ACCEPTED))
     await tick()
     expect(screen.getByText(/could not be verified — check the Parameters page/)).toBeInTheDocument()
+  })
+
+  it('a REAL disconnect during accept() (session nulled like connection.ts actually does, not just phase) still resolves to the unconfirmed message -- not stuck at accepting forever', async () => {
+    // Regression test (calibration review, highest-priority finding): the
+    // test above only flips `phase`, leaving `session`/`paramStore` in the
+    // store untouched -- that never happens in the real app (connection.ts's
+    // own `resetSession()` always nulls `session`/`paramStore` in the same
+    // `set()` call as the phase transition, see that module's own doc), and
+    // critically it never exercises the bug: `useCompassCalibration`'s mount
+    // effect only tears down (nulling its internal `calRef`) when `session`
+    // itself changes identity, not when `phase` alone changes. With the old
+    // `calRef.current !== cal` guard in `accept()`'s reject handler, a real
+    // disconnect (session -> null) mid-`accept()` nulled `calRef` out from
+    // under the still-pending `accept()` promise, so its eventual settle
+    // (here: the ACK arrives but `paramStore.fetchAll()` fails to confirm)
+    // was silently discarded -- `status` stuck at `'accepting'` forever, both
+    // review buttons rendered but disabled, no message at all.
+    const { transport, paramStore } = await connectSession()
+    vi.spyOn(paramStore, 'fetchAll').mockRejectedValueOnce(new Error('no response'))
+    render(<CalibrationPage />)
+    await startCompass(transport)
+    transport.feed(magReportFrame(0, [-34, 112, -8], 3.0))
+    await tick()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write offsets to board' }))
+    await tick() // DO_ACCEPT_MAG_CAL sent, ACK not yet fed -- status is 'accepting'
+
+    // A REAL disconnect: session/paramStore nulled in the same tick as the
+    // phase transition, exactly like connection.ts's resetSession().
+    act(() => {
+      useConnectionStore.setState({ phase: 'disconnected', session: null, paramStore: null })
+    })
+    await tick()
+    expect(screen.queryByText('Calibration needs a connected board')).not.toBeInTheDocument()
+
+    // The old (still-live-underneath) MagCalibration instance's accept()
+    // promise now settles: the FC ACKs the write, but confirming it fails.
+    transport.feed(ackFrame(MAV_CMD_DO_ACCEPT_MAG_CAL, MAV_RESULT_ACCEPTED))
+    await tick()
+
+    expect(screen.getByText(/could not be verified — check the Parameters page/)).toBeInTheDocument()
+    // Must NOT be stuck showing the disabled 'accepting' review buttons forever.
+    expect(screen.queryByText('Write offsets to board')).not.toBeInTheDocument()
   })
 })
 

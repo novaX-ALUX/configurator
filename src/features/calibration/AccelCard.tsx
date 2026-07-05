@@ -104,7 +104,13 @@ export function AccelCard({ accel, connected }: AccelCardProps) {
               onClick={abandon}
               className="rounded-[9px] border border-nvx-borderStrong bg-white px-3.5 py-2.5 text-[12.5px] font-semibold text-nvx-text hover:bg-nvx-field"
             >
-              {t('calibration.accel.cancelCta')}
+              {/* Face 6 ("back")'s own captureFace() confirm having already been
+                  ACKed (status stays 'busy' until the terminal 42429 arrives, per
+                  accelCal.ts's own doc) is the one window where the FC may already
+                  be mid-save -- "write nothing" would overpromise there, the same
+                  way `interrupted`'s copy already hedges ("nothing is guaranteed
+                  either way") instead of claiming a clean no-op. */}
+              {busy && currentFace === 'back' ? t('calibration.accel.cancelFinalFaceCta') : t('calibration.accel.cancelCta')}
             </button>
           </div>
           {error && <p className="mt-2 text-[11.5px] font-semibold text-nvx-danger">{error}</p>}

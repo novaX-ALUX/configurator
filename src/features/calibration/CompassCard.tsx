@@ -56,6 +56,10 @@ export function CompassCard({ compass, connected }: CompassCardProps) {
           {status === 'failed' && <p className="mb-2 text-[12px] font-semibold text-nvx-danger">{t('calibration.compass.failed')}</p>}
           {error && <p className="mb-2 text-[11.5px] text-nvx-danger">{error}</p>}
           <p className="my-2.5 text-[12.5px] leading-relaxed text-nvx-muted">{t('calibration.compass.idleBody')}</p>
+          {/* Disclosed here too, before Start is even clicked -- not just once
+              running -- so the user learns about the implicit COMPASS_LEARN=0
+              write BEFORE committing, not only after (calibration review finding). */}
+          <p className="mb-2.5 rounded-lg bg-nvx-primarySoft px-2.5 py-2 text-[11.5px] text-nvx-primarySoftText">{t('calibration.compass.learnDisclosure')}</p>
           <button
             type="button"
             disabled={!connected}
@@ -67,7 +71,7 @@ export function CompassCard({ compass, connected }: CompassCardProps) {
         </>
       ) : status === 'running' ? (
         <>
-          {disclosure && <p className="mb-2.5 rounded-lg bg-nvx-primarySoft px-2.5 py-2 text-[11.5px] text-nvx-primarySoftText">{disclosure}</p>}
+          {disclosure && <p className="mb-2.5 rounded-lg bg-nvx-primarySoft px-2.5 py-2 text-[11.5px] text-nvx-primarySoftText">{t('calibration.compass.learnDisclosure')}</p>}
           {sortedProgress.length === 0 ? (
             <p className="text-[12.5px] text-nvx-muted">{t('calibration.compass.samplingTitle')}</p>
           ) : (
