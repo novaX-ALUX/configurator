@@ -91,6 +91,54 @@
     "statusPrecision": "数值过大，无法精确存储 — 未发送",
     "statusError": "写入失败:{{message}}"
   },
+  "dashboard": {
+    "notConnectedTitle": "尚未连接飞控",
+    "notConnectedBody": "通过 USB 插入飞控，在顶部栏选择串口，然后点击连接。遥测、传感器和电机数据将在此显示。",
+    "connectCta": "连接飞控",
+    "hintStep1": "插入 USB",
+    "hintStep2": "选择串口",
+    "hintStep3": "连接",
+    "attitude": {
+      "title": "姿态",
+      "roll": "横滚",
+      "pitch": "俯仰",
+      "hdg": "航向"
+    },
+    "vehicle": {
+      "title": "机体",
+      "armed": "已解锁",
+      "disarmed": "未解锁",
+      "noHeartbeat": "无心跳信号",
+      "frame": "机架",
+      "frameClass": "类型 {{n}}"
+    },
+    "power": {
+      "title": "电源",
+      "remaining": "剩余 {{pct}}%",
+      "noRemaining": "电量百分比不可用 — 仅显示电压"
+    },
+    "gps": {
+      "title": "GPS",
+      "sats": "颗卫星",
+      "hdop": "HDOP {{value}}",
+      "noFix": "暂无数据",
+      "fix": {
+        "none": "无定位",
+        "2d": "2D 定位",
+        "3d": "3D 定位"
+      }
+    },
+    "motors": {
+      "title": "电机输出",
+      "label": "M{{n}}",
+      "noData": "暂无电机输出遥测数据。"
+    },
+    "rc": {
+      "title": "遥控通道",
+      "channel": "CH{{n}}",
+      "noData": "暂无遥控通道遥测数据。"
+    }
+  },
   "firmware": {
     "title": "固件",
     "subtitle": "通过 Web Serial 免驱动刷写",

@@ -13,7 +13,7 @@ export type PageId =
 export interface NavPage {
   id: PageId
   labelKey: string
-  /** M1 ships firmware/parameters/debug; the rest are shown disabled for later milestones. */
+  /** M1 shipped firmware/parameters/debug; M2 adds dashboard (Task 6.2); the rest stay disabled for later milestones. */
   enabled: boolean
 }
 
@@ -21,7 +21,7 @@ export const NAV_PAGES: NavPage[] = [
   { id: 'firmware', labelKey: 'nav.firmware', enabled: true },
   { id: 'parameters', labelKey: 'nav.parameters', enabled: true },
   { id: 'debug', labelKey: 'nav.debug', enabled: true },
-  { id: 'dashboard', labelKey: 'nav.dashboard', enabled: false },
+  { id: 'dashboard', labelKey: 'nav.dashboard', enabled: true },
   { id: 'setup', labelKey: 'nav.setup', enabled: false },
   { id: 'calibration', labelKey: 'nav.calibration', enabled: false },
   { id: 'motors', labelKey: 'nav.motors', enabled: false },

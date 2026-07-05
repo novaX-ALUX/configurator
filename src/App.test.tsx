@@ -11,8 +11,10 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: 'Parameters' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Debug / Status' })).toBeInTheDocument()
 
+    // Dashboard shipped in M2 (Task 6.2) and is now clickable too.
+    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeEnabled()
+
     // Future pages are listed but disabled.
-    expect(screen.getByRole('button', { name: 'Dashboard' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Console' })).toBeDisabled()
 
     // Top bar shows the disconnected state: baud rate + "Any device" fallback

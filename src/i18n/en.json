@@ -91,6 +91,54 @@
     "statusPrecision": "Value too large to store exactly — not sent",
     "statusError": "Write failed: {{message}}"
   },
+  "dashboard": {
+    "notConnectedTitle": "No flight controller connected",
+    "notConnectedBody": "Plug your board in via USB, pick its serial port in the top bar, and hit Connect. Telemetry, sensors and motors will light up here.",
+    "connectCta": "Connect flight controller",
+    "hintStep1": "Plug in USB",
+    "hintStep2": "Select port",
+    "hintStep3": "Connect",
+    "attitude": {
+      "title": "Attitude",
+      "roll": "ROLL",
+      "pitch": "PITCH",
+      "hdg": "HDG"
+    },
+    "vehicle": {
+      "title": "Vehicle",
+      "armed": "Armed",
+      "disarmed": "Disarmed",
+      "noHeartbeat": "No heartbeat",
+      "frame": "Frame",
+      "frameClass": "Class {{n}}"
+    },
+    "power": {
+      "title": "Power",
+      "remaining": "{{pct}}% remaining",
+      "noRemaining": "Battery percentage unavailable — showing voltage only"
+    },
+    "gps": {
+      "title": "GPS",
+      "sats": "sats",
+      "hdop": "HDOP {{value}}",
+      "noFix": "No data",
+      "fix": {
+        "none": "No fix",
+        "2d": "2D fix",
+        "3d": "3D fix"
+      }
+    },
+    "motors": {
+      "title": "Motor Outputs",
+      "label": "M{{n}}",
+      "noData": "No motor output telemetry yet."
+    },
+    "rc": {
+      "title": "RC Channels",
+      "channel": "CH{{n}}",
+      "noData": "No RC channel telemetry yet."
+    }
+  },
   "firmware": {
     "title": "Firmware",
     "subtitle": "Driverless flashing over Web Serial",

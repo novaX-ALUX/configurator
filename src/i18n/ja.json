@@ -91,6 +91,54 @@
     "statusPrecision": "値が大きすぎて正確に保存できません — 送信されませんでした",
     "statusError": "書き込みに失敗しました:{{message}}"
   },
+  "dashboard": {
+    "notConnectedTitle": "フライトコントローラーが接続されていません",
+    "notConnectedBody": "USB でボードを接続し、上部バーでシリアルポートを選んで接続をクリックしてください。テレメトリー、センサー、モーターの情報がここに表示されます。",
+    "connectCta": "フライトコントローラーに接続",
+    "hintStep1": "USB を接続",
+    "hintStep2": "ポートを選択",
+    "hintStep3": "接続",
+    "attitude": {
+      "title": "姿勢",
+      "roll": "ロール",
+      "pitch": "ピッチ",
+      "hdg": "方位"
+    },
+    "vehicle": {
+      "title": "機体",
+      "armed": "アーム済み",
+      "disarmed": "アーム解除",
+      "noHeartbeat": "ハートビートなし",
+      "frame": "フレーム",
+      "frameClass": "クラス {{n}}"
+    },
+    "power": {
+      "title": "電源",
+      "remaining": "残り {{pct}}%",
+      "noRemaining": "バッテリー残量不明 — 電圧のみ表示"
+    },
+    "gps": {
+      "title": "GPS",
+      "sats": "機の衛星",
+      "hdop": "HDOP {{value}}",
+      "noFix": "データなし",
+      "fix": {
+        "none": "測位なし",
+        "2d": "2D 測位",
+        "3d": "3D 測位"
+      }
+    },
+    "motors": {
+      "title": "モーター出力",
+      "label": "M{{n}}",
+      "noData": "モーター出力のテレメトリーはまだありません。"
+    },
+    "rc": {
+      "title": "RC チャンネル",
+      "channel": "CH{{n}}",
+      "noData": "RC チャンネルのテレメトリーはまだありません。"
+    }
+  },
   "firmware": {
     "title": "ファームウェア",
     "subtitle": "Web Serial によるドライバー不要の書き込み",
