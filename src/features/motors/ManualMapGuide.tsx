@@ -32,11 +32,32 @@ type GuideStep =
  * structurally unable to write `SERVOx_FUNCTION` or any other parameter. A
  * mismatch only shows a warning pointing the user at Parameters to fix the
  * mapping themselves; nothing here ever remaps anything automatically.
+ *
+ * **Adversarial-review fix.** `onSetPercent` (`motorTestStore.ts`'s
+ * `setMotorPercent`) already refuses to spin anything unless `state` is
+ * currently 'ready'/'testing' -- a stop always disarms this guide's own test
+ * spins centrally, no matter what this component does. But a stale local
+ * `step` (still showing "spinning position N" or a result screen after a
+ * kill switch fired) would be a dishonest UI even though it's now harmless,
+ * and a stale `next()` press would silently no-op instead of failing
+ * loudly. So `step` resets to 'idle' the moment `state` drops to 'locked'
+ * (the render-time "adjust state on prop change" idiom this codebase
+ * already uses in `useTelemetry.ts`/`useAccelCalibration.ts`, not a
+ * `useEffect`, to avoid a one-frame flash of the stale screen), and every
+ * mid-guide action is also explicitly disabled outside 'ready'/'testing'.
  */
 export function ManualMapGuide({ motorCount, state, onSetPercent }: ManualMapGuideProps) {
   const { t } = useTranslation()
   const [step, setStep] = useState<GuideStep>({ kind: 'idle' })
   const disabled = state !== 'ready' && state !== 'testing'
+
+  const [prevState, setPrevState] = useState(state)
+  if (state !== prevState) {
+    setPrevState(state)
+    if (state === 'locked' && step.kind !== 'idle') {
+      setStep({ kind: 'idle' })
+    }
+  }
 
   function start(): void {
     if (disabled) return
@@ -102,8 +123,9 @@ export function ManualMapGuide({ motorCount, state, onSetPercent }: ManualMapGui
               <button
                 key={n}
                 type="button"
+                disabled={disabled}
                 onClick={() => confirmPosition(n)}
-                className="h-8 w-8 rounded-full border border-nvx-borderStrong bg-white font-mono text-[12px] font-bold text-nvx-text hover:bg-nvx-field"
+                className="h-8 w-8 rounded-full border border-nvx-borderStrong bg-white font-mono text-[12px] font-bold text-nvx-text hover:bg-nvx-field disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {n}
               </button>
@@ -119,8 +141,9 @@ export function ManualMapGuide({ motorCount, state, onSetPercent }: ManualMapGui
           </span>
           <button
             type="button"
+            disabled={disabled}
             onClick={next}
-            className="ml-auto flex-none rounded-[9px] bg-nvx-primary px-[14px] py-2 text-[12px] font-bold text-white hover:bg-nvx-primaryHover"
+            className="ml-auto flex-none rounded-[9px] bg-nvx-primary px-[14px] py-2 text-[12px] font-bold text-white hover:bg-nvx-primaryHover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {t('motors.guide.next')}
           </button>

@@ -100,9 +100,17 @@ async function connectSession(frameClass = 1, frameType = 1): Promise<{ transpor
   return { transport, session }
 }
 
-/** Arms through the checkbox + Enable button + the real 3s countdown. */
+/**
+ * Arms through the checkbox + Enable button + the real 3s countdown. Safe to
+ * call more than once in the same test (e.g. re-arming after a kill switch
+ * fired and stopped everything) -- only clicks the checkbox if it isn't
+ * already checked, since `propsConfirmed` survives a plain `stop()` (only an
+ * explicit uncheck resets it, per `motorSafety.ts`'s own doc) and clicking an
+ * already-checked checkbox would toggle it back off.
+ */
 async function arm(): Promise<void> {
-  fireEvent.click(screen.getByRole('checkbox', { name: /confirm ALL propellers/i }))
+  const checkbox = screen.getByRole('checkbox', { name: /confirm ALL propellers/i })
+  if (!(checkbox as HTMLInputElement).checked) fireEvent.click(checkbox)
   fireEvent.click(screen.getByRole('button', { name: /Enable motor outputs/i }))
   await advance(3000)
   expect(screen.getByRole('button', { name: /Outputs enabled/i })).toBeInTheDocument()
@@ -334,6 +342,45 @@ describe('MotorTestPage: sequence test', () => {
   })
 })
 
+describe('MotorTestPage: adversarial-review regression — a stale sequence timer cannot resurrect a spin after re-arm', () => {
+  it("reproduces the reviewer's exact repro end-to-end on a 6-motor frame: sequence test + Escape mid-sequence + re-arm sends zero autonomous spins", async () => {
+    const { transport } = await connectSession(2, 1) // Hex X, 6 motors
+    render(<MotorTestPage />)
+    await arm()
+
+    fireEvent.click(screen.getByRole('button', { name: /Sequence/i }))
+    expect(screen.getByRole('slider', { name: 'M1' })).toHaveValue('12')
+
+    // Well before the sequence's own 900ms step -- its interval is still
+    // alive. A multiple of `advance`'s own 200ms step keeps it phase-aligned
+    // with the page's own tick interval (registered at mount, t=0) so a
+    // later `arm()`'s countdown isn't left short by an unrelated fractional
+    // remainder -- a test-harness-only concern, not a product timing issue.
+    await advance(400)
+
+    transport.sent.length = 0
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: /Enable motor outputs/i })).toBeInTheDocument() // back to 'locked'
+    await settleStopAcks(transport, 6)
+
+    // Re-arm exactly like a normal recovery.
+    await arm()
+    // If `sequenceRunning` were still stuck `true` (the old bug: the
+    // interval never got cancelled), this button would still show as
+    // running/disabled even once fully re-armed.
+    expect(screen.getByRole('button', { name: /Sequence/i })).not.toBeDisabled()
+
+    transport.sent.length = 0
+    // Advance well past where the old, uncancelled sequence interval would
+    // have fired its next step (900ms) and a subsequent renew tick (400ms).
+    await advance(900 * 3)
+
+    const spins = decodeMotorTestCmds(transport.sent).filter((c) => Number(c.param3) > 0)
+    expect(spins).toEqual([]) // the whole point: no autonomous spin with zero slider interaction
+    expect(screen.getAllByRole('slider').every((el) => (el as HTMLInputElement).value === '0')).toBe(true)
+  })
+})
+
 describe('MotorTestPage: ManualMapGuide never writes SERVOx_FUNCTION', () => {
   it('guides motor-by-motor and only ever sends DO_MOTOR_TEST commands, never a PARAM_SET', async () => {
     const { transport } = await connectSession()
@@ -372,6 +419,32 @@ describe('MotorTestPage: ManualMapGuide never writes SERVOx_FUNCTION', () => {
     expect(decodeParamSets(transport.sent)).toHaveLength(0)
     const cmds = decodeMotorTestCmds(transport.sent)
     expect(cmds.length).toBeGreaterThan(0) // it really did spin motors via the safety-gated path
+  })
+
+  it('adversarial-review regression: a stop mid-guide resets its step to idle and does not resurrect a spin on re-arm', async () => {
+    const { transport } = await connectSession()
+    render(<MotorTestPage />)
+    await arm()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start guide' }))
+    expect(screen.getByText(/Spinning position 1/i)).toBeInTheDocument()
+
+    transport.sent.length = 0
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: /Enable motor outputs/i })).toBeInTheDocument() // back to 'locked'
+    // The guide must not still be showing a stale "spinning"/result screen --
+    // it's back to its own idle "Start guide" affordance.
+    expect(screen.getByRole('button', { name: 'Start guide' })).toBeInTheDocument()
+    expect(screen.queryByText(/Spinning position/i)).not.toBeInTheDocument()
+    await settleStopAcks(transport, 4)
+
+    await arm()
+    expect(screen.getByRole('button', { name: 'Start guide' })).not.toBeDisabled()
+
+    transport.sent.length = 0
+    await advance(1200) // well past a renew cycle -- nothing should fire on its own
+    const spins = decodeMotorTestCmds(transport.sent).filter((c) => Number(c.param3) > 0)
+    expect(spins).toEqual([]) // no autonomous spin just because a stop happened mid-guide
   })
 })
 

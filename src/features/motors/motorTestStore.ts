@@ -35,6 +35,36 @@
  *    slider moves — only the next renew tick actually talks to the FC,
  *    deliberately, so a single dropped tick never means a burst of stale
  *    commands.
+ *
+ * **Adversarial-review fix: stale-feeder invalidation is centralized here,
+ * not left to callers.** `runSequence` (the "Sequence M1->Mn" test) is a
+ * repeating `setInterval` that outlives a single event -- it can still be
+ * ticking when a kill switch fires. A reviewer reproduced a real autonomous
+ * spin: start the sequence test, fire a non-unmount kill switch (e.g.
+ * Escape) mid-sequence, then re-arm — the *same* interval, never cancelled,
+ * eventually fires again after state has legitimately recovered to 'ready',
+ * calling what looks like an ordinary percent-set with a nonzero value. Two
+ * central invariants close this off, both enforced *here*, independent of
+ * whatever component happens to be driving percents:
+ *
+ *  1. The sequence-test timer is **owned by this store**, not by
+ *     `MotorSliders` — `runSequence`/`cancelSequence` below are the only
+ *     thing that ever touches it, and `onStop` (which fires for *every* path
+ *     into 'locked': the six kill switches, an idle auto-lock/auto-stop, or
+ *     `MotorSafety`'s own stall detector — all of them funnel through
+ *     `MotorSafety.stop()` -> this same callback) unconditionally cancels
+ *     it. A stale interval literally cannot exist across a stop, because
+ *     the stop *is* what clears it.
+ *  2. `applyPercent` (the guarded core both `setMotorPercent` and
+ *     `runSequence`'s own stepping go through) refuses to mutate `percents`
+ *     or call `MotorSafety.setSpinning` unless `safety.state` is currently
+ *     'ready' or 'testing' *at the moment of the call* — belt-and-suspenders
+ *     underneath (1): even if some future feeder is added and forgets to
+ *     register itself for cancellation, it still cannot repopulate
+ *     `percents` while locked/counting, which is what used to let a stale
+ *     write survive into the *next* legitimate percent-set (that one sweeps
+ *     the *whole* `percents` map into `activeMotors`, not just the motor it
+ *     touched).
  */
 import { create } from 'zustand'
 import { MotorSafety, type SafetyState } from './motorSafety'
@@ -43,6 +73,10 @@ import type { MavSession } from '../../core/mavlink/session'
 
 /** Short per-motor-test timeout for renewal commands — comfortably inside `motorSafety.ts`'s own `stallStopMs` default and its documented 0.5-1s renewal window. */
 const RENEW_TIMEOUT_S = 0.6
+
+/** Sequence-test throttle and per-motor dwell — design mock's own "Sequence M1→M4 @ 12%". Owned here (not `MotorSliders`) so a stop can cancel it centrally; see module doc. */
+const SEQUENCE_PERCENT = 12
+const SEQUENCE_STEP_MS = 900
 
 export interface MotorTestState {
   state: SafetyState
@@ -55,6 +89,8 @@ export interface MotorTestState {
   stopLeft: number
   /** motorSeq (1-based) -> current slider percent (0..`MOTOR_TEST_MAX_PERCENT`). A missing entry means 0. Reset to `{}` on every stop. */
   percents: Record<number, number>
+  /** True while `runSequence`'s own interval is active. `MotorSliders` reads this instead of owning any timer of its own — see module doc's adversarial-review fix. */
+  sequenceRunning: boolean
 
   /**
    * Single-owner setter: only `MotorTestPage` calls this, once per render
@@ -69,11 +105,20 @@ export interface MotorTestState {
   setSessionInfo: (session: MavSession | null, motorCount: number) => void
   confirmProps: (v: boolean) => void
   enable: () => void
-  /** Sets one motor's slider percent (clamped to `[0, MOTOR_TEST_MAX_PERCENT]`), drives `noteActivity`/`setSpinning`, and re-syncs reactive state. The FC command itself is sent by `onRenew` on the next tick, not here. */
+  /** Sets one motor's slider percent (clamped to `[0, MOTOR_TEST_MAX_PERCENT]`), drives `noteActivity`/`setSpinning`, and re-syncs reactive state. The FC command itself is sent by `onRenew` on the next tick, not here. A no-op (does not touch `percents`) unless `state` is currently 'ready'/'testing' — see module doc. */
   setMotorPercent: (motorSeq: number, percent: number) => void
+  /**
+   * Starts the "Sequence M1->Mn @ 12%" test: steps through every motor
+   * 1..`motorCount`, `SEQUENCE_STEP_MS` apart, via the same guarded
+   * `applyPercent` core `setMotorPercent` uses. A no-op if already running,
+   * or if `state` isn't currently 'ready'/'testing'. The interval this
+   * starts is owned by the store (not the caller) specifically so `onStop`
+   * can cancel it unconditionally — see module doc.
+   */
+  runSequence: (motorCount: number) => void
   /** The page's ~200ms driver. */
   tick: () => void
-  /** Every one of the six kill switches, the STOP ALL/LOCK OUTPUTS buttons, and the disconnect-during-testing guard all call this. Idempotent from 'locked' (mirrors `MotorSafety.stop`). */
+  /** Every one of the six kill switches, the STOP ALL/LOCK OUTPUTS buttons, and the disconnect-during-testing guard all call this. Idempotent from 'locked' (mirrors `MotorSafety.stop`). Also cancels any in-flight `runSequence` (via the shared `onStop` path — see module doc). */
   stop: (reason: string) => void
 }
 
@@ -81,11 +126,54 @@ export interface MotorTestState {
 export function createMotorTestStore(now: () => number = () => Date.now()) {
   let sessionRef: MavSession | null = null
   let motorCountRef = 0
+  /** The sequence-test's own interval handle — owned here, not by any component, so `onStop` can cancel it unconditionally. See module doc. */
+  let seqTimerRef: ReturnType<typeof setInterval> | null = null
 
   return create<MotorTestState>((set, get) => {
+    /**
+     * Cancels any in-flight `runSequence` interval. Called from `onStop`
+     * (every path into 'locked', see module doc) so a stale feeder can never
+     * survive a stop — this is the primary fix, not a fallback.
+     */
+    function cancelSequence(): void {
+      if (seqTimerRef !== null) {
+        clearInterval(seqTimerRef)
+        seqTimerRef = null
+      }
+      set({ sequenceRunning: false })
+    }
+
+    /**
+     * The single guarded core both `setMotorPercent` and `runSequence`'s own
+     * stepping go through. Refuses to touch `percents` or call
+     * `MotorSafety.setSpinning` unless `state` is currently 'ready'/'testing'
+     * — see module doc's adversarial-review fix for why this check, by
+     * itself, is necessary but not sufficient (the sequence timer must also
+     * actually be cancelled by `onStop`, since this guard alone can't stop a
+     * stale call that happens to land *after* a legitimate re-arm).
+     */
+    function applyPercent(motorSeq: number, percent: number): void {
+      if (safety.state !== 'ready' && safety.state !== 'testing') return
+      const clamped = Math.min(MOTOR_TEST_MAX_PERCENT, Math.max(0, percent))
+      set((s) => ({ percents: { ...s.percents, [motorSeq]: clamped } }))
+      safety.noteActivity()
+      const active = Object.entries(get().percents)
+        .filter(([, v]) => v > 0)
+        .map(([seq]) => Number(seq))
+      safety.setSpinning(active.length > 0, active)
+      set(readSafety())
+    }
+
     const safety = new MotorSafety({
       now,
       onStop: () => {
+        // Cancel the sequence feeder FIRST, before anything else -- this is
+        // the one callback every path into 'locked' funnels through (the six
+        // kill switches, an idle auto-lock/auto-stop, `MotorSafety`'s own
+        // stall detector), so it's the single central place a stale timer
+        // can be guaranteed dead, not left to whatever component happened to
+        // start it.
+        cancelSequence()
         if (sessionRef) void stopAllMotors(sessionRef, motorCountRef)
         set({ ...readSafety(), percents: {} })
       },
@@ -121,6 +209,7 @@ export function createMotorTestStore(now: () => number = () => Date.now()) {
       idleLeft: 0,
       stopLeft: 0,
       percents: {},
+      sequenceRunning: false,
 
       setSessionInfo(session, motorCount) {
         sessionRef = session
@@ -138,14 +227,26 @@ export function createMotorTestStore(now: () => number = () => Date.now()) {
       },
 
       setMotorPercent(motorSeq, percent) {
-        const clamped = Math.min(MOTOR_TEST_MAX_PERCENT, Math.max(0, percent))
-        set((s) => ({ percents: { ...s.percents, [motorSeq]: clamped } }))
-        safety.noteActivity()
-        const active = Object.entries(get().percents)
-          .filter(([, v]) => v > 0)
-          .map(([seq]) => Number(seq))
-        safety.setSpinning(active.length > 0, active)
-        set(readSafety())
+        applyPercent(motorSeq, percent)
+      },
+
+      runSequence(motorCount) {
+        if (seqTimerRef !== null) return // already running
+        if (motorCount < 1) return
+        if (safety.state !== 'ready' && safety.state !== 'testing') return
+
+        set({ sequenceRunning: true })
+        let motor = 1
+        applyPercent(motor, SEQUENCE_PERCENT)
+        seqTimerRef = setInterval(() => {
+          applyPercent(motor, 0)
+          motor++
+          if (motor > motorCount) {
+            cancelSequence()
+            return
+          }
+          applyPercent(motor, SEQUENCE_PERCENT)
+        }, SEQUENCE_STEP_MS)
       },
 
       tick() {

@@ -146,9 +146,11 @@ export function MotorTestPage() {
   const countdown = useMotorTestStore((s) => s.countdown)
   const idleLeft = useMotorTestStore((s) => s.idleLeft)
   const percents = useMotorTestStore((s) => s.percents)
+  const sequenceRunning = useMotorTestStore((s) => s.sequenceRunning)
   const confirmProps = useMotorTestStore((s) => s.confirmProps)
   const enable = useMotorTestStore((s) => s.enable)
   const setMotorPercent = useMotorTestStore((s) => s.setMotorPercent)
+  const runSequence = useMotorTestStore((s) => s.runSequence)
   const setSessionInfo = useMotorTestStore((s) => s.setSessionInfo)
   const tick = useMotorTestStore((s) => s.tick)
   const stop = useMotorTestStore((s) => s.stop)
@@ -300,7 +302,14 @@ export function MotorTestPage() {
               onEnable={enable}
               onStopAll={() => stop('STOP pressed')}
             />
-            <MotorSliders motorCount={motorCount} percents={percents} state={state} onSetPercent={setMotorPercent} />
+            <MotorSliders
+              motorCount={motorCount}
+              percents={percents}
+              state={state}
+              onSetPercent={setMotorPercent}
+              sequenceRunning={sequenceRunning}
+              onRunSequence={() => runSequence(motorCount)}
+            />
           </div>
         </div>
       </div>

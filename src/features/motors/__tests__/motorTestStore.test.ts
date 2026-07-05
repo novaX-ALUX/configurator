@@ -181,4 +181,78 @@ describe('motorTestStore', () => {
     store.getState().setMotorPercent(1, 0)
     expect(store.getState().state).toBe('ready')
   })
+
+  describe('adversarial-review fix: the sequence-test timer cannot survive a stop and resurrect a spin on re-arm', () => {
+    /**
+     * Reproduces the reviewer's exact repro on a 6-motor frame: start the
+     * sequence test, fire a non-unmount kill switch mid-sequence (well
+     * before the sequence's own 900ms step interval would fire again),
+     * re-arm exactly like a normal recovery, then advance time well past
+     * where the OLD (uncancelled) sequence timer would have fired its next
+     * step plus a renew tick. Before the fix, that stale interval kept
+     * running through the stop, and its next scheduled fire -- landing
+     * *after* state had legitimately recovered to 'ready' -- looked like an
+     * ordinary fresh percent-set and genuinely spun a motor with zero
+     * slider interaction. Asserts zero `DO_MOTOR_TEST` commands with a
+     * nonzero `param3` (a real spin) reach the wire after the stop, until a
+     * fresh explicit user action -- and that `sequenceRunning` itself goes
+     * false immediately on the stop, proving the interval was actually torn
+     * down, not just rendered harmless by state.
+     */
+    async function assertNoAutonomousSpinAfterStopAndRearm(trigger: (s: MotorTestState) => void): Promise<void> {
+      store.getState().setSessionInfo(session, 6)
+      arm()
+
+      store.getState().runSequence(6)
+      expect(store.getState().sequenceRunning).toBe(true)
+      expect(store.getState().percents[1]).toBe(12) // motor 1 spun immediately at sequence start
+
+      advance(300) // well before the sequence's own 900ms step -- its interval is still alive
+      store.getState().tick()
+
+      transport.sent.length = 0
+      trigger(store.getState())
+      expect(store.getState().state).toBe('locked')
+      expect(store.getState().sequenceRunning).toBe(false) // the interval itself must be torn down, not merely rendered harmless
+
+      await settleAcks(transport, 6) // the stop's own real stopAllMotors -- expected, not the bug under test
+
+      // Re-arm exactly like a normal recovery.
+      arm()
+      expect(store.getState().state).toBe('ready')
+
+      transport.sent.length = 0
+      // Advance well past where the old, uncancelled sequence interval would
+      // have fired its next step (900ms) and a subsequent renew tick (400ms).
+      for (let i = 0; i < 8; i++) {
+        advance(200)
+        store.getState().tick()
+      }
+      await flush()
+
+      const spins = decodeMotorTestCmds(transport.sent).filter((c) => Number(c.param3) > 0)
+      expect(spins).toEqual([]) // the whole point: no autonomous spin with zero user input
+      expect(store.getState().state).toBe('ready') // still armed, nothing spun on its own
+    }
+
+    it('1. window blur mid-sequence, then re-arm: no autonomous spin', async () => {
+      await assertNoAutonomousSpinAfterStopAndRearm((s) => s.stop('Window lost focus'))
+    })
+
+    it('2. tab hidden mid-sequence, then re-arm: no autonomous spin', async () => {
+      await assertNoAutonomousSpinAfterStopAndRearm((s) => s.stop('Tab hidden'))
+    })
+
+    it("3. Escape mid-sequence, then re-arm: no autonomous spin (the reviewer's exact repro)", async () => {
+      await assertNoAutonomousSpinAfterStopAndRearm((s) => s.stop('ESC pressed'))
+    })
+
+    it('4. unchecking props-removed mid-sequence, then re-arm: no autonomous spin', async () => {
+      await assertNoAutonomousSpinAfterStopAndRearm((s) => s.confirmProps(false))
+    })
+
+    it('5. STOP pressed mid-sequence, then re-arm: no autonomous spin', async () => {
+      await assertNoAutonomousSpinAfterStopAndRearm((s) => s.stop('STOP pressed'))
+    })
+  })
 })
