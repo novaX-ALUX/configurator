@@ -4,6 +4,7 @@ import { defs } from '../../core/mavlink/defs'
 import { encodeFrame, FrameParser } from '../../core/mavlink/frame'
 import { encodePayload } from '../../core/mavlink/encode'
 import { decodePayload } from '../../core/mavlink/decode'
+import { Telemetry } from '../../core/mavlink/telemetry'
 import { createConnectionStore, type PickedPort, type PortPicker } from '../connection'
 
 const HEARTBEAT_MSGID = 0
@@ -87,6 +88,7 @@ describe('connection store', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   describe('connect()', () => {
@@ -247,6 +249,7 @@ describe('connection store', () => {
     it('disposes the ParamStore, drops identity/portInfo/linkStats, and returns to disconnected', async () => {
       const transport = new MockTransport()
       const store = createConnectionStore(pickerFor(transport))
+      vi.spyOn(Telemetry.prototype, 'stopStreams').mockResolvedValue(undefined)
 
       await store.getState().connect(115200)
       transport.feed(heartbeatFrame())
@@ -301,6 +304,7 @@ describe('connection store', () => {
         return { transport: calls === 1 ? transport1 : new MockTransport(), portInfo: {} }
       }
       const store = createConnectionStore(picker)
+      vi.spyOn(Telemetry.prototype, 'stopStreams').mockResolvedValue(undefined)
 
       await store.getState().connect(115200)
       transport1.feed(heartbeatFrame())
@@ -400,6 +404,7 @@ describe('connection store', () => {
       await flush()
 
       const { session } = store.getState()
+      vi.spyOn(session!.telemetry, 'stopStreams').mockResolvedValue(undefined)
       const telemetryDisposeSpy = vi.spyOn(session!.telemetry, 'dispose')
       const paramStoreDisposeSpy = vi.spyOn(session!.paramStore, 'dispose')
 
@@ -459,6 +464,7 @@ describe('connection store', () => {
       transports[0].feed(heartbeatFrame())
       await flush()
       const firstSession = store.getState().session
+      vi.spyOn(firstSession!.telemetry, 'stopStreams').mockResolvedValue(undefined)
       await store.getState().disconnect()
 
       await store.getState().connect(115200)
@@ -471,6 +477,98 @@ describe('connection store', () => {
       expect(secondSession!.router).not.toBe(firstSession!.router)
       expect(secondSession!.paramStore).not.toBe(firstSession!.paramStore)
       expect(secondSession!.telemetry).not.toBe(firstSession!.telemetry)
+    })
+  })
+
+  describe('telemetry stream lifecycle', () => {
+    /** The per-message rates the store is documented to request (task brief's suggested defaults). */
+    const EXPECTED_RATES = {
+      ATTITUDE: 10,
+      SYS_STATUS: 2,
+      GPS_RAW_INT: 2,
+      RC_CHANNELS: 5,
+      SERVO_OUTPUT_RAW: 5,
+    }
+
+    it('requests telemetry streams once connected, with the documented per-message rates', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+      const requestStreamsSpy = vi.spyOn(Telemetry.prototype, 'requestStreams').mockResolvedValue(undefined)
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      expect(requestStreamsSpy).toHaveBeenCalledTimes(1)
+      expect(requestStreamsSpy).toHaveBeenCalledWith(EXPECTED_RATES)
+    })
+
+    it('a requestStreams() rejection does not break the connected state', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+      vi.spyOn(Telemetry.prototype, 'requestStreams').mockRejectedValue(new Error('board refused'))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      // Never awaited by connect() — the rejection above must be caught
+      // internally (no unhandled rejection) and must not have blocked the
+      // 'connected' transition.
+      expect(store.getState().phase).toBe('connected')
+    })
+
+    it('calls stopStreams() before the transport is closed, on a graceful disconnect()', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+      vi.spyOn(Telemetry.prototype, 'requestStreams').mockResolvedValue(undefined)
+      const stopStreamsSpy = vi.spyOn(Telemetry.prototype, 'stopStreams').mockResolvedValue(undefined)
+      const closeSpy = vi.spyOn(transport, 'close')
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      await store.getState().disconnect()
+
+      expect(stopStreamsSpy).toHaveBeenCalledTimes(1)
+      expect(closeSpy).toHaveBeenCalledTimes(1)
+      expect(stopStreamsSpy.mock.invocationCallOrder[0]).toBeLessThan(closeSpy.mock.invocationCallOrder[0])
+      expect(store.getState().phase).toBe('disconnected')
+    })
+
+    it('disconnect() still tears down and resolves even if stopStreams() rejects (best-effort — the board may already be gone)', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+      vi.spyOn(Telemetry.prototype, 'requestStreams').mockResolvedValue(undefined)
+      vi.spyOn(Telemetry.prototype, 'stopStreams').mockRejectedValue(new Error('board already gone'))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      await expect(store.getState().disconnect()).resolves.toBeUndefined()
+      expect(store.getState().phase).toBe('disconnected')
+    })
+
+    it('does not call stopStreams() on an unplug (link is already gone), but still disposes telemetry', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+      vi.spyOn(Telemetry.prototype, 'requestStreams').mockResolvedValue(undefined)
+      const stopStreamsSpy = vi.spyOn(Telemetry.prototype, 'stopStreams').mockResolvedValue(undefined)
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      const telemetryDisposeSpy = vi.spyOn(store.getState().session!.telemetry, 'dispose')
+
+      transport.simulateDisconnect('device unplugged')
+      await flush()
+
+      expect(stopStreamsSpy).not.toHaveBeenCalled()
+      expect(telemetryDisposeSpy).toHaveBeenCalledTimes(1)
+      expect(store.getState().session).toBeNull()
     })
   })
 

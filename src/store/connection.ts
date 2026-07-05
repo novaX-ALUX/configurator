@@ -27,7 +27,7 @@ import { SerialTransport } from '../core/transport/serial'
 import { defs } from '../core/mavlink/defs'
 import { MavRouter, type MavRouterStats } from '../core/mavlink/router'
 import { ParamStore } from '../core/mavlink/params'
-import { Telemetry } from '../core/mavlink/telemetry'
+import { Telemetry, type TelemetryMsg } from '../core/mavlink/telemetry'
 import type { MavSession } from '../core/mavlink/session'
 import { sendCommand } from '../core/mavlink/command'
 
@@ -40,6 +40,25 @@ const MAV_CMD_REQUEST_MESSAGE = 512
 const STATUSTEXT_CAP = 500
 /** `linkStats` is a periodic snapshot of `router.stats`, not push-updated per frame — 1Hz is plenty for a debug readout and decouples UI re-renders from telemetry rate. */
 const LINK_STATS_INTERVAL_MS = 1000
+
+/**
+ * Per-message `requestStreams()` rates (Hz), requested once the link
+ * reaches 'connected'. ATTITUDE is fast enough for a smooth attitude
+ * readout (10Hz); SYS_STATUS/GPS_RAW_INT are slow since battery level and
+ * GPS fix don't change quickly (2Hz each); RC_CHANNELS/SERVO_OUTPUT_RAW are
+ * fast enough to see stick/output movement without flooding the link
+ * (5Hz each). `Telemetry.requestStreams()`'s own default (10Hz) would apply
+ * to any message left out of this map — nothing is, here, but it's a
+ * `Partial` so that stays true if a message is ever added upstream without
+ * this map being updated to match.
+ */
+const TELEMETRY_STREAM_RATES_HZ: Partial<Record<TelemetryMsg, number>> = {
+  ATTITUDE: 10,
+  SYS_STATUS: 2,
+  GPS_RAW_INT: 2,
+  RC_CHANNELS: 5,
+  SERVO_OUTPUT_RAW: 5,
+}
 
 export type ConnectionPhase = 'disconnected' | 'connecting' | 'connected' | 'lost'
 
@@ -291,6 +310,13 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
                 paramStore: store,
                 session: { router, target: targetIds, paramStore: store, telemetry },
               })
+              // Fire-and-forget, same error tolerance as the AUTOPILOT_VERSION
+              // request just below: a board that never answers (or rejects
+              // every message in the set) must not block or throw out of the
+              // 'connected' transition — only log for diagnosis.
+              telemetry.requestStreams(TELEMETRY_STREAM_RATES_HZ).catch((err) => {
+                console.error('connection: telemetry requestStreams failed', err)
+              })
               // Graceful absence tolerance (task brief): a board that never
               // answers (or this request being unsupported) just leaves
               // `identity` as-is — never awaited, never blocks anything.
@@ -348,6 +374,17 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
       async disconnect() {
         const transport = transportRef
         if (!transport) return
+        // Best-effort: send the stop-stream commands while the link is still
+        // live, before transport.close() tears everything down (its
+        // onDisconnect -> teardown() fires synchronously within that call
+        // and disposes `telemetryRef` — this must happen first, on the
+        // still-open link, not after). A board that's already unresponsive
+        // must not block or throw out of a graceful disconnect — only log.
+        if (telemetryRef) {
+          await telemetryRef.stopStreams().catch((err) => {
+            console.error('connection: telemetry stopStreams failed', err)
+          })
+        }
         await transport.close() // triggers the registered onDisconnect -> teardown() synchronously within this call
       },
 
