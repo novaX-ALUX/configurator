@@ -46,6 +46,25 @@
  * check state first. It does not touch `propsConfirmed` — an auto-stop or a
  * kill-switch stop does not force the user to re-check the "props removed"
  * box before arming again; only an explicit `confirmProps(false)` does that.
+ * (Deliberate: re-arming after any stop still requires the full `enable()`
+ * countdown — re-ticking the props checkbox is a separate, independent
+ * confirmation the design does not ask for again on every stop.)
+ *
+ * **Stalled-tick detection (adversarial-review fix):** a real FC command
+ * timeout (0.5-1s, motorTest.ts's `runMotorTest`) is a *safe-fail* — the
+ * motor physically stops if it isn't renewed in time. But if the JS thread
+ * itself stalls (GC pause, tab backgrounding, debugger breakpoint, ...) for
+ * longer than that FC timeout yet still under `spinIdleMs` (5s), a naive
+ * `tick()` would see `idle = now - lastAct` still short (the user's last
+ * real input may well be recent) and blindly fire `onRenew` again on the
+ * next call — silently re-arming a motor that already physically stopped,
+ * without the user's continued presence ever being reconfirmed (the thread
+ * froze; the user did not keep holding anything). `tick()` therefore checks
+ * `now - lastRenew` against `stallStopMs` *before* deciding to renew:
+ * `lastRenew` only advances on a successful renew (every `renewMs`), so a
+ * gap that blows past several renew cycles is unambiguous evidence of a
+ * stalled tick loop, not normal jitter — and in that case it stops instead
+ * of renewing. See `stallStopMs` below for the threshold.
  */
 
 export type SafetyState = 'locked' | 'counting' | 'ready' | 'testing'
@@ -64,12 +83,27 @@ export interface MotorSafetyOptions {
   spinIdleMs?: number
   /** onRenew cadence while 'testing'. Default 400ms. */
   renewMs?: number
+  /**
+   * While 'testing', a gap since the last successful renew this long is
+   * treated as a stalled tick loop (not normal jitter) — `tick()` stops
+   * instead of renewing. Default `max(renewMs * 3, FC_COMMAND_MAX_TIMEOUT_MS)`:
+   * three missed renew cycles is well past ordinary scheduling jitter, and
+   * never less than the worst-case real FC command timeout
+   * (`motorTest.ts`'s `runMotorTest` uses a 0.5-1s timeoutS per the design
+   * doc — 1000ms here is that upper bound) — any gap at least that long
+   * means the FC's own command has plausibly already lapsed and the motor
+   * physically stopped, so renewing now would be resuming as if nothing
+   * happened instead of honestly re-confirming the user is still present.
+   */
+  stallStopMs?: number
 }
 
 const DEFAULT_COUNTDOWN_MS = 3000
 const DEFAULT_IDLE_LOCK_MS = 30000
 const DEFAULT_SPIN_IDLE_MS = 5000
 const DEFAULT_RENEW_MS = 400
+/** Upper bound of the 0.5-1s short-timeout range `motorTest.ts`'s `runMotorTest` uses for a real DO_MOTOR_TEST command (design doc §8) — see `stallStopMs`. */
+const FC_COMMAND_MAX_TIMEOUT_MS = 1000
 
 export class MotorSafety {
   private readonly now: () => number
@@ -79,6 +113,7 @@ export class MotorSafety {
   private readonly idleLockMs: number
   private readonly spinIdleMs: number
   private readonly renewMs: number
+  private readonly stallStopMs: number
 
   private _state: SafetyState = 'locked'
   private _propsConfirmed = false
@@ -102,6 +137,7 @@ export class MotorSafety {
     this.idleLockMs = opts.idleLockMs ?? DEFAULT_IDLE_LOCK_MS
     this.spinIdleMs = opts.spinIdleMs ?? DEFAULT_SPIN_IDLE_MS
     this.renewMs = opts.renewMs ?? DEFAULT_RENEW_MS
+    this.stallStopMs = opts.stallStopMs ?? Math.max(this.renewMs * 3, FC_COMMAND_MAX_TIMEOUT_MS)
   }
 
   get state(): SafetyState {
@@ -138,7 +174,18 @@ export class MotorSafety {
     this._countdown = this.countdownMs
   }
 
-  /** The periodic driver — the page calls this on a ~200ms interval. Advances the countdown, checks both idle-based auto-stops, and fires renewals while 'testing'. Pure function of `now()` and the recorded timestamps, so it is safe to call at any cadence, including a single call after a large fake-clock jump in tests. */
+  /**
+   * The periodic driver — the page calls this on a ~200ms interval. Advances
+   * the countdown, checks both idle-based auto-stops, and fires renewals
+   * while 'testing'. Pure function of `now()` and the recorded timestamps,
+   * so 'locked'/'counting'/'ready' are safe to drive with a single call
+   * after a large fake-clock jump in tests. 'testing' is the deliberate
+   * exception: by design (see `stallStopMs`), a single big gap since the
+   * last successful renew there is indistinguishable from — and treated as
+   * — a stalled tick loop, so tests covering 'testing' at more than a few
+   * hundred ms need periodic calls (mirroring the page's real cadence), not
+   * one jump.
+   */
   tick(): void {
     const t = this.now()
 
@@ -173,7 +220,15 @@ export class MotorSafety {
         return
       }
       this._stopLeft = this.spinIdleMs - idle
-      if (t - this.lastRenew >= this.renewMs) {
+      const sinceRenew = t - this.lastRenew
+      if (sinceRenew >= this.stallStopMs) {
+        // The tick loop itself stalled past a real FC command's own
+        // timeout — the motor has plausibly already safe-failed stopped.
+        // Do NOT renew (that would silently re-arm it); stop for real.
+        this.stop('auto-stop: tick stall detected, outputs may have lapsed')
+        return
+      }
+      if (sinceRenew >= this.renewMs) {
         this.lastRenew = t
         this.onRenewCb(this.activeMotors)
       }
