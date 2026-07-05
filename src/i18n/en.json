@@ -376,5 +376,59 @@
       "columnOnBoard": "ON BOARD",
       "columnNew": "NEW"
     }
+  },
+  "motors": {
+    "notConnectedTitle": "Motor test needs a connected board",
+    "notConnectedBody": "Connect the flight controller first. And while you're waiting — this is a good moment to take the props off.",
+    "connectCta": "Connect flight controller",
+    "title": "Motor Test",
+    "titleNote": "Props off · bench only · outputs capped at 30%",
+    "subtitle": "Verify motor order and spin direction against the diagram before first flight.",
+    "frameUnknownNote": "Frame not loaded yet — showing Quad X as a placeholder, not your real motor count.",
+    "steps": {
+      "confirmProps": "Confirm props removed",
+      "confirmPropsHint": "Hard gate — nothing spins without it",
+      "enable": "Enable outputs · 3-2-1",
+      "enableHint": "Auto-locks after {{s}} s idle",
+      "test": "Test — every exit stops motors",
+      "testHint": "{{s}} s no-input · ESC · window blur · leaving page"
+    },
+    "safetyGate": {
+      "title": "SAFETY GATE",
+      "checkboxLabel": "I confirm ALL propellers are removed",
+      "checkboxHint": "…and the aircraft is secured so it can't move on the bench.",
+      "enableLocked": "Enable motor outputs",
+      "enableCounting": "Arming outputs in {{s}}…",
+      "enableReady": "Outputs enabled · auto-lock in {{s}} s",
+      "stopAll": "STOP ALL"
+    },
+    "layout": {
+      "title": "MOTOR LAYOUT",
+      "caption": "Numbers = ArduPilot outputs · layout follows Setup → Frame"
+    },
+    "sliders": {
+      "title": "PER-MOTOR TEST",
+      "sequence": "Sequence {{labels}} @ {{pct}}%",
+      "footnote": "Sliders release to zero on any safety event. Output ceiling {{max}}% (MOT_TEST bench cap)."
+    },
+    "guide": {
+      "title": "Not sure of the wiring order?",
+      "body": "Guided motor-by-motor check: we spin one motor at a time through the same safety gate — you tell us which position actually spun. Mapping stays manual: fix SERVOx_FUNCTION yourself in Parameters if it doesn't match.",
+      "start": "Start guide",
+      "spinning": "Spinning position {{n}}… which motor actually moved?",
+      "match": "Matches — position {{n}} is wired correctly.",
+      "mismatch": "Mismatch — expected position {{n}} to spin, but you confirmed position {{picked}}. Fix SERVOx_FUNCTION in Parameters.",
+      "done": "Guide complete.",
+      "next": "Next",
+      "close": "Close"
+    },
+    "banners": {
+      "testActive": "MOTOR TEST ACTIVE",
+      "testActiveBody": "auto-stop in {{s}} s without input · click STOP or press ESC · leaving this page stops all motors",
+      "outputsEnabled": "MOTOR OUTPUTS ENABLED",
+      "outputsEnabledBody": "props must be off · auto-lock in {{s}} s if idle · window blur stops outputs",
+      "stopAll": "STOP ALL",
+      "lockOutputs": "LOCK OUTPUTS"
+    }
   }
 }

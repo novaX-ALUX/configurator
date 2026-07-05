@@ -376,5 +376,59 @@
       "columnOnBoard": "板上数值",
       "columnNew": "新数值"
     }
+  },
+  "motors": {
+    "notConnectedTitle": "电机测试需要先连接飞控",
+    "notConnectedBody": "请先连接飞控。等待期间——现在正是把桨叶拆下来的好时机。",
+    "connectCta": "连接飞控",
+    "title": "电机测试",
+    "titleNote": "拆桨 · 仅限台架 · 输出上限 30%",
+    "subtitle": "首次飞行前,请对照布局图核实电机顺序和转向。",
+    "frameUnknownNote": "机架尚未加载 — 当前显示的 Quad X 仅为占位,并非你的真实电机数量。",
+    "steps": {
+      "confirmProps": "确认已拆下螺旋桨",
+      "confirmPropsHint": "硬性门槛 — 不勾选则任何电机都不会转动",
+      "enable": "启用输出 · 3-2-1",
+      "enableHint": "空闲 {{s}} 秒后自动锁定",
+      "test": "测试 — 任何退出都会停止电机",
+      "testHint": "{{s}} 秒无操作 · ESC · 窗口失焦 · 离开页面"
+    },
+    "safetyGate": {
+      "title": "安全门",
+      "checkboxLabel": "我确认所有螺旋桨均已拆下",
+      "checkboxHint": "……并且机身已固定,不会在台架上移动。",
+      "enableLocked": "启用电机输出",
+      "enableCounting": "{{s}} 秒后解锁输出…",
+      "enableReady": "输出已启用 · {{s}} 秒后自动锁定",
+      "stopAll": "全部停止"
+    },
+    "layout": {
+      "title": "电机布局",
+      "caption": "数字为 ArduPilot 输出序号 · 布局与 Setup → Frame 联动"
+    },
+    "sliders": {
+      "title": "逐电机测试",
+      "sequence": "顺序测试 {{labels}} @ {{pct}}%",
+      "footnote": "任何安全事件都会使滑块归零。输出上限 {{max}}%(MOT_TEST 台架上限)。"
+    },
+    "guide": {
+      "title": "不确定接线顺序?",
+      "body": "逐电机引导核对:我们通过同一套安全门逐个转动电机——你来确认实际转动的是哪个位置。映射关系仍需手动处理:如不匹配,请在 Parameters 中自行修改 SERVOx_FUNCTION。",
+      "start": "开始引导",
+      "spinning": "正在转动位置 {{n}}……实际转动的是哪个电机?",
+      "match": "匹配 — 位置 {{n}} 接线正确。",
+      "mismatch": "不匹配 — 期望位置 {{n}} 转动,但你确认的是位置 {{picked}}。请在 Parameters 中修改 SERVOx_FUNCTION。",
+      "done": "引导完成。",
+      "next": "下一个",
+      "close": "关闭"
+    },
+    "banners": {
+      "testActive": "电机测试进行中",
+      "testActiveBody": "{{s}} 秒无操作将自动停止 · 点击 STOP 或按 ESC · 离开此页面将停止所有电机",
+      "outputsEnabled": "电机输出已启用",
+      "outputsEnabledBody": "螺旋桨必须已拆下 · 空闲 {{s}} 秒后自动锁定 · 窗口失焦将停止输出",
+      "stopAll": "全部停止",
+      "lockOutputs": "锁定输出"
+    }
   }
 }

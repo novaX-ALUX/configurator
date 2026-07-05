@@ -47,7 +47,7 @@ export function TopBar() {
   const disconnected = phase === 'disconnected'
 
   return (
-    <header className="col-span-2 row-start-1 flex h-14 items-center gap-3 border-b border-nvx-border bg-nvx-surface px-[18px]">
+    <header className="col-span-2 row-start-2 flex h-14 items-center gap-3 border-b border-nvx-border bg-nvx-surface px-[18px]">
       <img src={novaxLogo} alt="novaX" className="h-[17px] w-auto" />
       <span className="h-5 w-px bg-nvx-border" aria-hidden="true" />
       <span className="font-heading text-[10.5px] font-semibold tracking-[.22em] text-nvx-subtle">

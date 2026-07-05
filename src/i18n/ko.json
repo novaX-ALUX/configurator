@@ -376,5 +376,59 @@
       "columnOnBoard": "보드 값",
       "columnNew": "새 값"
     }
+  },
+  "motors": {
+    "notConnectedTitle": "모터 테스트를 하려면 보드를 연결해야 합니다",
+    "notConnectedBody": "먼저 비행 컨트롤러를 연결하세요. 기다리는 동안 — 지금이 프로펠러를 제거하기 좋은 때입니다.",
+    "connectCta": "비행 컨트롤러 연결",
+    "title": "모터 테스트",
+    "titleNote": "프로펠러 제거 · 벤치 전용 · 출력 상한 30%",
+    "subtitle": "첫 비행 전, 다이어그램과 대조하여 모터 순서와 회전 방향을 확인하세요.",
+    "frameUnknownNote": "프레임이 아직 로드되지 않았습니다 — 실제 모터 수가 아닌 자리 표시자로 Quad X를 표시 중입니다.",
+    "steps": {
+      "confirmProps": "프로펠러 제거 확인",
+      "confirmPropsHint": "필수 게이트 — 체크하지 않으면 아무것도 회전하지 않습니다",
+      "enable": "출력 활성화 · 3-2-1",
+      "enableHint": "{{s}}초 동안 조작이 없으면 자동 잠금",
+      "test": "테스트 — 어떤 방식으로 나가도 모터는 정지합니다",
+      "testHint": "{{s}}초 무입력 · ESC · 창 포커스 상실 · 페이지 이탈"
+    },
+    "safetyGate": {
+      "title": "안전 게이트",
+      "checkboxLabel": "모든 프로펠러를 제거했음을 확인합니다",
+      "checkboxHint": "……그리고 기체가 벤치에서 움직이지 않도록 고정되어 있습니다.",
+      "enableLocked": "모터 출력 활성화",
+      "enableCounting": "{{s}}초 후 출력 활성화…",
+      "enableReady": "출력 활성화됨 · {{s}}초 후 자동 잠금",
+      "stopAll": "전체 정지"
+    },
+    "layout": {
+      "title": "모터 레이아웃",
+      "caption": "숫자는 ArduPilot 출력 번호 · 레이아웃은 Setup → Frame과 연동됩니다"
+    },
+    "sliders": {
+      "title": "모터별 테스트",
+      "sequence": "{{labels}} 를 {{pct}}%로 순차 테스트",
+      "footnote": "안전 이벤트가 발생하면 슬라이더가 자동으로 0이 됩니다. 출력 상한 {{max}}%(MOT_TEST 벤치 상한)."
+    },
+    "guide": {
+      "title": "배선 순서가 확실하지 않나요?",
+      "body": "모터별 가이드 확인: 동일한 안전 게이트를 통해 모터를 하나씩 회전시킵니다 — 실제로 회전한 위치를 알려주세요. 매핑은 여전히 수동입니다: 일치하지 않으면 Parameters에서 SERVOx_FUNCTION을 직접 수정하세요.",
+      "start": "가이드 시작",
+      "spinning": "위치 {{n}} 회전 중… 실제로 움직인 모터는 어느 것인가요?",
+      "match": "일치 — 위치 {{n}}의 배선이 올바릅니다.",
+      "mismatch": "불일치 — 위치 {{n}}이(가) 회전할 것으로 예상했지만, 위치 {{picked}}을(를) 확인했습니다. Parameters에서 SERVOx_FUNCTION을 수정하세요.",
+      "done": "가이드 완료.",
+      "next": "다음",
+      "close": "닫기"
+    },
+    "banners": {
+      "testActive": "모터 테스트 진행 중",
+      "testActiveBody": "{{s}}초 무입력 시 자동 정지 · STOP 클릭 또는 ESC 누름 · 이 페이지를 벗어나면 모든 모터가 정지합니다",
+      "outputsEnabled": "모터 출력 활성화됨",
+      "outputsEnabledBody": "프로펠러가 제거되어야 함 · {{s}}초 유휴 시 자동 잠금 · 창 포커스 상실 시 출력 정지",
+      "stopAll": "전체 정지",
+      "lockOutputs": "출력 잠금"
+    }
   }
 }

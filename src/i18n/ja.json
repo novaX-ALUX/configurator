@@ -376,5 +376,59 @@
       "columnOnBoard": "ボード上の値",
       "columnNew": "新しい値"
     }
+  },
+  "motors": {
+    "notConnectedTitle": "モーターテストには機体の接続が必要です",
+    "notConnectedBody": "まずフライトコントローラーを接続してください。待っている間に——今がプロペラを外す良いタイミングです。",
+    "connectCta": "フライトコントローラーに接続",
+    "title": "モーターテスト",
+    "titleNote": "プロペラを外す · ベンチ専用 · 出力上限 30%",
+    "subtitle": "初飛行の前に、図と照らし合わせてモーターの順序と回転方向を確認してください。",
+    "frameUnknownNote": "フレーム未読み込み — 実際のモーター数ではなく、仮の表示として Quad X を表示しています。",
+    "steps": {
+      "confirmProps": "プロペラの取り外しを確認",
+      "confirmPropsHint": "必須ゲート — チェックしない限り何も回転しません",
+      "enable": "出力を有効化 · 3-2-1",
+      "enableHint": "{{s}} 秒操作がないと自動ロック",
+      "test": "テスト — どこから抜けてもモーターは停止します",
+      "testHint": "{{s}} 秒無操作 · ESC · ウィンドウのフォーカス喪失 · ページ離脱"
+    },
+    "safetyGate": {
+      "title": "セーフティゲート",
+      "checkboxLabel": "すべてのプロペラを外したことを確認しました",
+      "checkboxHint": "……機体はベンチ上で動かないよう固定されています。",
+      "enableLocked": "モーター出力を有効化",
+      "enableCounting": "{{s}} 秒後に出力を有効化…",
+      "enableReady": "出力有効 · {{s}} 秒後に自動ロック",
+      "stopAll": "全停止"
+    },
+    "layout": {
+      "title": "モーターレイアウト",
+      "caption": "数字は ArduPilot の出力番号 · レイアウトは Setup → Frame と連動"
+    },
+    "sliders": {
+      "title": "モーター個別テスト",
+      "sequence": "{{labels}} を {{pct}}% で順番にテスト",
+      "footnote": "安全イベントが発生するとスライダーは自動でゼロに戻ります。出力上限 {{max}}%(MOT_TEST のベンチ上限)。"
+    },
+    "guide": {
+      "title": "配線順序に自信がない?",
+      "body": "モーターごとのガイド付き確認:同じセーフティゲートを通して1つずつモーターを回転させます——実際に回転した位置を教えてください。マッピングは手動のままです:一致しない場合は Parameters で SERVOx_FUNCTION を自分で修正してください。",
+      "start": "ガイドを開始",
+      "spinning": "位置 {{n}} を回転中…実際に動いたのはどのモーターですか?",
+      "match": "一致 — 位置 {{n}} の配線は正しいです。",
+      "mismatch": "不一致 — 位置 {{n}} が回転するはずでしたが、位置 {{picked}} と確認されました。Parameters で SERVOx_FUNCTION を修正してください。",
+      "done": "ガイド完了。",
+      "next": "次へ",
+      "close": "閉じる"
+    },
+    "banners": {
+      "testActive": "モーターテスト中",
+      "testActiveBody": "{{s}} 秒操作がないと自動停止 · STOP をクリックするか ESC を押す · このページを離れると全モーターが停止します",
+      "outputsEnabled": "モーター出力が有効です",
+      "outputsEnabledBody": "プロペラを外してください · {{s}} 秒操作がないと自動ロック · ウィンドウのフォーカスが外れると出力停止",
+      "stopAll": "全停止",
+      "lockOutputs": "出力をロック"
+    }
   }
 }

@@ -9,6 +9,13 @@
  *
  * No React here — pure data + types, per the task brief.
  *
+ * **Second consumer (Task 9.3):** `features/motors/MotorTestPage.tsx` also
+ * reads `FRAME_FIELD` directly — the "layout follows Setup -> Frame" link
+ * the Motor Test page's frame diagram and motor count are built from. A
+ * future change to `FRAME_FIELD.options`' shape or `motors[]` layout
+ * coordinates ripples into that page's safety-relevant motor-count
+ * resolution too, not just Setup's own frame tiles.
+ *
  * ## Values verified against ArduPilot source, not just the design mock
  *
  * The design mock (and the task brief that transcribed it) got two enums
