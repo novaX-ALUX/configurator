@@ -156,6 +156,26 @@ describe('MotorTestPage: not connected', () => {
   })
 })
 
+describe('MotorTestPage: connected but session not yet resolved (Task 5.4 known gap)', () => {
+  it('does not show an armable safety gate when phase is connected but session is still null -- shows the waiting/empty state instead', () => {
+    // Regression test (calibration/motor-test review finding): the page used
+    // to gate its whole interactive UI on `phase === 'connected'` alone.
+    // Task 5.4's own documented gap is that `phase` can read 'connected'
+    // (HEARTBEAT-driven) before `getComponents()` has resolved a target,
+    // leaving `session` still `null` -- and neither `enable()` nor
+    // `setMotorPercent` (only `onStop`/`onRenew`) guard on a live session, so
+    // without this fix a user could check props/enable/slide while every
+    // real FC command silently no-ops: false confidence that a motor test
+    // actually ran.
+    useConnectionStore.setState({ phase: 'connected', session: null, paramStore: null })
+    render(<MotorTestPage />)
+
+    expect(screen.getByText(/Motor test needs a connected board/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Enable motor outputs/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /confirm ALL propellers/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('MotorTestPage: unknown frame disclosure', () => {
   it('discloses the Quad-X fallback as a placeholder when FRAME_CLASS/FRAME_TYPE have not been fetched, and stops disclosing once they are', async () => {
     const transport = new MockTransport()

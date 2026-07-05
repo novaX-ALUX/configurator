@@ -233,7 +233,16 @@ export function MotorTestPage() {
     if (phase !== 'connected') stop('Link disconnected')
   }, [phase, stop])
 
-  const connected = phase === 'connected'
+  // Gated on `session`, not just `phase`, per Task 5.4's own documented gap:
+  // `phase` can read 'connected' (HEARTBEAT-driven) before `getComponents()`
+  // has resolved a target, leaving `session` still `null` -- and `enable()`/
+  // `setMotorPercent` below have no session guard of their own (only
+  // `onStop`/`onRenew` do), so without this the safety gate would let a user
+  // arm and slide while every FC command silently no-ops: false confidence
+  // that a motor test actually ran. Falls back to the same not-connected
+  // empty state as the null-session case (`CalibrationPage`'s own hooks
+  // guard on session the same way for their write paths).
+  const connected = phase === 'connected' && session != null
 
   if (!connected) {
     return (
