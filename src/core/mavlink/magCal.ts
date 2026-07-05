@@ -37,26 +37,34 @@
  *    anything, so a caller that wires it up can never miss this — see that
  *    method's own doc for why a callback (not a return value) was chosen.
  *
- * 3. **After a report, nothing is written yet — and nothing tells the GCS
- *    once it is.** `send_mag_cal_report` (`AP_Compass_Calibration.cpp:
- *    283-332`) streams `MAG_CAL_REPORT` continuously post-completion,
- *    independent of `_accept_calibration`; the params are genuinely
- *    untouched until `DO_ACCEPT_MAG_CAL` arrives — confirmed by the
- *    autotest itself, which explicitly re-checks params are still zero
- *    right after receiving the SUCCESS report and *before* sending accept
- *    (`Tools/autotest/vehicle_test_suite.py:9965-9967`,
- *    `check_zero_mag_parameters`). Symmetrically, once `_accept_calibration`
- *    (`AP_Compass_Calibration.cpp:187-223`) does write — via direct
- *    `set_and_save_*()` C++ calls, never through `handle_param_set`
- *    (`GCS_MAVLink/GCS_Param.cpp:263-316`, the *only* path in the tree that
- *    echoes a `PARAM_VALUE` after a set, and it isn't reached here) — no
- *    unsolicited `PARAM_VALUE` broadcast follows. The autotest confirms this
- *    the same way: it actively re-queries with `get_parameter`/
- *    `verify_parameter_values` after `DO_ACCEPT_MAG_CAL`
- *    (`vehicle_test_suite.py:9968-9979`), not a passive wait. `accept()`
- *    below mirrors that: it calls `paramStore.fetchAll()` after the ACK
- *    (re-request, not trust-the-cache) rather than assuming an echo that
- *    the source proves never arrives on its own.
+ * 3. **After a report, nothing is written yet — and once it is, the echo's
+ *    timing is unpredictable relative to the ACK.** `send_mag_cal_report`
+ *    (`AP_Compass_Calibration.cpp:283-332`) streams `MAG_CAL_REPORT`
+ *    continuously post-completion, independent of `_accept_calibration`;
+ *    the params are genuinely untouched until `DO_ACCEPT_MAG_CAL` arrives —
+ *    confirmed by the autotest itself, which explicitly re-checks params are
+ *    still zero right after receiving the SUCCESS report and *before*
+ *    sending accept (`Tools/autotest/vehicle_test_suite.py:9965-9967`,
+ *    `check_zero_mag_parameters`). Once `_accept_calibration`
+ *    (`AP_Compass_Calibration.cpp:187-223`) does write, it does so via
+ *    direct `set_and_save_*()` C++ calls (never through `handle_param_set`,
+ *    `GCS_MAVLink/GCS_Param.cpp:263-316` — that path only echoes a
+ *    `PARAM_VALUE` for a GCS-originated `PARAM_SET`, not this one). Each of
+ *    those calls `AP_Param::save()`, which *queues* the write onto
+ *    `save_queue` (`AP_Param/AP_Param.cpp:118,1255-1283`) rather than saving
+ *    inline; a separate IO-thread handler, `save_io_handler`
+ *    (`AP_Param.cpp:1289-1293`), drains that queue and calls
+ *    `save_sync(force_save, send_to_gcs=true)`, which *does* broadcast a
+ *    `PARAM_VALUE` via `send_parameter()` (`AP_Param.cpp:1144-1250,
+ *    2630-2662`). So an echo **does** eventually arrive — just
+ *    asynchronously, off the main thread, decoupled from the COMMAND_ACK
+ *    `DO_ACCEPT_MAG_CAL` resolves on, with no defined ordering/timing
+ *    relative to it. The autotest sidesteps this uncertainty by actively
+ *    re-querying with `get_parameter`/`verify_parameter_values` after
+ *    `DO_ACCEPT_MAG_CAL` (`vehicle_test_suite.py:9968-9979`) rather than
+ *    racing the async echo. `accept()` below does the same: it calls
+ *    `paramStore.fetchAll()` after the ACK instead of trying to correlate an
+ *    IO-thread-queued broadcast whose arrival order isn't guaranteed.
  *
  * 4. **`MAV_CMD_DO_ACCEPT_MAG_CAL` (42425) writes the full set atomically.**
  *    `Compass::_accept_calibration` (`AP_Compass_Calibration.cpp:187-223`)
@@ -390,12 +398,13 @@ export class MagCalibration {
    * Sends `MAV_CMD_DO_ACCEPT_MAG_CAL` (all compasses) — the FC then writes
    * the full mag param set atomically (module doc point 4), never through
    * this module. After a `MAV_RESULT_ACCEPTED` ACK, calls
-   * `paramStore.fetchAll()` to confirm: the FC does not broadcast an
-   * unsolicited `PARAM_VALUE` after this write (module doc point 3), so
-   * passively trusting the existing cache would not actually confirm
-   * anything — re-requesting the table is what does. A rejection from the
-   * `fetchAll()` call means the FC-side write already happened but this
-   * layer couldn't confirm it; a rejection from the ACK itself means
+   * `paramStore.fetchAll()` to confirm: the FC's own `PARAM_VALUE` echo for
+   * this write is real but queued asynchronously on its IO thread, with no
+   * defined timing relative to the `COMMAND_ACK` (module doc point 3) — so
+   * racing that echo (or trusting the pre-accept cache) can't reliably
+   * confirm anything; actively re-requesting the table can. A rejection
+   * from the `fetchAll()` call means the FC-side write already happened but
+   * this layer couldn't confirm it; a rejection from the ACK itself means
    * nothing was written. Callers distinguishing the two should catch and
    * inspect which step actually threw.
    */
