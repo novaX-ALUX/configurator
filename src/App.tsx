@@ -12,6 +12,7 @@ import { SetupPage } from './features/setup/SetupPage'
 import { CalibrationPage } from './features/calibration/CalibrationPage'
 import { MotorTestPage } from './features/motors/MotorTestPage'
 import { useMotorTestStore } from './features/motors/motorTestStore'
+import { SetupGuideDrawer } from './features/guide/SetupGuideDrawer'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
 
 /**
@@ -115,6 +116,7 @@ function App() {
         )}
       </main>
       <DisconnectToast />
+      <SetupGuideDrawer />
     </div>
   )
 }

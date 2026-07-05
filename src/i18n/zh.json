@@ -430,5 +430,44 @@
       "stopAll": "全部停止",
       "lockOutputs": "锁定输出"
     }
+  },
+  "guide": {
+    "openButton": "装机引导",
+    "title": "首飞前装机引导",
+    "subtitle": "从全新飞控到安全首次悬停之间的五项检查。进度从飞控读取判定 — 已在别处完成的可直接跳过。",
+    "progress": "{{done}} / {{total}}",
+    "close": "关闭",
+    "skip": "暂时跳过",
+    "footerNote": "检测仅为只读 — 引导绝不会修改任何参数。",
+    "openPage": "打开页面",
+    "done": "已完成",
+    "todo": "待完成",
+    "steps": {
+      "connect": {
+        "title": "连接并拉取参数",
+        "desc": "已读取 {{count}} 个参数",
+        "descPending": "尚未连接"
+      },
+      "frameEsc": {
+        "title": "机架与 ESC 协议",
+        "desc": "{{frame}} · {{esc}}",
+        "descPending": "尚未从飞控读取"
+      },
+      "calibrate": {
+        "title": "校准传感器",
+        "descTodo": "先完成加速度计六面校准，再校准罗盘",
+        "descAccelOnly": "加速度计已完成 · 罗盘待完成",
+        "descDone": "加速度计已完成 · 罗盘已完成"
+      },
+      "motorTest": {
+        "title": "测试电机顺序与转向",
+        "descTodo": "拆下螺旋桨 — 逐个短暂试转电机",
+        "descDone": "已在台架上验证输出"
+      },
+      "failsafes": {
+        "title": "失控保护",
+        "desc": "遥控信号丢失 · 低电量 · 地面站丢失"
+      }
+    }
   }
 }

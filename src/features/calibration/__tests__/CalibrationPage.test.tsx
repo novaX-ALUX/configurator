@@ -4,6 +4,7 @@ import '../../../i18n'
 import { CalibrationPage } from '../CalibrationPage'
 import { useConnectionStore } from '../../../store/connection'
 import { useActivityLog } from '../../../store/activityLog'
+import { useCalibrationProgress } from '../calibrationProgress'
 import { MockTransport } from '../../../core/transport/mock'
 import { defs } from '../../../core/mavlink/defs'
 import { encodeFrame, FrameParser } from '../../../core/mavlink/frame'
@@ -146,6 +147,7 @@ async function startCompass(transport: MockTransport): Promise<void> {
 }
 
 const initialConnectionState = useConnectionStore.getState()
+const initialCalProgressState = useCalibrationProgress.getState()
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -154,6 +156,7 @@ beforeEach(() => {
 
 afterEach(() => {
   useConnectionStore.setState(initialConnectionState, true)
+  useCalibrationProgress.setState(initialCalProgressState, true)
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -220,6 +223,8 @@ describe('CalibrationPage: accelerometer', () => {
     await tick()
 
     expect(screen.getByText('CALIBRATED')).toBeInTheDocument()
+    // Task 10.1's Setup Guide reads this session-scoped flag -- see calibrationProgress.ts's own doc.
+    expect(useCalibrationProgress.getState().accelDone).toBe(true)
   })
 
   it('disconnect mid-sequence shows the honest interrupted copy, latches across reconnect, and clears only on explicit restart', async () => {
@@ -451,6 +456,8 @@ describe('CalibrationPage: compass', () => {
     transport.feed(ackFrame(MAV_CMD_DO_ACCEPT_MAG_CAL, MAV_RESULT_ACCEPTED))
     await tick()
     expect(screen.getByText('OFFSETS WRITTEN')).toBeInTheDocument()
+    // Task 10.1's Setup Guide reads this session-scoped flag -- see calibrationProgress.ts's own doc.
+    expect(useCalibrationProgress.getState().compassApplied).toBe(true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Undo — restore previous' }))
     await tick()

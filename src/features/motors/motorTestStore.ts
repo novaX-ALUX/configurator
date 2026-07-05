@@ -91,6 +91,17 @@ export interface MotorTestState {
   percents: Record<number, number>
   /** True while `runSequence`'s own interval is active. `MotorSliders` reads this instead of owning any timer of its own — see module doc's adversarial-review fix. */
   sequenceRunning: boolean
+  /**
+   * Set the first time any motor is actually driven above 0% this session
+   * (via either the manual sliders or the sequence test) — Task 10.1's Setup
+   * Guide reads this as "was motor order/direction actually verified".
+   * Monotonic, like `setupStore.ts`'s `frameEscTouched`/`fsTouched`: a
+   * `stop()` clears `percents` back to `{}` (sliders release to zero), but
+   * does NOT clear this flag — the fact that the user spun a motor earlier
+   * this session doesn't become untrue just because the safety engine
+   * re-locked afterward.
+   */
+  motorsTested: boolean
 
   /**
    * Single-owner setter: only `MotorTestPage` calls this, once per render
@@ -155,7 +166,7 @@ export function createMotorTestStore(now: () => number = () => Date.now()) {
     function applyPercent(motorSeq: number, percent: number): void {
       if (safety.state !== 'ready' && safety.state !== 'testing') return
       const clamped = Math.min(MOTOR_TEST_MAX_PERCENT, Math.max(0, percent))
-      set((s) => ({ percents: { ...s.percents, [motorSeq]: clamped } }))
+      set((s) => ({ percents: { ...s.percents, [motorSeq]: clamped }, ...(clamped > 0 ? { motorsTested: true } : {}) }))
       safety.noteActivity()
       const active = Object.entries(get().percents)
         .filter(([, v]) => v > 0)
@@ -210,6 +221,7 @@ export function createMotorTestStore(now: () => number = () => Date.now()) {
       stopLeft: 0,
       percents: {},
       sequenceRunning: false,
+      motorsTested: false,
 
       setSessionInfo(session, motorCount) {
         sessionRef = session

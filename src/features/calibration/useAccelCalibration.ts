@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AccelCalibration, type AccelCalStatus, type AccelFace } from '../../core/mavlink/accelCal'
 import type { MavSession } from '../../core/mavlink/session'
 import type { ConnectionPhase } from '../../store/connection'
+import { useCalibrationProgress } from './calibrationProgress'
 
 /** Prompt order — mirrors `accelCal.ts`'s own `FACE_FOR_STEP` (step 1..6). */
 export const ACCEL_FACE_ORDER: readonly AccelFace[] = ['level', 'left', 'right', 'nosedown', 'noseup', 'back']
@@ -79,6 +80,8 @@ export function useAccelCalibration(session: MavSession | null, phase: Connectio
       setStatus(cal.status)
       setCurrentFace(null)
       if (!ok) setError('Calibration failed on the board.')
+      // Read-only signal for Task 10.1's Setup Guide -- see calibrationProgress.ts's own doc.
+      else useCalibrationProgress.getState().markAccelDone()
     })
 
     return () => {

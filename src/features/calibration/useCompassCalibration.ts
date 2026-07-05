@@ -46,6 +46,7 @@ import type { ParamStore } from '../../core/mavlink/params'
 import type { MavSession } from '../../core/mavlink/session'
 import type { ConnectionPhase } from '../../store/connection'
 import { useActivityLog } from '../../store/activityLog'
+import { useCalibrationProgress } from './calibrationProgress'
 
 export type CompassCalStatus = 'idle' | 'running' | 'review' | 'accepting' | 'applied' | 'unconfirmed' | 'failed'
 
@@ -227,7 +228,11 @@ export function useCompassCalibration(
     setAcceptError(null)
     cal.accept().then(
       () => {
-        if (calRef.current === cal) setStatus('applied')
+        if (calRef.current === cal) {
+          setStatus('applied')
+          // Read-only signal for Task 10.1's Setup Guide -- see calibrationProgress.ts's own doc.
+          useCalibrationProgress.getState().markCompassApplied()
+        }
       },
       (err: unknown) => {
         if (calRef.current !== cal) return // stale-instance guard, see start()'s own comment

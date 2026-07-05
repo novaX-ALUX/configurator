@@ -103,6 +103,28 @@ describe('motorTestStore', () => {
     expect(store.getState().state).toBe('ready')
   })
 
+  it('motorsTested (Task 10.1 Setup Guide signal): stays false until a motor is actually driven above 0%, then stays true across a stop', () => {
+    arm()
+    expect(store.getState().motorsTested).toBe(false)
+
+    store.getState().setMotorPercent(1, 20)
+    expect(store.getState().motorsTested).toBe(true)
+
+    store.getState().stop('STOP pressed')
+    expect(store.getState().percents).toEqual({}) // sliders release to zero
+    expect(store.getState().motorsTested).toBe(true) // but the guide signal is monotonic, unlike percents
+  })
+
+  it('motorsTested stays false for a rejected percent (guard not satisfied, or percent clamped to 0)', () => {
+    // Not armed yet -- applyPercent's guard rejects the call outright.
+    store.getState().setMotorPercent(1, 20)
+    expect(store.getState().motorsTested).toBe(false)
+
+    arm()
+    store.getState().setMotorPercent(1, 0)
+    expect(store.getState().motorsTested).toBe(false)
+  })
+
   describe('the six kill switches all call MotorSafety.stop AND send a real FC stop to every motor', () => {
     async function assertKillSwitchStops(trigger: (s: MotorTestState & ReturnType<typeof store.getState>) => void): Promise<void> {
       arm()

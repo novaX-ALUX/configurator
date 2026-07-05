@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NAV_PAGES, type PageId, useNavigationStore } from '../store/navigation'
+import { useGuideStore } from '../features/guide/guideStore'
 
 /**
  * Sidebar nav icons, ported from the left rail of docs/design/novaX-Configurator.dc.html.
@@ -72,6 +73,8 @@ export function Sidebar() {
   // rather than here, so every caller gets the same protection — not just
   // Sidebar's click handler.
   const setActivePage = useNavigationStore((s) => s.setActivePage)
+  const guideOpen = useGuideStore((s) => s.open)
+  const toggleGuide = useGuideStore((s) => s.toggleGuide)
 
   return (
     <nav
@@ -103,6 +106,22 @@ export function Sidebar() {
           </button>
         )
       })}
+      <button
+        type="button"
+        title={t('guide.openButton')}
+        onClick={toggleGuide}
+        className={`mt-auto flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[11px] border border-dashed transition-colors ${
+          guideOpen ? 'border-nvx-primary text-nvx-primary' : 'border-nvx-borderStrong text-nvx-faint hover:border-nvx-primary hover:text-nvx-primary'
+        }`}
+      >
+        <span aria-hidden="true">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="7.5" />
+            <path d="M14.8 9.2l-1.8 4.4-4.4 1.8 1.8-4.4z" />
+          </svg>
+        </span>
+        <span className="sr-only">{t('guide.openButton')}</span>
+      </button>
     </nav>
   )
 }

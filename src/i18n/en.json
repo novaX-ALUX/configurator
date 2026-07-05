@@ -430,5 +430,44 @@
       "stopAll": "STOP ALL",
       "lockOutputs": "LOCK OUTPUTS"
     }
+  },
+  "guide": {
+    "openButton": "Setup Guide",
+    "title": "First-flight Setup Guide",
+    "subtitle": "Five checks between a fresh board and a safe first hover. Progress is detected from the board — skip anything you've done elsewhere.",
+    "progress": "{{done}} / {{total}}",
+    "close": "Close",
+    "skip": "Skip for now",
+    "footerNote": "Detection is read-only — the guide never changes parameters.",
+    "openPage": "Open page",
+    "done": "Done",
+    "todo": "To do",
+    "steps": {
+      "connect": {
+        "title": "Connect & fetch parameters",
+        "desc": "{{count}} parameters read",
+        "descPending": "Not connected yet"
+      },
+      "frameEsc": {
+        "title": "Frame & ESC protocol",
+        "desc": "{{frame}} · {{esc}}",
+        "descPending": "Not read from the board yet"
+      },
+      "calibrate": {
+        "title": "Calibrate sensors",
+        "descTodo": "Accelerometer 6-face, then compass",
+        "descAccelOnly": "Accel done · compass pending",
+        "descDone": "Accel done · compass done"
+      },
+      "motorTest": {
+        "title": "Test motor order & direction",
+        "descTodo": "Props off — spin each motor briefly",
+        "descDone": "Outputs verified on the bench"
+      },
+      "failsafes": {
+        "title": "Failsafes",
+        "desc": "RC loss · low battery · GCS loss"
+      }
+    }
   }
 }

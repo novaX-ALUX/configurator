@@ -430,5 +430,44 @@
       "stopAll": "전체 정지",
       "lockOutputs": "출력 잠금"
     }
+  },
+  "guide": {
+    "openButton": "셋업 가이드",
+    "title": "첫 비행 전 셋업 가이드",
+    "subtitle": "새 보드부터 안전한 첫 호버링까지 다섯 가지 점검입니다. 진행 상태는 보드에서 감지됩니다 — 다른 곳에서 이미 완료했다면 건너뛰세요.",
+    "progress": "{{done}} / {{total}}",
+    "close": "닫기",
+    "skip": "나중에 하기",
+    "footerNote": "감지는 읽기 전용입니다 — 가이드는 파라미터를 절대 변경하지 않습니다.",
+    "openPage": "페이지 열기",
+    "done": "완료",
+    "todo": "미완료",
+    "steps": {
+      "connect": {
+        "title": "연결 후 파라미터 가져오기",
+        "desc": "파라미터 {{count}}개 읽음",
+        "descPending": "아직 연결되지 않음"
+      },
+      "frameEsc": {
+        "title": "프레임 및 ESC 프로토콜",
+        "desc": "{{frame}} · {{esc}}",
+        "descPending": "아직 보드에서 읽지 않음"
+      },
+      "calibrate": {
+        "title": "센서 캘리브레이션",
+        "descTodo": "가속도계 6자세 캘리브레이션 후 컴퍼스 진행",
+        "descAccelOnly": "가속도계 완료 · 컴퍼스 대기 중",
+        "descDone": "가속도계 완료 · 컴퍼스 완료"
+      },
+      "motorTest": {
+        "title": "모터 순서 및 회전 방향 테스트",
+        "descTodo": "프로펠러 제거 — 모터를 하나씩 짧게 회전",
+        "descDone": "벤치에서 출력 확인 완료"
+      },
+      "failsafes": {
+        "title": "페일세이프",
+        "desc": "RC 신호 끊김 · 배터리 부족 · GCS 연결 끊김"
+      }
+    }
   }
 }
