@@ -87,6 +87,8 @@ Three human-owned items remain before a public release:
 
 Deferred, roughly in priority order: real-time telemetry charts, dataflash log download (MAVLink FTP) + in-browser analysis, PID tuning / flight modes / RC mapping (deeper Setup), map + mission planning, RTK injection, PX4 support.
 
+For the full feature inventory — everything implemented and everything still missing versus the closest comparable tool (MicoConfigurator) — see [`docs/feature-status.md`](docs/feature-status.md).
+
 ## License
 
 Application code is proprietary to novaX-ALUX. Bundled dependencies keep their own licenses (notably `mavlink-mappings`, LGPL — see [Before shipping](#before-shipping)).
