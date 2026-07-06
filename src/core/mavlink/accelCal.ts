@@ -71,7 +71,7 @@
  *    the human-readable "Calibration successful"/"Calibration FAILED"
  *    (`AP_AccelCal.cpp:215`, `:241`) at `MAV_SEVERITY_CRITICAL` — the app
  *    already has a general STATUSTEXT feed (`src/store/connection.ts`,
- *    `StatusPanel`), so per the task brief ("STATUSTEXT仅显示/兜底") this
+ *    `StatusPanel`), so per the task brief ("STATUSTEXT for display/fallback only") this
  *    module does not duplicate that feed; `onComplete`'s `message` is
  *    reserved for that existing display path and is always `undefined` from
  *    here — 42429 carries no text field to source one from.

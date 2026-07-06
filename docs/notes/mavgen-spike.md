@@ -166,7 +166,7 @@ our own Web-native (`Uint8Array`/`DataView`) codec in `FrameParser`.
   `loweheiser`/`cubepilot`/`csAirLink` module at all, even in the latest
   `1.0.22-20260311`. If the project ever needs CubePilot-specific or
   csAirLink/loweheiser messages, this package will not have them — flag
-  this explicitly in Task 0.4 (选型锁定记录) rather than discovering it later.
+  this explicitly in Task 0.4 (decision-lock record) rather than discovering it later.
   minimal+common+ardupilotmega together (272 msgs) covers the standard
   ArduPilot flight-controller telemetry/param/mission/camera/gimbal/EFI
   surface, which is almost certainly sufficient for this configurator.
@@ -379,7 +379,7 @@ is already excluded as a runtime dependency, and even with that dependency
 added it's schema-only (no offsets, no pack/unpack) — strictly worse than
 `mavlink-mappings` on every criterion that matters here.
 
-## Concerns to carry into Task 0.4 (选型锁定记录)
+## Concerns to carry into Task 0.4 (decision-lock record)
 
 1. **License (LGPL) — needs a human decision, not a spike decision.**
    `mavlink-mappings`' own `package.json` declares `"license": "LGPL"`

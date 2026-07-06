@@ -25,7 +25,7 @@ The tool talks **MAVLink** over the **Web Serial API** and flashes firmware over
 ## Tech stack
 
 - **React 18 + Vite + TypeScript**, Zustand state, Tailwind CSS
-- **i18next** — English (source), 中文 / 한국어 / 日本語
+- **i18next** — English (source), Chinese, Korean, Japanese
 - **Hand-written MAVLink2 stack** (frame parser, router, command/ACK, parameter protocol, telemetry) over browser-native `Uint8Array`/`DataView` — no Node polyfills
 - Message definitions from [`mavlink-mappings`](https://www.npmjs.com/package/mavlink-mappings) (LGPL), isolated behind a single adapter (see [Before shipping](#before-shipping))
 - **Vitest** for tests; ArduPilot SITL for integration

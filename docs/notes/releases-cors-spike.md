@@ -6,7 +6,7 @@ Decides whether the configurator (static site on GitHub Pages, origin
 `novaX-ALUX/flight_controller`'s GitHub Releases, or must mirror them into
 the site's own `public/`.
 
-**Verdict: 视资源类型而定 (mixed) — 需镜像 for the parts that matter.**
+**Verdict: depends on the asset type (mixed) — mirroring required for the parts that matter.**
 `api.github.com` (release/asset *metadata*) sends `Access-Control-Allow-Origin: *`
 and is directly fetchable. **`release-assets.githubusercontent.com` — the
 actual byte payload of every release asset, regardless of file type (tested
@@ -242,7 +242,7 @@ fact.
 - **`manifest.json` as a release asset — same block as firmware binaries.**
   The design doc (§7 of
   `docs/superpowers/specs/2026-07-02-novax-configurator-design.md`) plans
-  to publish `manifest.json` "随 GitHub Release 发布" (as a release asset,
+  to publish `manifest.json` "with the GitHub Release" (as a release asset,
   alongside the `.apj`/`.hex`). That means `manifest.json` would be served
   from `release-assets.githubusercontent.com`, hitting the **exact same**
   missing-CORS-header wall as the firmware binaries — content-type makes no
@@ -255,9 +255,10 @@ fact.
 
 `docs/superpowers/specs/2026-07-02-novax-configurator-design.md` §7 says:
 
-> 获取:浏览器直接 fetch GitHub Releases(实现时先验证 CORS 重定向链路;若不
-> 可行,回退方案为 manifest 镜像到本站点 public/,**固件文件仍指向
-> Releases**)。
+> Retrieval: the browser fetches GitHub Releases directly (verify the CORS
+> redirect chain during implementation first; if unworkable, the fallback is
+> to mirror the manifest into this site's public/, **with firmware files
+> still pointing at Releases**).
 
 That fallback phrasing reads as "if CORS fails, mirror only the manifest;
 firmware files can stay pointed at Releases." The evidence above shows that
@@ -267,7 +268,7 @@ as an in-memory `ArrayBuffer` in JS to write over USB/serial — a plain
 `<a href="...releases/download/...">` browser-native download (which *does*
 work, since navigation isn't subject to CORS) only gets the file onto the
 user's disk, not into the page's JS. Since `release-assets.githubusercontent.com`
-has no CORS for any file, "固件文件仍指向 Releases" as a direct-`fetch()`
+has no CORS for any file, "firmware files still point to Releases" as a direct-`fetch()`
 target is not viable once you're past the "if CORS fails" branch — and the
 verified answer here is that it does fail. **Both `manifest.json` and the
 firmware binaries need mirroring**, not just the manifest.
@@ -338,11 +339,11 @@ small, text, and changes per release) as a lighter alternative to the CI
 mirror pipeline — worth a one-line mention in Task 0.4, not a decision made
 here.
 
-## Concerns to carry into Task 0.4 (选型锁定记录)
+## Concerns to carry into Task 0.4 (decision-lock record)
 
 1. **Firmware binary mirroring is now confirmed load-bearing, not optional.**
    The existing design doc's fallback phrasing under-scoped this
-   ("固件文件仍指向 Releases") — Task 0.4 should update §7 to reflect that
+   ("firmware files still point to Releases") — Task 0.4 should update §7 to reflect that
    both manifest and firmware binaries require the mirror pipeline, given
    WebUSB/serial flashing needs in-memory bytes.
 2. **Sync pipeline is new build surface.** A CI job (or manual script run
