@@ -10,8 +10,10 @@ import { createConnectionStore, type PickedPort, type PortPicker } from '../conn
 const HEARTBEAT_MSGID = 0
 const STATUSTEXT_MSGID = 253
 const AUTOPILOT_VERSION_MSGID = 148
+const COMMAND_LONG_MSGID = 76
 const COMMAND_ACK_MSGID = 77
 const MAV_CMD_REQUEST_MESSAGE = 512
+const MAV_CMD_DO_SEND_BANNER = 42428
 
 function heartbeatFrame(opts?: { sysid?: number; compid?: number; seq?: number }): Uint8Array {
   const payload = encodePayload(defs, HEARTBEAT_MSGID, {
@@ -56,10 +58,11 @@ function autopilotVersionFrame(opts: { flightSwVersion: number; productId: numbe
   return encodeFrame(defs, { msgid: AUTOPILOT_VERSION_MSGID, payload: buf }, opts.seq ?? 0, opts.sysid ?? 1, opts.compid ?? 1)
 }
 
-function decodeLastSent(transport: MockTransport): { msgid: number; fields: Record<string, unknown> } {
+function decodeAllSent(transport: MockTransport): Array<{ msgid: number; fields: Record<string, unknown> }> {
   const parser = new FrameParser(defs)
-  const [frame] = parser.push(transport.sent[transport.sent.length - 1])
-  return { msgid: frame.msgid, fields: decodePayload(defs, frame).fields }
+  return transport.sent.flatMap((chunk) =>
+    parser.push(chunk).map((frame) => ({ msgid: frame.msgid, fields: decodePayload(defs, frame).fields })),
+  )
 }
 
 function ackFrame(opts: { command: number; result: number; sysid?: number; compid?: number; seq?: number }): Uint8Array {
@@ -205,8 +208,8 @@ describe('connection store', () => {
     })
   })
 
-  describe('AUTOPILOT_VERSION identity', () => {
-    it('requests AUTOPILOT_VERSION via MAV_CMD_REQUEST_MESSAGE once connected, and decodes an eventual reply', async () => {
+  describe('board identity (AUTOPILOT_VERSION + DO_SEND_BANNER)', () => {
+    it('requests AUTOPILOT_VERSION and DO_SEND_BANNER once connected, and decodes an eventual version reply', async () => {
       const transport = new MockTransport()
       const store = createConnectionStore(pickerFor(transport))
 
@@ -214,9 +217,9 @@ describe('connection store', () => {
       transport.feed(heartbeatFrame())
       await flush()
 
-      const sent = decodeLastSent(transport)
-      expect(sent.fields.command).toBe(MAV_CMD_REQUEST_MESSAGE)
-      expect(sent.fields.param1).toBe(AUTOPILOT_VERSION_MSGID)
+      const commands = decodeAllSent(transport).filter((m) => m.msgid === COMMAND_LONG_MSGID)
+      expect(commands.some((m) => m.fields.command === MAV_CMD_REQUEST_MESSAGE && m.fields.param1 === AUTOPILOT_VERSION_MSGID)).toBe(true)
+      expect(commands.some((m) => m.fields.command === MAV_CMD_DO_SEND_BANNER)).toBe(true)
       expect(store.getState().identity).toBeNull() // no reply yet
 
       // ACK for the request, then the actual AUTOPILOT_VERSION message.
@@ -226,7 +229,76 @@ describe('connection store', () => {
       transport.feed(autopilotVersionFrame({ flightSwVersion, productId: 1099 }))
       await flush()
 
-      expect(store.getState().identity).toEqual({ boardId: 1099, fwVersion: '4.5.7', vehicleName: undefined })
+      // product_id is NOT surfaced: real hardware (AF-H7 nano, 2026-07-08)
+      // confirmed it echoes the USB PID (0x5741 generic), not any board id.
+      expect(store.getState().identity).toEqual({ fwVersion: '4.5.7' })
+    })
+
+    it('fills identity.boardName from the banner system-id line, UID as three hex words (real AF-H7 nano output)', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      // Captured verbatim from an AF-H7 nano (ArduPilot 4.6.3 base,
+      // 2026-07-08): the 12-byte UID prints as three space-separated
+      // 8-hex-digit words, not one contiguous run.
+      transport.feed(statustextFrame({ severity: 6, text: 'AF-H7_nano 00330029 34345116 30323534' }))
+      await flush()
+
+      expect(store.getState().identity).toEqual({ boardName: 'AF-H7_nano' })
+    })
+
+    it('also accepts the single-token UID spelling of the system-id line', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      transport.feed(statustextFrame({ severity: 6, text: 'AF-H7_nano 290033001651343434353230' }))
+      await flush()
+
+      expect(store.getState().identity).toEqual({ boardName: 'AF-H7_nano' })
+    })
+
+    it('merges banner boardName and AUTOPILOT_VERSION fwVersion without either clobbering the other', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      transport.feed(statustextFrame({ severity: 6, text: 'AF-H7_nano 290033001651343434353230' }))
+      const flightSwVersion = (4 << 24) | (5 << 16) | (7 << 8) | 255
+      transport.feed(autopilotVersionFrame({ flightSwVersion, productId: 1099 }))
+      await flush()
+
+      expect(store.getState().identity).toEqual({ boardName: 'AF-H7_nano', fwVersion: '4.5.7' })
+    })
+
+    it('does not mistake ordinary STATUSTEXT lines for the banner system-id line', async () => {
+      const transport = new MockTransport()
+      const store = createConnectionStore(pickerFor(transport))
+
+      await store.getState().connect(115200)
+      transport.feed(heartbeatFrame())
+      await flush()
+
+      // The non-system-id lines of the real captured banner, plus a PreArm.
+      transport.feed(statustextFrame({ severity: 4, text: 'PreArm: Compass not calibrated' }))
+      transport.feed(statustextFrame({ severity: 6, text: 'novaX v0.2.3 (92b0cd78)' }))
+      transport.feed(statustextFrame({ severity: 6, text: 'ChibiOS: 88b84600' })) // hex too short (8 < 16)
+      transport.feed(statustextFrame({ severity: 6, text: 'RCOut: PWM:1-11' }))
+      transport.feed(statustextFrame({ severity: 6, text: 'IMU0: fast sampling 2.0kHz/2.0kHz' }))
+      transport.feed(statustextFrame({ severity: 6, text: 'Frame: QUAD/X' }))
+      await flush()
+
+      expect(store.getState().identity).toBeNull()
     })
 
     it('leaves identity null and does not block anything if AUTOPILOT_VERSION is never answered', async () => {

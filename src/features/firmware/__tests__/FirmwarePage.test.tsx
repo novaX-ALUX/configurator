@@ -26,11 +26,10 @@ function mockManifestFetch(body: unknown = fixtureManifest, ok = true): void {
 describe('FirmwarePage — online list (Tab 1)', () => {
   it('lists every board from the manifest regardless of connection identity, and only highlights the matching one as recommended', async () => {
     mockManifestFetch()
-    // Connected, with an identity matching AF-F4_nano (apjBoardId 6203) — a
-    // board NOT recommended (AF-H7E, 6202) must still be fully listed:
-    // decisions-m1.md is explicit that identity only highlights, never
-    // filters/hides.
-    useConnectionStore.setState({ phase: 'connected', identity: { boardId: 6203, fwVersion: '0.2.0', vehicleName: undefined } })
+    // Connected, with a banner board name matching AF-F4_nano — a board NOT
+    // recommended (AF-H7E) must still be fully listed: decisions-m1.md is
+    // explicit that identity only highlights, never filters/hides.
+    useConnectionStore.setState({ phase: 'connected', identity: { boardName: 'AF-F4_nano', fwVersion: '0.2.0' } })
 
     render(<FirmwarePage />)
 

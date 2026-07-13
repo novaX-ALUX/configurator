@@ -19,7 +19,6 @@
     "disconnect": "断开连接",
     "anyDevice": "任意设备",
     "unknownBoard": "未知板型",
-    "boardIdLabel": "ID",
     "language": "Language"
   },
   "toast": {
@@ -228,7 +227,7 @@
 
     "connectNote": "连接飞控可高亮推荐固件 — 无论是否连接，完整列表始终可见。",
     "connectCta": "连接飞控",
-    "connectedAs": "{{board}} · 板型 ID {{boardId}}",
+    "connectedAs": "已连接：{{board}}",
     "recommended": "推荐用于此板型",
 
     "onlineLoading": "正在加载固件列表…",

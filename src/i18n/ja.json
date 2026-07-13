@@ -19,7 +19,6 @@
     "disconnect": "切断",
     "anyDevice": "任意のデバイス",
     "unknownBoard": "不明なボード",
-    "boardIdLabel": "ID",
     "language": "Language"
   },
   "toast": {
@@ -228,7 +227,7 @@
 
     "connectNote": "ボードを接続するとおすすめのファームウェアが強調表示されます — 接続の有無にかかわらず、一覧は常にすべて表示されます。",
     "connectCta": "フライトコントローラーに接続",
-    "connectedAs": "{{board}} · ボード ID {{boardId}}",
+    "connectedAs": "接続中: {{board}}",
     "recommended": "このボードにおすすめ",
 
     "onlineLoading": "ファームウェア一覧を読み込み中…",

@@ -17,7 +17,7 @@ afterEach(() => {
 
 describe('DfuRecovery — software-DFU gating (F4-only, per manifest softwareDfuAllowed)', () => {
   it('shows "Reboot into DFU" when connected to a board whose manifest entry allows software DFU (AF-F4_nano)', () => {
-    useConnectionStore.setState({ phase: 'connected', identity: { boardId: 6203, fwVersion: '0.2.0', vehicleName: undefined } })
+    useConnectionStore.setState({ phase: 'connected', identity: { boardName: 'AF-F4_nano', fwVersion: '0.2.0' } })
 
     render(<DfuRecovery manifest={manifest} />)
 
@@ -25,7 +25,7 @@ describe('DfuRecovery — software-DFU gating (F4-only, per manifest softwareDfu
   })
 
   it('hides "Reboot into DFU" for a connected board whose manifest entry disallows it (AF-F7_mini, non-F4)', () => {
-    useConnectionStore.setState({ phase: 'connected', identity: { boardId: 6201, fwVersion: '0.2.0', vehicleName: undefined } })
+    useConnectionStore.setState({ phase: 'connected', identity: { boardName: 'AF-F7_mini', fwVersion: '0.2.0' } })
 
     render(<DfuRecovery manifest={manifest} />)
 
@@ -33,8 +33,8 @@ describe('DfuRecovery — software-DFU gating (F4-only, per manifest softwareDfu
     expect(screen.getByText('Connect a novaX board that supports one-click DFU to unlock this.')).toBeInTheDocument()
   })
 
-  it('hides "Reboot into DFU" for an unknown board ID not present in the manifest at all', () => {
-    useConnectionStore.setState({ phase: 'connected', identity: { boardId: 999999, fwVersion: '0.2.0', vehicleName: undefined } })
+  it('hides "Reboot into DFU" for an unknown board name not present in the manifest at all', () => {
+    useConnectionStore.setState({ phase: 'connected', identity: { boardName: 'NoSuchBoard-9000', fwVersion: '0.2.0' } })
 
     render(<DfuRecovery manifest={manifest} />)
 
@@ -42,7 +42,7 @@ describe('DfuRecovery — software-DFU gating (F4-only, per manifest softwareDfu
   })
 
   it('hides "Reboot into DFU" while not connected, even for an otherwise-allowed board identity', () => {
-    useConnectionStore.setState({ phase: 'disconnected', identity: { boardId: 6203, fwVersion: '0.2.0', vehicleName: undefined } })
+    useConnectionStore.setState({ phase: 'disconnected', identity: { boardName: 'AF-F4_nano', fwVersion: '0.2.0' } })
 
     render(<DfuRecovery manifest={manifest} />)
 
@@ -50,7 +50,7 @@ describe('DfuRecovery — software-DFU gating (F4-only, per manifest softwareDfu
   })
 
   it('hides "Reboot into DFU" when no manifest has loaded yet', () => {
-    useConnectionStore.setState({ phase: 'connected', identity: { boardId: 6203, fwVersion: '0.2.0', vehicleName: undefined } })
+    useConnectionStore.setState({ phase: 'connected', identity: { boardName: 'AF-F4_nano', fwVersion: '0.2.0' } })
 
     render(<DfuRecovery manifest={null} />)
 
@@ -75,7 +75,7 @@ describe('DfuRecovery — manual DFU panel', () => {
 
 describe('DfuRecovery — cross-tab busy gating', () => {
   it('disables "Select DFU device" (and "Reboot into DFU", when otherwise available) while Tab 1 is busy, to avoid racing it for the connection', () => {
-    useConnectionStore.setState({ phase: 'connected', identity: { boardId: 6203, fwVersion: '0.2.0', vehicleName: undefined } })
+    useConnectionStore.setState({ phase: 'connected', identity: { boardName: 'AF-F4_nano', fwVersion: '0.2.0' } })
 
     render(<DfuRecovery manifest={manifest} busy={true} />)
 
@@ -84,7 +84,7 @@ describe('DfuRecovery — cross-tab busy gating', () => {
   })
 
   it('leaves both buttons enabled when Tab 1 is not busy', () => {
-    useConnectionStore.setState({ phase: 'connected', identity: { boardId: 6203, fwVersion: '0.2.0', vehicleName: undefined } })
+    useConnectionStore.setState({ phase: 'connected', identity: { boardName: 'AF-F4_nano', fwVersion: '0.2.0' } })
 
     render(<DfuRecovery manifest={manifest} busy={false} />)
 

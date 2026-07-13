@@ -4,6 +4,7 @@ import {
   fetchManifest,
   firmwareFileUrl,
   matchBoards,
+  matchBoardsByName,
   parseManifest,
 } from '../manifest'
 import goldenManifest from './fixtures/manifest.json'
@@ -81,6 +82,33 @@ describe('matchBoards', () => {
 
   it('returns an empty array for an unknown board id', () => {
     expect(matchBoards(manifest, 9999)).toEqual([])
+  })
+})
+
+describe('matchBoardsByName', () => {
+  const manifest = parseManifest(goldenManifest)
+
+  it('matches the exact hwdef board name from the MAVLink banner', () => {
+    const matches = matchBoardsByName(manifest, 'AF-H7_nano')
+    expect(matches).toHaveLength(1)
+    expect(matches[0].apjBoardId).toBe(6200)
+  })
+
+  it('tolerates underscore/space/case drift between banner and manifest spellings', () => {
+    // The USB product string spells it "AF-H7 nano" while the hwdef/manifest
+    // name is "AF-H7_nano" — the same board must match either way.
+    expect(matchBoardsByName(manifest, 'af-h7 NANO')).toHaveLength(1)
+    expect(matchBoardsByName(manifest, 'af-h7 NANO')[0].boardName).toBe('AF-H7_nano')
+  })
+
+  it('does not cross-match different boards sharing a prefix (AF-H7E vs AF-H7_nano)', () => {
+    const matches = matchBoardsByName(manifest, 'AF-H7E')
+    expect(matches).toHaveLength(1)
+    expect(matches[0].apjBoardId).toBe(6202)
+  })
+
+  it('returns an empty array for an unknown board name', () => {
+    expect(matchBoardsByName(manifest, 'PixSurfer9000')).toEqual([])
   })
 })
 

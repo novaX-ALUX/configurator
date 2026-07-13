@@ -55,11 +55,11 @@ describe('TopBar', () => {
     expect(disconnectCalls).toEqual([1])
   })
 
-  it('connected with a known board: shows board id + fw version chip, port info, and Disconnect', () => {
+  it('connected with a known board: shows banner board name + fw version chip, port info, and Disconnect', () => {
     const disconnectCalls: number[] = []
     useConnectionStore.setState({
       phase: 'connected',
-      identity: { boardId: 1099, fwVersion: '4.5.7' },
+      identity: { boardName: 'AF-H7_nano', fwVersion: '4.5.7' },
       portInfo: { usbVendorId: 0x1209, usbProductId: 7 },
       baud: 115200,
       disconnect: () => {
@@ -70,7 +70,7 @@ describe('TopBar', () => {
 
     render(<TopBar />)
 
-    expect(screen.getByText('ID 1099')).toBeInTheDocument()
+    expect(screen.getByText('AF-H7_nano')).toBeInTheDocument()
     expect(screen.getByText('4.5.7')).toBeInTheDocument()
     expect(screen.getByText('VID:1209 PID:0007 · 115200')).toBeInTheDocument()
 

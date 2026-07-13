@@ -112,10 +112,7 @@ export function TopBar() {
         <span className="inline-flex items-center gap-2 rounded-full bg-nvx-successSoft px-3 py-1.5">
           <span className="h-[7px] w-[7px] animate-nvxPulse rounded-full bg-nvx-success" />
           <span className="text-[12.5px] font-bold text-nvx-successText">
-            {identity?.vehicleName ??
-              (identity?.boardId !== undefined
-                ? `${t('topbar.boardIdLabel')} ${identity.boardId}`
-                : t('topbar.unknownBoard'))}
+            {identity?.boardName ?? t('topbar.unknownBoard')}
           </span>
           {identity?.fwVersion && (
             <span className="font-mono text-[10.5px] text-nvx-successMuted">{identity.fwVersion}</span>

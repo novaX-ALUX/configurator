@@ -36,6 +36,24 @@ const DEFAULT_BAUD = 115200
 const STATUSTEXT_MSGID = 253
 const AUTOPILOT_VERSION_MSGID = 148
 const MAV_CMD_REQUEST_MESSAGE = 512
+/** ArduPilot-dialect: re-sends the boot banner STATUSTEXTs, incl. the system-id line. */
+const MAV_CMD_DO_SEND_BANNER = 42428
+const MAV_SEVERITY_INFO = 6
+/**
+ * The banner's system-id line: hwdef board name + the MCU's 12-byte UID as
+ * hex. Captured from a real AF-H7 nano (2026-07-08):
+ * "AF-H7_nano 00330029 34345116 30323534" — the UID prints as space-separated
+ * 8-hex-digit words; other spellings run it together, so the tail is one or
+ * more all-hex words. `isBannerSystemIdLine` additionally requires ≥16 hex
+ * digits total, which keeps short hashes out (e.g. "ChibiOS: 88b84600").
+ */
+const BANNER_SYSTEM_ID_RE = /^(.+?)\s+((?:[0-9A-Fa-f]{8,})(?:\s+[0-9A-Fa-f]{8,})*)$/
+
+function parseBannerSystemIdLine(text: string): string | undefined {
+  const m = BANNER_SYSTEM_ID_RE.exec(text.trim())
+  if (!m) return undefined
+  return m[2].replace(/\s+/g, '').length >= 16 ? m[1] : undefined
+}
 /** Ring-buffer cap for `statustext` (task brief: "~500 entries"). No virtual scrolling in M1 — the cap IS the memory bound. */
 const STATUSTEXT_CAP = 500
 /** `linkStats` is a periodic snapshot of `router.stats`, not push-updated per frame — 1Hz is plenty for a debug readout and decouples UI re-renders from telemetry rate. */
@@ -70,19 +88,20 @@ export interface StatusTextEntry {
 }
 
 /**
- * `boardId`/`fwVersion` come from AUTOPILOT_VERSION (msgid 148) — a board
- * that never answers that request (or answers with zeroed fields) simply
- * leaves these `undefined`; nothing in the app gates on them (decisions-m1:
- * board_id from AUTOPILOT_VERSION is display-only). `vehicleName` is a
- * friendly name resolved via the firmware manifest module by `apjBoardId`
- * once a manifest is loaded (Task 3.3+) — this store never fetches a
- * manifest itself, so it stays `undefined` for now and callers fall back to
- * showing the numeric `boardId`.
+ * `boardName` is the hwdef board name from DO_SEND_BANNER's system-id
+ * STATUSTEXT line (e.g. "AF-H7_nano"); `fwVersion` comes from
+ * AUTOPILOT_VERSION (msgid 148). A board that never answers either request
+ * simply leaves the field `undefined`; nothing in the app gates on identity
+ * (decisions-m1: it is display/highlight-only). AUTOPILOT_VERSION's
+ * `product_id` is deliberately NOT surfaced: real-hardware verification
+ * (AF-H7 nano, 2026-07-08) showed it echoes the USB PID (the generic
+ * ArduPilot 0x5741 unless a board's hwdef overrides it), not any per-board
+ * id — the earlier `boardId` field built on it could never match a
+ * manifest `apjBoardId` (e.g. 22337 vs 6200).
  */
 export interface ConnectionIdentity {
-  boardId?: number
+  boardName?: string
   fwVersion?: string
-  vehicleName?: string
 }
 
 export interface ConnectionPortInfo {
@@ -324,6 +343,11 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
                 command: MAV_CMD_REQUEST_MESSAGE,
                 param1: AUTOPILOT_VERSION_MSGID,
               }).catch(() => {})
+              // Same fire-and-forget contract: the banner reply arrives as
+              // ordinary STATUSTEXTs, picked apart by the subscriber below.
+              sendCommand(router, { sysid: target.sysid, compid: target.compid }, {
+                command: MAV_CMD_DO_SEND_BANNER,
+              }).catch(() => {})
             }
           }
         })
@@ -337,29 +361,33 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
             if (next.length > STATUSTEXT_CAP) next.splice(0, next.length - STATUSTEXT_CAP)
             return { statustext: next }
           })
+          // Banner system-id line -> boardName. First match wins: the name
+          // can't change mid-session (same physical board), and holding it
+          // keeps a later false-positive INFO line from overwriting it.
+          if (severity === MAV_SEVERITY_INFO) {
+            const boardName = parseBannerSystemIdLine(text)
+            if (boardName !== undefined) {
+              set((s) =>
+                s.identity?.boardName !== undefined
+                  ? s
+                  : { identity: { ...s.identity, boardName } },
+              )
+            }
+          }
         })
         cleanupFns.push(unsubStatusText)
 
         const unsubIdentity = router.subscribe({ msgid: AUTOPILOT_VERSION_MSGID }, (msg) => {
-          // `product_id` -> `boardId` is a plausible-but-unverified mapping,
-          // not something confirmed against ArduPilot firmware source: the
-          // MAVLink common spec only describes vendor_id/product_id as
-          // generic "USB-style IDs", but Mission Planner/QGroundControl-style
-          // GCS tools are known to display ArduPilot's product_id as a
-          // "board ID". If real-hardware verification ever shows this field
-          // means something else (or is always 0) on some firmware, this is
-          // the only line to change — identity is display-only either way
-          // (decisions-m1: board_id from AUTOPILOT_VERSION never gates
-          // anything), so a wrong/absent value here cannot break anything
-          // else, only mislabel the topbar chip.
-          const productId = Number(msg.fields.product_id)
-          set({
+          // Only `flight_sw_version` is consumed. `product_id` is ignored —
+          // see `ConnectionIdentity`'s doc: real hardware showed it is the
+          // USB PID, not a board id. Merge (not replace) so a banner-provided
+          // `boardName` survives whichever reply lands second.
+          set((s) => ({
             identity: {
-              boardId: productId > 0 ? productId : undefined,
+              ...s.identity,
               fwVersion: decodeFlightSwVersion(Number(msg.fields.flight_sw_version)),
-              vehicleName: undefined,
             },
-          })
+          }))
         })
         cleanupFns.push(unsubIdentity)
 

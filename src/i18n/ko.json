@@ -19,7 +19,6 @@
     "disconnect": "연결 해제",
     "anyDevice": "모든 장치",
     "unknownBoard": "알 수 없는 보드",
-    "boardIdLabel": "ID",
     "language": "Language"
   },
   "toast": {
@@ -228,7 +227,7 @@
 
     "connectNote": "보드를 연결하면 추천 펌웨어가 강조 표시됩니다 — 연결 여부와 관계없이 전체 목록은 항상 표시됩니다.",
     "connectCta": "비행 컨트롤러 연결",
-    "connectedAs": "{{board}} · 보드 ID {{boardId}}",
+    "connectedAs": "연결됨: {{board}}",
     "recommended": "이 보드에 추천됨",
 
     "onlineLoading": "펌웨어 목록을 불러오는 중…",

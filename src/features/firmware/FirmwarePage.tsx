@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
-import { fetchManifest, matchBoards, type BoardFirmware, type FirmwareFile, type FirmwareManifest } from '../../core/firmware/manifest'
+import { fetchManifest, matchBoards, matchBoardsByName, type BoardFirmware, type FirmwareFile, type FirmwareManifest } from '../../core/firmware/manifest'
 import { parseApj, type ParsedApj } from '../../core/firmware/apj'
 import { FlashLog } from './FlashLog'
 import { DfuRecovery } from './DfuRecovery'
@@ -153,6 +153,13 @@ export function FirmwarePage() {
     session.prepare(target)
   }
 
+  // Highlight-only (decisions-m1): matches the banner board name against the
+  // manifest — never filters the list, never gates a flash.
+  const recommendedBoards =
+    manifestLoad.kind === 'loaded' && identity?.boardName !== undefined
+      ? matchBoardsByName(manifestLoad.manifest, identity.boardName)
+      : []
+
   const visibleSteps = NORMAL_STEP_ORDER.filter((s) => {
     if (session.target?.source.kind !== 'local') return true
     return s.step !== 'downloading' && s.step !== 'verifying'
@@ -178,7 +185,7 @@ export function FirmwarePage() {
         {phase === 'connected' ? (
           <div className="mb-3.5 flex items-center gap-3 rounded-xl border border-nvx-border bg-white px-4 py-3 shadow-card">
             <span className="text-[13.5px] font-extrabold text-nvx-text">
-              {t('firmware.connectedAs', { board: identity?.vehicleName ?? t('topbar.unknownBoard'), boardId: identity?.boardId ?? '—' })}
+              {t('firmware.connectedAs', { board: identity?.boardName ?? t('topbar.unknownBoard') })}
             </span>
           </div>
         ) : (
@@ -224,7 +231,7 @@ export function FirmwarePage() {
               <p className="text-[12.5px] text-nvx-muted">{t('firmware.onlineEmpty')}</p>
             ) : (
               manifestLoad.manifest.boards.map((b) => {
-                const recommended = identity?.boardId !== undefined && identity.boardId === b.apjBoardId
+                const recommended = recommendedBoards.includes(b)
                 const selected = selectedBoard?.apjBoardId === b.apjBoardId && selectedBoard.version === b.version
                 const file = apjFile(b)
                 return (

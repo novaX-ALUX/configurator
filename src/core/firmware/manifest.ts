@@ -164,6 +164,19 @@ export function matchBoards(manifest: FirmwareManifest, bootloaderBoardId: numbe
   return manifest.boards.filter((board) => board.apjBoardId === bootloaderBoardId)
 }
 
+/**
+ * Boards matching a MAVLink-banner board name (DO_SEND_BANNER's system-id
+ * STATUSTEXT line). The manifest name and the banner name both come from the
+ * hwdef directory name, but the USB product string variant swaps `_` for a
+ * space (e.g. "AF-H7 nano" vs "AF-H7_nano"), so compare case-insensitively
+ * with separators stripped — still whole-name equality, never prefix/fuzzy.
+ */
+export function matchBoardsByName(manifest: FirmwareManifest, boardName: string): BoardFirmware[] {
+  const normalize = (name: string) => name.toLowerCase().replace(/[\s_-]+/g, '')
+  const wanted = normalize(boardName)
+  return manifest.boards.filter((board) => normalize(board.boardName) === wanted)
+}
+
 /** Same-origin mirror path for a firmware file's bytes. Never `file.url` (see module doc). */
 export function firmwareFileUrl(file: FirmwareFile): string {
   return `${import.meta.env.BASE_URL}firmware/${file.name}`

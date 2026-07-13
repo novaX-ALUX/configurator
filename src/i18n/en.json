@@ -19,7 +19,6 @@
     "disconnect": "Disconnect",
     "anyDevice": "Any device",
     "unknownBoard": "Unknown board",
-    "boardIdLabel": "ID",
     "language": "Language"
   },
   "toast": {
@@ -228,7 +227,7 @@
 
     "connectNote": "Connect a board to highlight its recommended firmware — every board is always listed, connected or not.",
     "connectCta": "Connect flight controller",
-    "connectedAs": "{{board}} · board ID {{boardId}}",
+    "connectedAs": "Connected: {{board}}",
     "recommended": "Recommended for this board",
 
     "onlineLoading": "Loading the firmware list…",
