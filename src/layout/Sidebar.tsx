@@ -99,7 +99,7 @@ export function Sidebar() {
             aria-current={isActive ? 'page' : undefined}
             title={label}
             onClick={() => setActivePage(page.id)}
-            className={`flex h-[42px] w-[42px] items-center justify-center rounded-[11px] transition-colors ${
+            className={`flex w-[58px] flex-none flex-col items-center justify-center gap-1 rounded-[11px] px-1 py-1.5 text-center transition-colors ${
               !page.enabled
                 ? 'cursor-not-allowed text-nvx-disabled'
                 : isActive
@@ -108,7 +108,7 @@ export function Sidebar() {
             }`}
           >
             <span aria-hidden="true">{NAV_ICONS[page.id]}</span>
-            <span className="sr-only">{label}</span>
+            <span className="text-[10px] font-semibold leading-[1.15]">{label}</span>
           </button>
         )
       })}
@@ -116,7 +116,7 @@ export function Sidebar() {
         type="button"
         title={t('guide.openButton')}
         onClick={toggleGuide}
-        className={`mt-auto flex h-[42px] w-[42px] flex-none items-center justify-center rounded-[11px] border border-dashed transition-colors ${
+        className={`mt-auto flex w-[58px] flex-none flex-col items-center justify-center gap-1 rounded-[11px] border border-dashed px-1 py-1.5 text-center transition-colors ${
           guideOpen ? 'border-nvx-primary text-nvx-primary' : 'border-nvx-borderStrong text-nvx-faint hover:border-nvx-primary hover:text-nvx-primary'
         }`}
       >
@@ -126,7 +126,7 @@ export function Sidebar() {
             <path d="M14.8 9.2l-1.8 4.4-4.4 1.8 1.8-4.4z" />
           </svg>
         </span>
-        <span className="sr-only">{t('guide.openButton')}</span>
+        <span className="text-[10px] font-semibold leading-[1.15]">{t('guide.openButton')}</span>
       </button>
     </nav>
   )
