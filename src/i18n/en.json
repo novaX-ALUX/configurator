@@ -115,7 +115,8 @@
     "power": {
       "title": "Power",
       "remaining": "{{pct}}% remaining",
-      "noRemaining": "Battery percentage unavailable — showing voltage only"
+      "noRemaining": "Battery percentage unavailable — showing voltage only",
+      "implausible": "reported by FC — voltage suggests USB/bench power"
     },
     "gps": {
       "title": "GPS",

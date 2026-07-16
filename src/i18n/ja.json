@@ -115,7 +115,8 @@
     "power": {
       "title": "電源",
       "remaining": "残り {{pct}}%",
-      "noRemaining": "バッテリー残量不明 — 電圧のみ表示"
+      "noRemaining": "バッテリー残量不明 — 電圧のみ表示",
+      "implausible": "FC報告値 — 電圧はUSB/ベンチ電源を示唆"
     },
     "gps": {
       "title": "GPS",

@@ -62,6 +62,29 @@ export function gpsFixTier(fixType: number): GpsFixTier {
   return 'none'
 }
 
+/**
+ * Conservative implausibility floor for a reported pack voltage, in volts (issue #9).
+ *
+ * SYS_STATUS's `battery_remaining` % can come from a source (e.g. an ESC's own estimate)
+ * that's independent of `voltage_battery`, so a board running on USB/bench power can report
+ * a healthy-looking percent next to a voltage far too low to be a real pack — the observed
+ * case was 0.02 V next to "80% remaining", both rendered as healthy.
+ *
+ * 3.0 V is the conventional LiPo/Li-ion low-voltage cutoff — the point below which a single
+ * cell is considered over-discharged even after sag under load. Any real 1S-6S pack in normal
+ * use reports at or above this, so this floor never flags a genuine pack; it only catches
+ * near-zero/no-battery readings. (A 1S pack abused well past its cutoff, e.g. left to self-
+ * discharge to 2.5 V, could still trip this — but that's abnormal use of a damaged cell, not
+ * the "plausible pack in normal use" case the issue asks this to leave alone.) A literal 0 V
+ * is excluded (kept as a distinct "unpopulated" case, not the spurious-low-reading case this
+ * guards against) — this matches the interval in the issue's acceptance criteria.
+ */
+const IMPLAUSIBLE_VOLTAGE_FLOOR_V = 3.0
+
+export function isVoltageImplausible(voltage: number): boolean {
+  return voltage > 0 && voltage < IMPLAUSIBLE_VOLTAGE_FLOOR_V
+}
+
 /** `+12.3°` / `-4.5°` — sign always shown explicitly (matches the design file's own rollTxt/pitchTxt convention). */
 export function formatSignedDeg(deg: number): string {
   return `${deg >= 0 ? '+' : ''}${deg.toFixed(1)}°`

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { TelemetryState } from '../../core/mavlink/telemetry'
+import { isVoltageImplausible } from './dashboardUtils'
 
 interface PowerCardProps {
   power?: TelemetryState['power']
@@ -27,10 +28,20 @@ const BAR_CLASSES: Record<BatteryTier, string> = {
  * loading"), this shows voltage/current only and never fabricates a percent
  * from a guessed cell-count/voltage range (a 4S 13.2-16.8V assumption would
  * be wrong for any other cell count and is nowhere in the actual telemetry).
+ *
+ * Issue #9: `battery_remaining` can come from a source independent of
+ * `voltage_battery` (e.g. an ESC's own estimate), so a board on USB/bench
+ * power can report a healthy-looking percent next to a voltage far too low
+ * to be a real pack — both rendering as "healthy" is an honesty-rule hole.
+ * When that happens (see `isVoltageImplausible`), the bar drops its
+ * success/warning/danger tier for a neutral "disabled" fill and gets a short
+ * qualifier — the FC's number is still shown as reported, never fabricated
+ * or hidden, just no longer presented as mutually confirming the voltage.
  */
 export function PowerCard({ power }: PowerCardProps) {
   const { t } = useTranslation()
   const pct = power?.batteryRemaining
+  const implausible = pct !== undefined && power?.voltage !== undefined && isVoltageImplausible(power.voltage)
 
   return (
     <div className="flex flex-col rounded-xl border border-nvx-border bg-white p-4 shadow-card">
@@ -45,9 +56,10 @@ export function PowerCard({ power }: PowerCardProps) {
       {pct !== undefined ? (
         <>
           <div className="mt-2.5 h-2 overflow-hidden rounded bg-nvx-field">
-            <div className={`h-full rounded ${BAR_CLASSES[batteryTier(pct)]}`} style={{ width: `${pct}%` }} />
+            <div className={`h-full rounded ${implausible ? 'bg-nvx-disabled' : BAR_CLASSES[batteryTier(pct)]}`} style={{ width: `${pct}%` }} />
           </div>
           <div className="mt-auto pt-2 font-mono text-[11px] text-nvx-faint">{t('dashboard.power.remaining', { pct })}</div>
+          {implausible && <div className="pt-1 text-[11px] text-nvx-faint">{t('dashboard.power.implausible')}</div>}
         </>
       ) : (
         <div className="mt-auto pt-2 text-[11px] text-nvx-faint">{t('dashboard.power.noRemaining')}</div>

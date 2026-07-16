@@ -115,7 +115,8 @@
     "power": {
       "title": "电源",
       "remaining": "剩余 {{pct}}%",
-      "noRemaining": "电量百分比不可用 — 仅显示电压"
+      "noRemaining": "电量百分比不可用 — 仅显示电压",
+      "implausible": "飞控上报 — 电压表明为USB/台架供电"
     },
     "gps": {
       "title": "GPS",

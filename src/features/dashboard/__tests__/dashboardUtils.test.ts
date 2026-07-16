@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arduCopterModeName, formatSignedDeg, gpsFixTier, normalizeHeadingDeg, pctFromUs } from '../dashboardUtils'
+import { arduCopterModeName, formatSignedDeg, gpsFixTier, isVoltageImplausible, normalizeHeadingDeg, pctFromUs } from '../dashboardUtils'
 
 describe('arduCopterModeName', () => {
   it('decodes the common ArduCopter modes', () => {
@@ -44,6 +44,25 @@ describe('gpsFixTier', () => {
   it('3d for fix_type 3 and above (DGPS/RTK included)', () => {
     expect(gpsFixTier(3)).toBe('3d')
     expect(gpsFixTier(6)).toBe('3d')
+  })
+})
+
+describe('isVoltageImplausible', () => {
+  it('flags a near-zero voltage, e.g. an unconnected sense pin on USB/bench power', () => {
+    expect(isVoltageImplausible(0.02)).toBe(true)
+  })
+
+  it('does not flag a real 1S pack even deeply sagged under load', () => {
+    expect(isVoltageImplausible(3.0)).toBe(false)
+    expect(isVoltageImplausible(3.2)).toBe(false)
+  })
+
+  it('does not flag a real 6S pack', () => {
+    expect(isVoltageImplausible(22.2)).toBe(false)
+  })
+
+  it('does not flag a literal 0 V (a distinct "unpopulated" case, not a spurious low reading)', () => {
+    expect(isVoltageImplausible(0)).toBe(false)
   })
 })
 
