@@ -1,7 +1,8 @@
 /**
- * Pure, DOM-free helpers backing `ParamsPage`'s search/group filter, paging,
- * and type-badge/precision-guard logic — split out from the component so
- * they're unit-testable without React or a `ParamStore`.
+ * Pure, DOM-free helpers backing `ParamsPage`'s search/group-section filter,
+ * enum/range-caption widget logic, and type-badge/precision-guard logic —
+ * split out from the component so they're unit-testable without React or a
+ * `ParamStore`.
  *
  * `PARAM_TYPE_LABELS` is a local, hardcoded MAV_PARAM_TYPE (1-10) label
  * table rather than an import of `mavlink-mappings`' own `MavParamType`
@@ -32,6 +33,7 @@ import {
   ParamWriteTimeoutError,
   type Param,
 } from '../../core/mavlink/params'
+import type { ParamMetaEntry } from '../../core/paramMetadata'
 
 /** Every outcome a staged `ParamStore.set()` can settle to, shared by `features/params`' `DiffDrawer` and `features/setup`'s `SetupDirtyBar`. */
 export type DiffRowStatus =
@@ -128,17 +130,11 @@ export function wouldLosePrecision(type: number, value: number): boolean {
   return isIntegerParamType(type) && Math.fround(value) !== value
 }
 
-const PAGE_SIZE = 100
-
-export function paramPageSize(): number {
-  return PAGE_SIZE
-}
-
 /**
  * First `_`-segment of a parameter name (e.g. `ATC_RAT_PIT_P` -> `ATC`); the
  * whole name if there's no `_` at all, or if `_` is the very first character
  * (a leading underscore, e.g. `_FOO_BAR`) — an empty-string group would
- * render as a nameless "_ (N)" chip, so that case falls back to the same
+ * render as a nameless "_ (N)" section, so that case falls back to the same
  * "no delimiter" behavior as a name with no underscore at all.
  */
 export function deriveGroup(name: string): string {
@@ -146,42 +142,71 @@ export function deriveGroup(name: string): string {
   return idx <= 0 ? name : name.slice(0, idx)
 }
 
-export interface GroupChip {
+export interface ParamGroup {
   group: string
-  count: number
+  items: Param[]
 }
 
-/** Groups by `deriveGroup`, sorted by count desc (ties broken alphabetically for a stable order), capped to `max`. Does not include an "All" entry — callers add that themselves alongside the total count. */
-export function topGroups(params: readonly Param[], max = 12): GroupChip[] {
-  const counts = new Map<string, number>()
+/**
+ * Every `deriveGroup()` group present in `params`, alphabetically sorted
+ * (matches the Mico reference's alphabetical group list) — unlike the
+ * deleted `topGroups`/`GROUP_CHIP_MAX`, nothing is capped or ranked by
+ * count. Collapsible sections + scroll replace the chip row as the page's
+ * navigation, so there's no longer a reason to hide any group (PRD #12
+ * §2.5). A group with zero matching params simply never appears here —
+ * callers pass an already-`filterParams`-filtered array to get "hide
+ * zero-match groups on search" for free, with no extra logic.
+ */
+export function groupParams(params: readonly Param[]): ParamGroup[] {
+  const byGroup = new Map<string, Param[]>()
   for (const p of params) {
     const g = deriveGroup(p.name)
-    counts.set(g, (counts.get(g) ?? 0) + 1)
+    const items = byGroup.get(g)
+    if (items) items.push(p)
+    else byGroup.set(g, [p])
   }
-  return [...counts.entries()]
-    .map(([group, count]) => ({ group, count }))
-    .sort((a, b) => b.count - a.count || a.group.localeCompare(b.group))
-    .slice(0, max)
+  return [...byGroup.entries()].map(([group, items]) => ({ group, items })).sort((a, b) => a.group.localeCompare(b.group))
 }
 
-/** Case-insensitive substring match on `name`, ANDed with an optional exact group filter (`null` = no group filter, i.e. "All"). */
-export function filterParams(params: readonly Param[], query: string, group: string | null): Param[] {
+/**
+ * Case-insensitive substring match on `param.name` OR (when `lookupMeta` is
+ * given) the matched `ParamMetaEntry.displayName` — never the description,
+ * which would surface too many unrelated hits (PRD #12 §2.5). An empty
+ * query returns every param unchanged. `lookupMeta` is `undefined` when
+ * metadata never loaded, in which case search silently falls back to
+ * name-only matching (same fallback principle as everywhere else metadata
+ * is additive, PRD §1.4).
+ */
+export function filterParams(params: readonly Param[], query: string, lookupMeta?: (name: string) => ParamMetaEntry | undefined): Param[] {
   const q = query.trim().toLowerCase()
+  if (!q) return [...params]
   return params.filter((p) => {
-    if (q && !p.name.toLowerCase().includes(q)) return false
-    if (group !== null && deriveGroup(p.name) !== group) return false
-    return true
+    if (p.name.toLowerCase().includes(q)) return true
+    const displayName = lookupMeta?.(p.name)?.displayName
+    return displayName !== undefined && displayName.toLowerCase().includes(q)
   })
 }
 
-/** 1-indexed page window; `page` is clamped into `[1, ceil(items.length/pageSize)]` (never throws on an out-of-range page). */
-export function paginate<T>(items: readonly T[], page: number, pageSize: number = PAGE_SIZE): T[] {
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize))
-  const clamped = Math.min(Math.max(1, page), totalPages)
-  const start = (clamped - 1) * pageSize
-  return items.slice(start, start + pageSize)
+/**
+ * True when `meta.values` (an enum's listed options) is present AND `value`
+ * is one of them — the only condition under which `ParamRow` renders a
+ * `<select>` instead of the plain number input. An out-of-spec value (staged
+ * or live) must never be hidden behind a dropdown that can't represent it
+ * (PRD §1.4/§2.2).
+ */
+export function isEnumValue(meta: ParamMetaEntry | undefined, value: number): boolean {
+  return meta?.values?.some((v) => v.value === value) ?? false
 }
 
-export function totalPages(itemCount: number, pageSize: number = PAGE_SIZE): number {
-  return Math.max(1, Math.ceil(itemCount / pageSize))
+/**
+ * Advisory range/units caption text (e.g. "0–100 %"), or `undefined` if
+ * metadata has neither — never rendered as an HTML `min`/`max` or used to
+ * block staging (PRD §2.3: ArduPilot's documented range is a suggestion in
+ * the source comment, not a firmware-enforced constraint).
+ */
+export function rangeUnitsCaption(meta: ParamMetaEntry | undefined): string | undefined {
+  if (!meta) return undefined
+  const range = meta.range ? `${meta.range[0]}–${meta.range[1]}` : undefined
+  if (range && meta.units) return `${range} ${meta.units}`
+  return range ?? meta.units
 }

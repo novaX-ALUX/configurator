@@ -118,4 +118,70 @@ describe('ParamRow', () => {
       expect(screen.getByText('Minimum throttle output.')).toBeInTheDocument()
     })
   })
+
+  // Issue #14 (PA2): enum dropdown replaces the number input only when the
+  // live/staged value is one of meta.values' listed options — an
+  // out-of-spec value must never be hidden behind a dropdown (PRD #12
+  // §1.4/§2.2).
+  describe('enum dropdown (issue #14)', () => {
+    const enumMeta = {
+      displayName: 'Auto rotate',
+      description: 'Automatically check orientation.',
+      values: [
+        { value: 0, label: 'Disabled' },
+        { value: 1, label: 'Enabled' },
+        { value: 2, label: 'Enabled with compass fixup' },
+      ],
+    }
+
+    it('renders a <select> (not a number input) when the live value is a listed option, and stages via the same onStage path', () => {
+      const onStage = vi.fn()
+      render(<ParamRow param={param({ name: 'COMPASS_AUTO_ROT', value: 0 })} stagedValue={undefined} onStage={onStage} meta={enumMeta} />)
+
+      const select = screen.getByLabelText('COMPASS_AUTO_ROT')
+      expect(select.tagName).toBe('SELECT')
+      expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument() // no number input alongside it
+
+      fireEvent.change(select, { target: { value: '2' } })
+      expect(onStage).toHaveBeenCalledWith('COMPASS_AUTO_ROT', 2)
+    })
+
+    it('reflects a staged value in the dropdown selection', () => {
+      render(<ParamRow param={param({ name: 'COMPASS_AUTO_ROT', value: 0 })} stagedValue={1} onStage={vi.fn()} meta={enumMeta} />)
+
+      expect(screen.getByLabelText('COMPASS_AUTO_ROT')).toHaveValue('1')
+    })
+
+    it('falls back to the plain number input when the live value is not one of the listed options — never hides the real value behind a dropdown', () => {
+      render(<ParamRow param={param({ name: 'COMPASS_AUTO_ROT', value: 7 })} stagedValue={undefined} onStage={vi.fn()} meta={enumMeta} />)
+
+      const input = screen.getByLabelText('COMPASS_AUTO_ROT')
+      expect(input.tagName).toBe('INPUT')
+      expect(input).toHaveValue(7)
+    })
+  })
+
+  // Issue #14 (PA2): advisory-only caption, never an HTML min/max (PRD #12 §2.3).
+  describe('range/units caption (issue #14)', () => {
+    it('shows a gray range/units caption when metadata has them, without constraining the input', () => {
+      render(
+        <ParamRow
+          param={param()}
+          stagedValue={undefined}
+          onStage={vi.fn()}
+          meta={{ displayName: 'Throttle minimum', description: 'x', range: [0, 100], units: '%' }}
+        />,
+      )
+
+      expect(screen.getByText('0–100 %')).toBeInTheDocument()
+      const input = screen.getByLabelText('THR_MIN')
+      expect(input).not.toHaveAttribute('min')
+      expect(input).not.toHaveAttribute('max')
+    })
+
+    it('renders no caption when metadata has neither range nor units', () => {
+      render(<ParamRow param={param()} stagedValue={undefined} onStage={vi.fn()} meta={{ displayName: 'x', description: 'y' }} />)
+      expect(screen.queryByText(/–/)).not.toBeInTheDocument()
+    })
+  })
 })

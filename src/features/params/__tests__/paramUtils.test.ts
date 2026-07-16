@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Param } from '../../../core/mavlink/params'
+import type { ParamMetaEntry } from '../../../core/paramMetadata'
 import {
   deriveGroup,
   fetchProgressPercent,
   filterParams,
-  paginate,
+  groupParams,
+  isEnumValue,
   paramTypeLabel,
-  topGroups,
-  totalPages,
+  rangeUnitsCaption,
   wouldLosePrecision,
 } from '../paramUtils'
 
@@ -78,28 +79,28 @@ describe('deriveGroup', () => {
   })
 })
 
-describe('topGroups', () => {
-  it('counts params per group, sorted by count desc then alphabetically, capped to max', () => {
+describe('groupParams', () => {
+  it('buckets every param by deriveGroup, alphabetically sorted, with no cap', () => {
     const params = [
+      param({ name: 'COMPASS_A' }),
       param({ name: 'ATC_A' }),
       param({ name: 'ATC_B' }),
-      param({ name: 'ATC_C' }),
       param({ name: 'BATT_A' }),
-      param({ name: 'BATT_B' }),
-      param({ name: 'COMPASS_A' }),
     ]
-    expect(topGroups(params, 2)).toEqual([
-      { group: 'ATC', count: 3 },
-      { group: 'BATT', count: 2 },
+    expect(groupParams(params).map((g) => [g.group, g.items.map((p) => p.name)])).toEqual([
+      ['ATC', ['ATC_A', 'ATC_B']],
+      ['BATT', ['BATT_A']],
+      ['COMPASS', ['COMPASS_A']],
     ])
   })
 
-  it('breaks ties alphabetically for a stable order', () => {
-    const params = [param({ name: 'BETA_X' }), param({ name: 'ALPHA_X' })]
-    expect(topGroups(params)).toEqual([
-      { group: 'ALPHA', count: 1 },
-      { group: 'BETA', count: 1 },
-    ])
+  it('includes every group present, however many — no top-N cap (PA2 deleted the chip row/GROUP_CHIP_MAX)', () => {
+    const params = Array.from({ length: 30 }, (_, i) => param({ name: `G${i}_X` }))
+    expect(groupParams(params)).toHaveLength(30)
+  })
+
+  it('returns nothing for an empty input, e.g. a search with zero matches', () => {
+    expect(groupParams([])).toEqual([])
   })
 })
 
@@ -111,41 +112,71 @@ describe('filterParams', () => {
   ]
 
   it('matches name substrings case-insensitively', () => {
-    expect(filterParams(params, 'rat_pit', null).map((p) => p.name)).toEqual(['ATC_RAT_PIT_P'])
-    expect(filterParams(params, 'BATT', null).map((p) => p.name)).toEqual(['BATT_CAPACITY'])
+    expect(filterParams(params, 'rat_pit').map((p) => p.name)).toEqual(['ATC_RAT_PIT_P'])
+    expect(filterParams(params, 'BATT').map((p) => p.name)).toEqual(['BATT_CAPACITY'])
   })
 
-  it('filters by exact group when one is given', () => {
-    expect(filterParams(params, '', 'ATC').map((p) => p.name)).toEqual(['ATC_RAT_PIT_P', 'ATC_RAT_YAW_P'])
+  it('returns everything unchanged for an empty query', () => {
+    expect(filterParams(params, '')).toHaveLength(3)
   })
 
-  it('ANDs the search query and the group filter', () => {
-    expect(filterParams(params, 'yaw', 'ATC').map((p) => p.name)).toEqual(['ATC_RAT_YAW_P'])
-    expect(filterParams(params, 'yaw', 'BATT')).toEqual([])
+  it('also matches the metadata display name, case-insensitively, when a lookup is given', () => {
+    const meta = new Map<string, ParamMetaEntry>([['BATT_CAPACITY', { displayName: 'Battery capacity', description: 'x' }]])
+    const lookup = (name: string) => meta.get(name)
+    expect(filterParams(params, 'capacity', lookup).map((p) => p.name)).toEqual(['BATT_CAPACITY'])
   })
 
-  it('returns everything for an empty query and a null group', () => {
-    expect(filterParams(params, '', null)).toHaveLength(3)
+  it('never matches the description, only the display name', () => {
+    const meta = new Map<string, ParamMetaEntry>([['BATT_CAPACITY', { displayName: 'Battery capacity', description: 'mAh rating for the fuel gauge' }]])
+    const lookup = (name: string) => meta.get(name)
+    expect(filterParams(params, 'fuel gauge', lookup)).toEqual([])
+  })
+
+  it('falls back to name-only matching when no lookup is given (metadata never loaded)', () => {
+    expect(filterParams(params, 'capacity').map((p) => p.name)).toEqual(['BATT_CAPACITY'])
   })
 })
 
-describe('paginate / totalPages', () => {
-  const items = Array.from({ length: 250 }, (_, i) => i)
+describe('isEnumValue', () => {
+  const enumMeta: ParamMetaEntry = {
+    displayName: 'Auto rotate',
+    description: 'x',
+    values: [
+      { value: 0, label: 'Disabled' },
+      { value: 1, label: 'Enabled' },
+    ],
+  }
 
-  it('slices a 100-item window per page', () => {
-    expect(paginate(items, 1, 100)).toEqual(items.slice(0, 100))
-    expect(paginate(items, 2, 100)).toEqual(items.slice(100, 200))
-    expect(paginate(items, 3, 100)).toEqual(items.slice(200, 250))
+  it('is true when the value is one of meta.values\' listed options', () => {
+    expect(isEnumValue(enumMeta, 0)).toBe(true)
+    expect(isEnumValue(enumMeta, 1)).toBe(true)
   })
 
-  it('computes total pages, rounding up', () => {
-    expect(totalPages(250, 100)).toBe(3)
-    expect(totalPages(100, 100)).toBe(1)
-    expect(totalPages(0, 100)).toBe(1)
+  it('is false for an out-of-spec value not in the list — never hides the real value behind a dropdown', () => {
+    expect(isEnumValue(enumMeta, 2)).toBe(false)
   })
 
-  it('clamps an out-of-range page instead of throwing or returning empty', () => {
-    expect(paginate(items, 99, 100)).toEqual(items.slice(200, 250))
-    expect(paginate(items, 0, 100)).toEqual(items.slice(0, 100))
+  it('is false when there is no metadata, or metadata has no values (a plain scalar param)', () => {
+    expect(isEnumValue(undefined, 0)).toBe(false)
+    expect(isEnumValue({ displayName: 'x', description: 'y' }, 0)).toBe(false)
+  })
+})
+
+describe('rangeUnitsCaption', () => {
+  it('combines range and units when both are present', () => {
+    expect(rangeUnitsCaption({ displayName: 'x', description: 'y', range: [0, 100], units: '%' })).toBe('0–100 %')
+  })
+
+  it('renders range alone when there are no units', () => {
+    expect(rangeUnitsCaption({ displayName: 'x', description: 'y', range: [0, 100] })).toBe('0–100')
+  })
+
+  it('renders units alone when there is no range', () => {
+    expect(rangeUnitsCaption({ displayName: 'x', description: 'y', units: 'deg' })).toBe('deg')
+  })
+
+  it('is undefined when there is neither, or no metadata at all', () => {
+    expect(rangeUnitsCaption({ displayName: 'x', description: 'y' })).toBeUndefined()
+    expect(rangeUnitsCaption(undefined)).toBeUndefined()
   })
 })

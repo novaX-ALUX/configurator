@@ -70,6 +70,33 @@ async function tick(ms = 0): Promise<void> {
   })
 }
 
+/**
+ * Issue #14 (PA2): every group section starts collapsed, so a row's input
+ * isn't in the DOM until its section is expanded. Tests below this file's
+ * "search / collapsible group sections" block predate that change and only
+ * care about staging/write behavior, not collapsing — expanding every group
+ * up front keeps them exercising the same rows they always did, without
+ * threading an explicit expand step through each one individually.
+ */
+function expandAllGroups(): void {
+  for (const button of screen.getAllByRole('button')) {
+    if (button.getAttribute('aria-expanded') === 'false') fireEvent.click(button)
+  }
+}
+
+/** Expands a single group's section by its `deriveGroup()` prefix — cheaper than `expandAllGroups()` when the fixture has hundreds of single-param groups (e.g. `P1`..`P1276`) and only one group's rows actually matter to the assertion. */
+function expandGroup(prefix: string): void {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${prefix}_`) }))
+}
+
+/** Stubs `fetch` for `core/paramMetadata.ts`'s same-origin metadata fetch — shared by the issue #13 (display name/description) and issue #14 (search-by-display-name) test blocks below. */
+function mockMetaFetch(body: ParamMetaFile, ok = true): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })),
+  )
+}
+
 describe('ParamsPage', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -118,6 +145,7 @@ describe('ParamsPage', () => {
       transport.feed(paramValueFrame({ name: 'P1', value: 2, count: 2, index: 1 }))
       await tick()
 
+      expandAllGroups() // each group starts collapsed (issue #14) — expand to see the loaded rows
       expect(screen.getByText('P0')).toBeInTheDocument()
       expect(screen.getByText('P1')).toBeInTheDocument()
     })
@@ -182,6 +210,7 @@ describe('ParamsPage', () => {
 
       render(<ParamsPage />)
       expect(screen.queryByRole('button', { name: 'Load parameters' })).not.toBeInTheDocument()
+      expandAllGroups() // each group starts collapsed (issue #14) — expand to see the loaded row
       expect(screen.getByText('ALREADY_FETCHED')).toBeInTheDocument()
     })
 
@@ -204,14 +233,22 @@ describe('ParamsPage', () => {
       expect(screen.queryByText(/of .* shown/)).not.toBeInTheDocument()
 
       // The rest of the storm arrives (still triggered by the other page's call, not this one)...
+      // Named with a shared `GRP{n}_` prefix (not a flat `P{i}`) so
+      // `deriveGroup()` buckets them into ~26 realistically-sized sections
+      // instead of 1276 one-param sections — real ArduPilot params always
+      // share underscore-delimited prefixes (issue #14's collapsible
+      // sections render every group with no pagination/cap, so a flat name
+      // scheme here would make this single test render ~1300 individual
+      // section buttons for no reason this test actually cares about).
       for (let i = 1; i < 1277; i++) {
-        transport.feed(paramValueFrame({ name: `P${i}`, value: i, count: 1277, index: i }))
+        transport.feed(paramValueFrame({ name: `GRP${Math.floor(i / 50)}_P${i}`, value: i, count: 1277, index: i }))
       }
       await tick()
       await otherPagesFetch
 
       // ...and once it completes, the real table replaces the progress screen.
       expect(screen.queryByText(/Fetching parameters/)).not.toBeInTheDocument()
+      expandGroup('STAT') // each group starts collapsed (issue #14) — expand just STAT_RUNTIME's single-param group
       expect(screen.getByText('STAT_RUNTIME')).toBeInTheDocument()
       expect(screen.getByText('1277 of 1277 shown')).toBeInTheDocument()
     })
@@ -227,18 +264,12 @@ describe('ParamsPage', () => {
   // successful one does, so the fetch-failure case must run before any
   // success case primes that cache for the rest of the file.
   describe('parameter metadata (issue #13)', () => {
-    function mockMetaFetch(body: ParamMetaFile, ok = true): void {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })),
-      )
-    }
-
     async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>, fwVersion?: string) {
       const { transport, paramStore } = await makeConnectedParamStore()
       await feedAll(transport, entries)
       useConnectionStore.setState({ phase: 'connected', paramStore, identity: fwVersion ? { fwVersion } : null })
       render(<ParamsPage />)
+      expandAllGroups() // each group starts collapsed (issue #14) — expand to see the loaded rows
       return { transport, paramStore }
     }
 
@@ -292,7 +323,9 @@ describe('ParamsPage', () => {
     })
   })
 
-  describe('search / group filter / pagination', () => {
+  // Issue #14 (PA2): collapsible group sections replace pagination + the
+  // GROUP_CHIP_MAX chip row entirely (PRD #12 §2.5).
+  describe('search / collapsible group sections (issue #14)', () => {
     async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>) {
       const { transport, paramStore } = await makeConnectedParamStore()
       await feedAll(transport, entries)
@@ -304,7 +337,37 @@ describe('ParamsPage', () => {
       return { transport, paramStore }
     }
 
-    it('search filters by name substring, case-insensitively', async () => {
+    it('no pagination anywhere: a large table renders as sections, not "Page X of Y"', async () => {
+      const entries = Array.from({ length: 250 }, (_, i) => ({ name: `PARAM_${String(i).padStart(3, '0')}`, value: i }))
+      await renderLoaded(entries)
+
+      expect(screen.queryByText(/Page \d+ of \d+/)).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Prev' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument()
+      // One collapsible section for the single PARAM group, all 250 counted.
+      expect(screen.getByRole('button', { name: /^PARAM_ \(250\)/ })).toBeInTheDocument()
+    })
+
+    it('every group starts collapsed; expanding one shows its rows without affecting others', async () => {
+      await renderLoaded([
+        { name: 'ATC_RAT_PIT_P', value: 1 },
+        { name: 'BATT_CAPACITY', value: 1 },
+      ])
+
+      expect(screen.getByRole('button', { name: /^ATC_ \(1\)/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^BATT_ \(1\)/ })).toBeInTheDocument()
+      expect(screen.queryByText('ATC_RAT_PIT_P')).not.toBeInTheDocument()
+      expect(screen.queryByText('BATT_CAPACITY')).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: /^ATC_/ }))
+      expect(screen.getByText('ATC_RAT_PIT_P')).toBeInTheDocument()
+      expect(screen.queryByText('BATT_CAPACITY')).not.toBeInTheDocument() // BATT section is untouched, still collapsed
+
+      fireEvent.click(screen.getByRole('button', { name: /^ATC_/ })) // toggling again re-collapses it
+      expect(screen.queryByText('ATC_RAT_PIT_P')).not.toBeInTheDocument()
+    })
+
+    it('search matches param.name by substring, case-insensitively', async () => {
       await renderLoaded([
         { name: 'ATC_RAT_PIT_P', value: 1 },
         { name: 'ATC_RAT_YAW_P', value: 1 },
@@ -312,43 +375,59 @@ describe('ParamsPage', () => {
       ])
 
       fireEvent.change(screen.getByPlaceholderText('Search name…'), { target: { value: 'yaw' } })
-      expect(screen.queryByText('ATC_RAT_PIT_P')).not.toBeInTheDocument()
       expect(screen.getByText('ATC_RAT_YAW_P')).toBeInTheDocument()
+      expect(screen.queryByText('ATC_RAT_PIT_P')).not.toBeInTheDocument()
       expect(screen.queryByText('BATT_CAPACITY')).not.toBeInTheDocument()
     })
 
-    it('group chips filter to that prefix group; "All" clears it', async () => {
+    it('search also matches the metadata display name, case-insensitively, but never the description', async () => {
+      // No mockMetaFetch call here on purpose: `core/paramMetadata.ts` caches
+      // by version in a module-level Map, and `AVAILABLE_METADATA_VERSIONS`
+      // has exactly one bundled version — the earlier "parameter metadata
+      // (issue #13)" block above already primed that cache with
+      // COMPASS_AUTO_ROT ("Automatically check orientation" / "Checks
+      // compass orientation after calibration."), so a fresh mock here would
+      // just be silently ignored in favor of the cached promise. Reusing
+      // that entry both sidesteps the cache and doubles as the description
+      // non-match proof (the word "calibration" only appears there).
+      await renderLoaded([
+        { name: 'COMPASS_AUTO_ROT', value: 1 },
+        { name: 'ATC_RAT_YAW_P', value: 1 },
+      ])
+      await tick()
+
+      fireEvent.change(screen.getByPlaceholderText('Search name…'), { target: { value: 'orientation' } })
+      expect(screen.getByText('COMPASS_AUTO_ROT')).toBeInTheDocument() // matched via displayName, not the raw name
+      expect(screen.queryByText('ATC_RAT_YAW_P')).not.toBeInTheDocument()
+
+      fireEvent.change(screen.getByPlaceholderText('Search name…'), { target: { value: 'calibration' } })
+      expect(screen.queryByText('COMPASS_AUTO_ROT')).not.toBeInTheDocument() // description-only text never matches
+    })
+
+    it('a non-empty query auto-expands matching groups and hides zero-match groups; clearing restores collapsed-by-default', async () => {
       await renderLoaded([
         { name: 'ATC_RAT_PIT_P', value: 1 },
-        { name: 'ATC_RAT_YAW_P', value: 1 },
         { name: 'BATT_CAPACITY', value: 1 },
       ])
 
-      fireEvent.click(screen.getByRole('button', { name: /^ATC/ }))
-      expect(screen.getByText('ATC_RAT_PIT_P')).toBeInTheDocument()
-      expect(screen.queryByText('BATT_CAPACITY')).not.toBeInTheDocument()
-
-      fireEvent.click(screen.getByRole('button', { name: /^All/ }))
+      // A group the user expanded manually, before ever searching, is in play too.
+      fireEvent.click(screen.getByRole('button', { name: /^BATT_/ }))
       expect(screen.getByText('BATT_CAPACITY')).toBeInTheDocument()
-    })
 
-    it('paginates at 100 per page, with Prev/Next disabled at the boundaries', async () => {
-      const entries = Array.from({ length: 250 }, (_, i) => ({ name: `PARAM_${String(i).padStart(3, '0')}`, value: i }))
-      await renderLoaded(entries)
+      fireEvent.change(screen.getByPlaceholderText('Search name…'), { target: { value: 'atc' } })
+      // Matching group auto-expands with no click needed.
+      expect(screen.getByText('ATC_RAT_PIT_P')).toBeInTheDocument()
+      // Zero-match group is hidden entirely, not just collapsed — even though it was manually expanded a moment ago.
+      expect(screen.queryByRole('button', { name: /^BATT_/ })).not.toBeInTheDocument()
 
-      expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
-      expect(screen.getByText('PARAM_000')).toBeInTheDocument()
-      expect(screen.queryByText('PARAM_100')).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Prev' })).toBeDisabled()
-
-      fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-      expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
-      expect(screen.getByText('PARAM_100')).toBeInTheDocument()
-
-      fireEvent.click(screen.getByRole('button', { name: 'Next' }))
-      expect(screen.getByText('Page 3 of 3')).toBeInTheDocument()
-      expect(screen.getByText('PARAM_200')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+      fireEvent.change(screen.getByPlaceholderText('Search name…'), { target: { value: '' } })
+      // Clearing restores collapsed-by-default for every group — including
+      // both the one the search had auto-expanded AND the one the user had
+      // manually expanded before searching (PRD #12 §2.5's literal "restores
+      // the collapsed-by-default state", not just "undoes what search did").
+      expect(screen.queryByText('ATC_RAT_PIT_P')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^BATT_/ })).toBeInTheDocument()
+      expect(screen.queryByText('BATT_CAPACITY')).not.toBeInTheDocument()
     })
   })
 
@@ -361,6 +440,7 @@ describe('ParamsPage', () => {
       // straight in the 'loaded' table view, no "Load parameters" click needed.
       useConnectionStore.setState({ phase: 'connected', paramStore })
       render(<ParamsPage />)
+      expandAllGroups() // these tests exercise staging/write, not collapsing — see expandAllGroups' doc comment
       return { transport, paramStore }
     }
 
@@ -542,6 +622,7 @@ describe('ParamsPage', () => {
       await feedAll(transport, [{ name: 'THR_MIN', value: 0 }])
       useConnectionStore.setState({ phase: 'connected', paramStore })
       render(<ParamsPage />)
+      expandAllGroups()
 
       expect(useNavigationStore.getState().guardNavigation).toBeNull()
 
@@ -564,6 +645,7 @@ describe('ParamsPage', () => {
       await feedAll(transport, [{ name: 'THR_MIN', value: 0 }])
       useConnectionStore.setState({ phase: 'connected', paramStore })
       render(<ParamsPage />)
+      expandAllGroups()
 
       const input = screen.getByDisplayValue('0')
       fireEvent.change(input, { target: { value: '1' } })

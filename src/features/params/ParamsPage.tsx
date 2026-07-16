@@ -6,7 +6,7 @@ import { ParamStoreDisposedError, type FetchProgressState } from '../../core/mav
 import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata } from '../../core/paramMetadata'
 import { ParamRow } from './ParamRow'
 import { DiffDrawer, type DiffRowStatus } from './DiffDrawer'
-import { fetchErrorMessage, fetchProgressPercent, filterParams, paginate, paramPageSize, topGroups, totalPages, withoutKey, writeErrorStatus } from './paramUtils'
+import { fetchErrorMessage, fetchProgressPercent, filterParams, groupParams, withoutKey, writeErrorStatus } from './paramUtils'
 
 type LoadState = { kind: 'idle' } | { kind: 'error'; message: string } | { kind: 'loaded' }
 
@@ -16,9 +16,6 @@ type LoadState = { kind: 'idle' } | { kind: 'error'; message: string } | { kind:
  * sharing this one reference across call sites is safe.
  */
 const NO_FETCH_PROGRESS: FetchProgressState = { active: false, got: 0, total: undefined }
-
-/** Top ~12 groups by count (task brief), plus an "All" chip the component adds itself. */
-const GROUP_CHIP_MAX = 12
 
 /** How long a successful write's 'ok' row stays visible in the drawer before it clears (spec: per-row status includes 'ok', not an immediate vanish). */
 const WRITE_OK_DISPLAY_MS = 2000
@@ -41,11 +38,13 @@ const WRITE_OK_DISPLAY_MS = 2000
 
 /**
  * Full parameter table: fetch (with progress + distinguishable errors),
- * search/group filter, pagination (page size 100, no virtualization — M1
- * cut per the task brief), staged edits with a diff-before-write drawer,
- * and two safety nets: a nav-store guard blocking navigation away with
- * unsaved edits, and a clear-with-warning on disconnect (edits don't
- * survive a session, so keeping them staged after teardown would be a lie).
+ * search filter (name or metadata display name), one collapsible section
+ * per `deriveGroup()` prefix (all collapsed by default, expand state is
+ * component state only — never persisted, PRD #12 §2.5), staged edits with
+ * a diff-before-write drawer, and two safety nets: a nav-store guard
+ * blocking navigation away with unsaved edits, and a clear-with-warning on
+ * disconnect (edits don't survive a session, so keeping them staged after
+ * teardown would be a lie).
  */
 export function ParamsPage() {
   const { t } = useTranslation()
@@ -73,8 +72,11 @@ export function ParamsPage() {
   const [fetchProgress, setFetchProgress] = useState<FetchProgressState>(() => paramStore?.fetchProgress ?? NO_FETCH_PROGRESS)
   const [version, setVersion] = useState(0) // bumped on every ParamStore.onChange to force paramsArray to re-derive from the live cache
   const [query, setQuery] = useState('')
-  const [group, setGroup] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
+  // Which groups the user has manually expanded — all collapsed by default,
+  // component state only (not persisted across page loads/navigation, PRD
+  // #12 §2.5: re-expanding a group is a single click, unlike Charts' series
+  // selection which is expensive enough to justify persistence).
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [pending, setPending] = useState<Map<string, number>>(new Map())
   const [writeStatus, setWriteStatus] = useState<Map<string, DiffRowStatus>>(new Map())
   const [writing, setWriting] = useState(false)
@@ -113,8 +115,7 @@ export function ParamsPage() {
     setWriting(false)
     setDrawerOpen(false)
     setQuery('')
-    setGroup(null)
-    setPage(1)
+    setExpandedGroups(new Set())
     setMeta(null)
     setMetaBannerDismissed(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -200,16 +201,41 @@ export function ParamsPage() {
     void fetchProgress.active
     return paramStore ? [...paramStore.all.values()] : []
   }, [paramStore, version, fetchProgress.active])
-  const groups = useMemo(() => topGroups(paramsArray, GROUP_CHIP_MAX), [paramsArray])
-  const filtered = useMemo(() => filterParams(paramsArray, query, group), [paramsArray, query, group])
-  const pageSize = paramPageSize()
-  const pageCount = totalPages(filtered.length, pageSize)
-  const clampedPage = Math.min(page, pageCount)
-  const pageItems = useMemo(() => paginate(filtered, clampedPage, pageSize), [filtered, clampedPage, pageSize])
+  const hasQuery = query.trim() !== ''
+  const filtered = useMemo(() => filterParams(paramsArray, query, meta ? (name) => lookupParamMeta(meta.table, name) : undefined), [paramsArray, query, meta])
+  // Derived from the already-filtered array: a group with zero matches on a
+  // non-empty query simply has no entries here, which is how "hide
+  // zero-match groups on search" falls out for free (PRD #12 §2.5) — no
+  // separate visibility flag needed.
+  const groups = useMemo(() => groupParams(filtered), [filtered])
 
-  useEffect(() => {
-    setPage(1)
-  }, [query, group])
+  function isGroupExpanded(group: string): boolean {
+    // Non-empty query auto-expands every group that has a match; the
+    // section header's toggle is disabled while searching (see the button
+    // below), so `expandedGroups` itself is never mutated by a search —
+    // clearing it back to `''` is what puts every group back to collapsed
+    // (handleQueryChange below), matching "clearing the query restores the
+    // collapsed-by-default state" literally (PRD #12 §2.5).
+    return hasQuery || expandedGroups.has(group)
+  }
+
+  function toggleGroup(group: string): void {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(group)) next.delete(group)
+      else next.add(group)
+      return next
+    })
+  }
+
+  function handleQueryChange(next: string): void {
+    setQuery(next)
+    // Clearing the search restores the collapsed-by-default state
+    // unconditionally — including any group the user had expanded manually
+    // before searching — rather than only the groups the search itself
+    // auto-expanded (PRD §2.5).
+    if (next.trim() === '') setExpandedGroups(new Set())
+  }
 
   function stage(name: string, value: number): void {
     setPending((p) => new Map(p).set(name, value))
@@ -394,33 +420,10 @@ export function ParamsPage() {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => handleQueryChange(e.target.value)}
           placeholder={t('params.searchPlaceholder')}
           className="w-[260px] rounded-[9px] border border-nvx-borderStrong px-3 py-2 font-mono text-[12px] focus:border-nvx-primary"
         />
-        <button
-          type="button"
-          onClick={() => setGroup(null)}
-          aria-pressed={group === null}
-          className={`rounded-full border px-2.5 py-1.5 font-mono text-[10.5px] font-semibold ${
-            group === null ? 'border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText' : 'border-nvx-borderStrong bg-white text-nvx-muted'
-          }`}
-        >
-          {t('params.allGroup')} ({paramsArray.length})
-        </button>
-        {groups.map((g) => (
-          <button
-            key={g.group}
-            type="button"
-            onClick={() => setGroup(g.group)}
-            aria-pressed={group === g.group}
-            className={`rounded-full border px-2.5 py-1.5 font-mono text-[10.5px] font-semibold ${
-              group === g.group ? 'border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText' : 'border-nvx-borderStrong bg-white text-nvx-muted'
-            }`}
-          >
-            {g.group}_ ({g.count})
-          </button>
-        ))}
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-nvx-border bg-white shadow-card">
@@ -431,32 +434,43 @@ export function ParamsPage() {
           <span>{t('params.columnIndex')}</span>
         </div>
         <div className="min-h-[220px] flex-1 overflow-auto">
-          {pageItems.length === 0 ? (
+          {groups.length === 0 ? (
             <p className="px-4 py-3 text-[12px] text-nvx-faint">{t('params.noResults')}</p>
           ) : (
-            pageItems.map((p) => (
-              <ParamRow key={p.name} param={p} stagedValue={pending.get(p.name)} onStage={stage} meta={meta ? lookupParamMeta(meta.table, p.name) : undefined} />
-            ))
+            groups.map((g) => {
+              const expanded = isGroupExpanded(g.group)
+              return (
+                <div key={g.group} className="border-b border-nvx-border last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(g.group)}
+                    disabled={hasQuery}
+                    aria-expanded={expanded}
+                    className="flex w-full items-center gap-1.5 bg-nvx-field px-4 py-[7px] text-left font-mono text-[11px] font-extrabold tracking-[.05em] text-nvx-muted disabled:cursor-default"
+                  >
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className={`flex-none transition-transform duration-150 ease-out motion-reduce:transition-none ${expanded ? 'rotate-90' : ''}`}
+                    >
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                    {g.group}_ <span className="font-normal text-nvx-faint">({g.items.length})</span>
+                  </button>
+                  {expanded &&
+                    g.items.map((p) => (
+                      <ParamRow key={p.name} param={p} stagedValue={pending.get(p.name)} onStage={stage} meta={meta ? lookupParamMeta(meta.table, p.name) : undefined} />
+                    ))}
+                </div>
+              )
+            })
           )}
-        </div>
-        <div className="flex items-center justify-between border-t border-nvx-border px-4 py-2 text-[11.5px] text-nvx-muted">
-          <button
-            type="button"
-            disabled={clampedPage <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="rounded-md px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t('params.prev')}
-          </button>
-          <span className="font-mono">{t('params.page', { page: clampedPage, total: pageCount })}</span>
-          <button
-            type="button"
-            disabled={clampedPage >= pageCount}
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded-md px-2 py-1 font-semibold disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t('params.next')}
-          </button>
         </div>
         {pending.size > 0 ? (
           <div className="flex items-center gap-2.5 border-t border-nvx-warningBorder bg-nvx-warningSoft px-4 py-2.5">
