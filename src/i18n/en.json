@@ -284,6 +284,7 @@
     "localBoardName": "Unknown board (ID {{boardId}})",
 
     "updateButton": "Update {{board}} to {{version}}",
+    "selectToUpdate": "Select firmware to update",
 
     "confirmTitle": "Update {{board}} to {{version}}?",
     "confirmBody": "The board reboots into its bootloader, is reflashed, then reboots back. Parameters are preserved. Don't disconnect the USB cable during this process.",

@@ -284,6 +284,7 @@
     "localBoardName": "不明なボード（ID {{boardId}}）",
 
     "updateButton": "{{board}} を {{version}} に更新",
+    "selectToUpdate": "更新するファームウェアを選択してください",
 
     "confirmTitle": "{{board}} を {{version}} に更新しますか？",
     "confirmBody": "ボードはブートローダーに再起動し、書き込み後にアプリへ再起動します。パラメータは保持されます。この間は USB ケーブルを抜かないでください。",

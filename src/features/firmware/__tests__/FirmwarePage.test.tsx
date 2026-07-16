@@ -85,6 +85,18 @@ describe('FirmwarePage — online list (Tab 1)', () => {
     expect(updateButton).toBeDisabled()
   })
 
+  it('shows static disabled copy (never em-dash placeholders) when nothing is selected', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'disconnected' })
+
+    render(<FirmwarePage />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /AF-F4_nano/ })).toBeInTheDocument())
+
+    const updateButton = screen.getByRole('button', { name: 'Select firmware to update' })
+    expect(updateButton).toBeDisabled()
+    expect(screen.queryByText(/Update — to —/)).not.toBeInTheDocument()
+  })
+
   it('opens a confirm dialog naming the board/version when Update is clicked while connected, and Cancel returns to idle', async () => {
     mockManifestFetch()
     useConnectionStore.setState({ phase: 'connected', identity: null })

@@ -338,7 +338,7 @@ export function FirmwarePage() {
                 onClick={startOnlineUpdate}
                 className="rounded-[10px] bg-nvx-primary px-5 py-2.5 text-[13px] font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {selectedBoard ? t('firmware.updateButton', { board: selectedBoard.boardName, version: selectedBoard.version }) : t('firmware.updateButton', { board: '—', version: '—' })}
+                {selectedBoard ? t('firmware.updateButton', { board: selectedBoard.boardName, version: selectedBoard.version }) : t('firmware.selectToUpdate')}
               </button>
             )}
           </div>

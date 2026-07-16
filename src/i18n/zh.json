@@ -284,6 +284,7 @@
     "localBoardName": "未知板型（ID {{boardId}}）",
 
     "updateButton": "将 {{board}} 更新到 {{version}}",
+    "selectToUpdate": "请选择要更新的固件",
 
     "confirmTitle": "将 {{board}} 更新到 {{version}}？",
     "confirmBody": "飞控将重启进入 bootloader、刷写新固件、再重启回应用 — 参数会被保留。刷写期间请勿拔出 USB 线。",
