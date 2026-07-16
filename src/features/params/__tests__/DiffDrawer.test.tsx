@@ -122,4 +122,17 @@ describe('DiffDrawer', () => {
     render(<DiffDrawer rows={[]} writing={false} onDiscard={vi.fn()} onWriteAll={vi.fn()} onClose={vi.fn()} />)
     expect(screen.getByText('Write 0 parameter(s)?')).toBeInTheDocument()
   })
+
+  it('the row list scrolls internally instead of clipping a large batch (issue #16)', () => {
+    const manyRows = Array.from({ length: 250 }, (_, i) => row({ name: `PARAM_${i}` }))
+    const { container } = render(<DiffDrawer rows={manyRows} writing={false} onDiscard={vi.fn()} onWriteAll={vi.fn()} onClose={vi.fn()} />)
+
+    expect(screen.getByText('Write 250 parameter(s)?')).toBeInTheDocument()
+    const scrollArea = container.querySelector('.overflow-y-auto')
+    expect(scrollArea).not.toBeNull()
+    expect(scrollArea?.className).toMatch(/max-h-\[50vh\]/)
+    // Every row is still in the DOM (nothing dropped) — it's the scroll
+    // container that bounds the height, not a cap on how many rows render.
+    expect(scrollArea?.children).toHaveLength(250)
+  })
 })

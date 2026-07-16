@@ -95,7 +95,12 @@
     "statusError": "Write failed: {{message}}",
     "metaVersionMismatch": "Parameter descriptions are for ArduCopter {{bundled}}; this vehicle reports {{fwVersion}} — some parameters may be undocumented or described slightly differently.",
     "metaVersionUnknown": "Firmware version unknown — parameter descriptions are for ArduCopter {{bundled}} and may not match exactly.",
-    "metaBannerDismiss": "Dismiss"
+    "metaBannerDismiss": "Dismiss",
+    "exportCta": "Export .param file",
+    "importCta": "Import .param file",
+    "importParseError": "Couldn't import: {{message}}",
+    "importSummary": "{{staged}} parameter(s) staged, {{unknown}} skipped (unknown to this vehicle), {{unchanged}} skipped (unchanged)",
+    "importSummaryWithPrecision": "{{staged}} parameter(s) staged, {{unknown}} skipped (unknown to this vehicle), {{unchanged}} skipped (unchanged), {{precision}} skipped (would lose precision)"
   },
   "dashboard": {
     "offline": "Offline",

@@ -660,4 +660,114 @@ describe('ParamsPage', () => {
       expect(useNavigationStore.getState().guardNavigation).toBeNull()
     })
   })
+
+  describe('.param file export/import (issue #16)', () => {
+    async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>) {
+      const { transport, paramStore } = await makeConnectedParamStore()
+      await feedAll(transport, entries)
+      useConnectionStore.setState({ phase: 'connected', paramStore, identity: { boardName: 'AF-H7_nano', fwVersion: '4.6.3' } })
+      render(<ParamsPage />)
+      expandAllGroups()
+      return { transport, paramStore }
+    }
+
+    function stubDownload(): { createObjectURL: ReturnType<typeof vi.fn>; clickSpy: ReturnType<typeof vi.spyOn> } {
+      const createObjectURL = vi.fn(() => 'blob:mock-url')
+      vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL: vi.fn() })
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+      return { createObjectURL, clickSpy }
+    }
+
+    function paramFile(name: string, contents: string): File {
+      return new File([contents], name, { type: 'text/plain' })
+    }
+
+    it('exports the full loaded table as a provenance-stamped .param file', async () => {
+      // 0.5 (not 0.1): exactly representable in float32, so it survives this
+      // test's PARAM_VALUE encode/decode round trip unchanged — 0.1 would
+      // come back as its float32-rounded neighbor, which is a real and
+      // separately-tested phenomenon (see the round-trip test in
+      // paramFileUtils.test.ts) but not what this test is checking.
+      await renderLoaded([
+        { name: 'THR_MIN', value: 0.5 },
+        { name: 'THR_MAX', value: 900, type: 6 },
+      ])
+      const { createObjectURL, clickSpy } = stubDownload()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export .param file' }))
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1)
+      expect(clickSpy).toHaveBeenCalledTimes(1)
+      const blob = createObjectURL.mock.calls[0][0] as Blob
+      const text = await blob.text()
+      const lines = text.split('\n')
+      expect(lines[0]).toMatch(/^# novaX Configurator export — AF-H7_nano 4\.6\.3 — /)
+      expect(lines).toContain('THR_MAX,900')
+      expect(lines).toContain('THR_MIN,0.5')
+
+      clickSpy.mockRestore()
+      vi.unstubAllGlobals()
+    })
+
+    it('importing a file stages only the real changes and reports skip counts', async () => {
+      await renderLoaded([
+        { name: 'THR_MIN', value: 0 },
+        { name: 'THR_MAX', value: 900, type: 6 },
+      ])
+      const file = paramFile(
+        'in.param',
+        [
+          '# a comment line, ignored',
+          'THR_MIN,0.5', // real change -> staged
+          'THR_MAX,900', // equals current cached value -> skipped (unchanged)
+          'NOT_A_REAL_PARAM,1', // unknown to this vehicle -> skipped
+        ].join('\n'),
+      )
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [file] } })
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.getByText('1 parameter(s) staged, 1 skipped (unknown to this vehicle), 1 skipped (unchanged)')).toBeInTheDocument()
+      expect(screen.getByText('1 unsaved — the board still has the old values')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('0.5')).toBeInTheDocument() // THR_MIN's row now shows the staged value
+    })
+
+    it('a malformed file rejects the whole import with one top-level error and stages nothing', async () => {
+      await renderLoaded([{ name: 'THR_MIN', value: 0 }])
+      const file = paramFile('bad.param', 'THR_MIN,0.5\nthis is not a valid line\n')
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [file] } })
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.getByText(/Couldn't import:/)).toBeInTheDocument()
+      expect(screen.queryByText(/skipped \(unchanged\)/)).not.toBeInTheDocument()
+      expect(screen.getByText('Editor matches the board — edit any value to queue a change.')).toBeInTheDocument()
+    })
+
+    it('a 200+ row import stages every real change and the drawer scrolls rather than clips', async () => {
+      const entries = Array.from({ length: 220 }, (_, i) => ({ name: `PARAM_${i}`, value: 0 }))
+      await renderLoaded(entries)
+      const fileText = entries.map((e) => `${e.name},1`).join('\n') // every line is a real change from 0 -> 1
+      const file = paramFile('big.param', fileText)
+
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement
+      await act(async () => {
+        fireEvent.change(input, { target: { files: [file] } })
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.getByText('220 unsaved — the board still has the old values')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Review & write' }))
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByText('Write 220 parameter(s)?')).toBeInTheDocument()
+      const scrollArea = dialog.querySelector('.overflow-y-auto')
+      expect(scrollArea?.children).toHaveLength(220)
+    })
+  })
 })

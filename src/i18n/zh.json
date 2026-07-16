@@ -95,7 +95,12 @@
     "statusError": "写入失败:{{message}}",
     "metaVersionMismatch": "参数说明基于 ArduCopter {{bundled}}；此设备报告的版本是 {{fwVersion}} — 部分参数可能缺少文档或描述略有出入。",
     "metaVersionUnknown": "固件版本未知 — 参数说明基于 ArduCopter {{bundled}}，可能无法完全匹配。",
-    "metaBannerDismiss": "关闭"
+    "metaBannerDismiss": "关闭",
+    "exportCta": "导出 .param 文件",
+    "importCta": "导入 .param 文件",
+    "importParseError": "导入失败: {{message}}",
+    "importSummary": "已暂存 {{staged}} 个参数，跳过 {{unknown}} 个(此设备未知)，跳过 {{unchanged}} 个(无变化)",
+    "importSummaryWithPrecision": "已暂存 {{staged}} 个参数，跳过 {{unknown}} 个(此设备未知)，跳过 {{unchanged}} 个(无变化)，跳过 {{precision}} 个(精度会丢失)"
   },
   "dashboard": {
     "offline": "离线",

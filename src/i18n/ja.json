@@ -95,7 +95,12 @@
     "statusError": "書き込みに失敗しました:{{message}}",
     "metaVersionMismatch": "パラメータの説明はArduCopter {{bundled}}用です。この機体は{{fwVersion}}を報告しています — 一部のパラメータは未文書化であるか、説明が若干異なる場合があります。",
     "metaVersionUnknown": "ファームウェアのバージョンが不明です — パラメータの説明はArduCopter {{bundled}}用であり、正確に一致しない場合があります。",
-    "metaBannerDismiss": "閉じる"
+    "metaBannerDismiss": "閉じる",
+    "exportCta": ".paramファイルをエクスポート",
+    "importCta": ".paramファイルをインポート",
+    "importParseError": "インポートできませんでした: {{message}}",
+    "importSummary": "{{staged}}件のパラメータをステージしました、{{unknown}}件スキップ(この機体では未知)、{{unchanged}}件スキップ(変更なし)",
+    "importSummaryWithPrecision": "{{staged}}件のパラメータをステージしました、{{unknown}}件スキップ(この機体では未知)、{{unchanged}}件スキップ(変更なし)、{{precision}}件スキップ(精度が失われるため)"
   },
   "dashboard": {
     "offline": "オフライン",

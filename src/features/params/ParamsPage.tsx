@@ -6,6 +6,7 @@ import { ParamStoreDisposedError, type FetchProgressState } from '../../core/mav
 import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata } from '../../core/paramMetadata'
 import { ParamRow } from './ParamRow'
 import { DiffDrawer, type DiffRowStatus } from './DiffDrawer'
+import { downloadParamFile, parseParamFile, planImport, serializeParamFile, type ImportPlan } from './paramFileUtils'
 import { fetchErrorMessage, fetchProgressPercent, filterParams, groupParams, withoutKey, writeErrorStatus } from './paramUtils'
 
 type LoadState = { kind: 'idle' } | { kind: 'error'; message: string } | { kind: 'loaded' }
@@ -88,6 +89,15 @@ export function ParamsPage() {
   // this, so there is no error state here, only "not available yet".
   const [meta, setMeta] = useState<LoadedParamMetadata | null>(null)
   const [metaBannerDismissed, setMetaBannerDismissed] = useState(false)
+  // `.param` file import/export (issue #16, PRD #12 §3). `importError` is the
+  // single top-level parse failure (PRD §3.1: a malformed file rejects the
+  // whole import, never partially stages); `importSummary` is the post-parse
+  // "N staged, M skipped..." notice shown once staging is done — a plain
+  // dismissible banner, not part of DiffDrawer itself, since PRD §3.3 calls
+  // it a *pre-drawer* summary.
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSummary, setImportSummary] = useState<ImportPlan | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const prevParamStoreRef = useRef(paramStore)
   // Mirrors `writeStatus` for the scheduled ok-then-clear timeout below to
@@ -118,6 +128,8 @@ export function ParamsPage() {
     setExpandedGroups(new Set())
     setMeta(null)
     setMetaBannerDismissed(false)
+    setImportError(null)
+    setImportSummary(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramStore])
 
@@ -250,6 +262,32 @@ export function ParamsPage() {
   function revertAll(): void {
     setPending(new Map())
     setWriteStatus(new Map())
+  }
+
+  function handleExport(): void {
+    if (!paramStore || load.kind !== 'loaded') return
+    const content = serializeParamFile(paramsArray, { board: identity?.boardName, fw: identity?.fwVersion })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    downloadParamFile(`novax-params-${stamp}.param`, content)
+  }
+
+  // Parses the dropped/picked file, then stages every real change through
+  // the exact same `stage()` a manual row edit uses — see paramFileUtils.ts's
+  // module doc for why this is the only place import ever touches staged
+  // state, never ParamStore.set directly.
+  async function handleImportFile(file: File): Promise<void> {
+    if (!paramStore) return
+    const text = await file.text()
+    const parsed = parseParamFile(text)
+    if (parsed.kind === 'error') {
+      setImportError(parsed.message)
+      setImportSummary(null)
+      return
+    }
+    setImportError(null)
+    const plan = planImport(parsed.entries, paramStore.all)
+    for (const entry of plan.toStage) stage(entry.name, entry.value)
+    setImportSummary(plan)
   }
 
   async function handleLoad(): Promise<void> {
@@ -417,6 +455,41 @@ export function ParamsPage() {
         </div>
       )}
 
+      {importError && (
+        <div role="alert" className="mb-3 flex items-start gap-2.5 rounded-lg border border-nvx-dangerBorder bg-nvx-dangerSoft px-3.5 py-2.5 text-[12px] text-nvx-dangerHover">
+          <span className="flex-1">{t('params.importParseError', { message: importError })}</span>
+          <button
+            type="button"
+            onClick={() => setImportError(null)}
+            aria-label={t('params.metaBannerDismiss')}
+            className="flex-none font-bold text-nvx-dangerHover hover:opacity-70"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {importSummary && (
+        <div className="mb-3 flex items-start gap-2.5 rounded-lg border border-nvx-infoBorder bg-nvx-primarySoft px-3.5 py-2.5 text-[12px] text-nvx-primarySoftText">
+          <span className="flex-1">
+            {t(importSummary.skippedPrecision > 0 ? 'params.importSummaryWithPrecision' : 'params.importSummary', {
+              staged: importSummary.toStage.length,
+              unknown: importSummary.skippedUnknown,
+              unchanged: importSummary.skippedUnchanged,
+              precision: importSummary.skippedPrecision,
+            })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setImportSummary(null)}
+            aria-label={t('params.metaBannerDismiss')}
+            className="flex-none font-bold text-nvx-primarySoftText hover:opacity-70"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           value={query}
@@ -424,6 +497,31 @@ export function ParamsPage() {
           placeholder={t('params.searchPlaceholder')}
           className="w-[260px] rounded-[9px] border border-nvx-borderStrong px-3 py-2 font-mono text-[12px] focus:border-nvx-primary"
         />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="ml-auto rounded-[9px] border border-nvx-borderStrong bg-white px-3.5 py-2 text-[12px] font-bold text-nvx-text hover:bg-nvx-field"
+        >
+          {t('params.importCta')}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".param,.parm,text/plain"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) void handleImportFile(file)
+            e.target.value = ''
+          }}
+        />
+        <button
+          type="button"
+          onClick={handleExport}
+          className="rounded-[9px] border border-nvx-borderStrong bg-white px-3.5 py-2 text-[12px] font-bold text-nvx-text hover:bg-nvx-field"
+        >
+          {t('params.exportCta')}
+        </button>
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-nvx-border bg-white shadow-card">
