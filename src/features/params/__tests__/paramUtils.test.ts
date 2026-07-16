@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Param } from '../../../core/mavlink/params'
 import {
   deriveGroup,
+  fetchProgressPercent,
   filterParams,
   paginate,
   paramTypeLabel,
@@ -38,6 +39,27 @@ describe('wouldLosePrecision', () => {
   it('never flags a REAL32/REAL64 value, however precise', () => {
     expect(wouldLosePrecision(9, 0.123456789)).toBe(false)
     expect(wouldLosePrecision(10, 16777217)).toBe(false)
+  })
+})
+
+describe('fetchProgressPercent', () => {
+  it('is undefined while total is unknown (before the stream names param_count)', () => {
+    expect(fetchProgressPercent(0, undefined)).toBeUndefined()
+  })
+
+  it('rounds got/total to an integer percent', () => {
+    expect(fetchProgressPercent(1, 3)).toBe(33)
+    expect(fetchProgressPercent(638, 1277)).toBe(50)
+    expect(fetchProgressPercent(0, 1277)).toBe(0)
+    expect(fetchProgressPercent(1277, 1277)).toBe(100)
+  })
+
+  it('clamps to 100 rather than overshooting on a stray arrival past total', () => {
+    expect(fetchProgressPercent(1278, 1277)).toBe(100)
+  })
+
+  it('is undefined for a nonsensical zero/negative total rather than dividing by zero', () => {
+    expect(fetchProgressPercent(0, 0)).toBeUndefined()
   })
 })
 

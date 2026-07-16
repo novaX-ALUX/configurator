@@ -182,6 +182,37 @@ describe('ParamsPage', () => {
       expect(screen.queryByRole('button', { name: 'Load parameters' })).not.toBeInTheDocument()
       expect(screen.getByText('ALREADY_FETCHED')).toBeInTheDocument()
     })
+
+    it('bug repro (issue #8): mounting mid a fetchAll() started elsewhere shows real pull progress, not a "1 of 1 shown" table masquerading as complete', async () => {
+      const { transport, paramStore } = await makeConnectedParamStore()
+      // Another page (e.g. Setup, which shares this ParamStore) triggers the
+      // full-table pull first — this page never calls handleLoad() itself.
+      const otherPagesFetch = paramStore.fetchAll()
+      await tick()
+      // Only 1 of 1277 has landed so far when the user switches to this page.
+      transport.feed(paramValueFrame({ name: 'STAT_RUNTIME', value: 6693, count: 1277, index: 0 }))
+      await tick()
+
+      useConnectionStore.setState({ phase: 'connected', paramStore })
+      render(<ParamsPage />)
+
+      // Must show honest pull progress, not the table with a lying "1 of 1 shown".
+      expect(screen.getByText('Fetching parameters… 1 / 1277')).toBeInTheDocument()
+      expect(screen.queryByText('STAT_RUNTIME')).not.toBeInTheDocument()
+      expect(screen.queryByText(/of .* shown/)).not.toBeInTheDocument()
+
+      // The rest of the storm arrives (still triggered by the other page's call, not this one)...
+      for (let i = 1; i < 1277; i++) {
+        transport.feed(paramValueFrame({ name: `P${i}`, value: i, count: 1277, index: i }))
+      }
+      await tick()
+      await otherPagesFetch
+
+      // ...and once it completes, the real table replaces the progress screen.
+      expect(screen.queryByText(/Fetching parameters/)).not.toBeInTheDocument()
+      expect(screen.getByText('STAT_RUNTIME')).toBeInTheDocument()
+      expect(screen.getByText('1277 of 1277 shown')).toBeInTheDocument()
+    })
   })
 
   describe('search / group filter / pagination', () => {

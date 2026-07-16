@@ -2,16 +2,19 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
-import { ParamStoreDisposedError } from '../../core/mavlink/params'
+import { ParamStoreDisposedError, type FetchProgressState } from '../../core/mavlink/params'
 import { ParamRow } from './ParamRow'
 import { DiffDrawer, type DiffRowStatus } from './DiffDrawer'
-import { fetchErrorMessage, filterParams, paginate, paramPageSize, topGroups, totalPages, withoutKey, writeErrorStatus } from './paramUtils'
+import { fetchErrorMessage, fetchProgressPercent, filterParams, paginate, paramPageSize, topGroups, totalPages, withoutKey, writeErrorStatus } from './paramUtils'
 
-type LoadState =
-  | { kind: 'idle' }
-  | { kind: 'loading'; got: number; total: number | undefined }
-  | { kind: 'error'; message: string }
-  | { kind: 'loaded' }
+type LoadState = { kind: 'idle' } | { kind: 'error'; message: string } | { kind: 'loaded' }
+
+/**
+ * Default `fetchProgress` for when there's no `ParamStore` yet (not
+ * connected) — a plain "nothing in flight" value, never mutated in place, so
+ * sharing this one reference across call sites is safe.
+ */
+const NO_FETCH_PROGRESS: FetchProgressState = { active: false, got: 0, total: undefined }
 
 /** Top ~12 groups by count (task brief), plus an "All" chip the component adds itself. */
 const GROUP_CHIP_MAX = 12
@@ -58,6 +61,14 @@ export function ParamsPage() {
   // fires on a *later* paramStore identity change, so the initial mount has
   // to make this same "already fetched?" call itself.
   const [load, setLoad] = useState<LoadState>(() => (paramStore && paramStore.all.size > 0 ? { kind: 'loaded' } : { kind: 'idle' }))
+  // Live fetchAll() progress, store-wide — not just from a fetch *this page*
+  // triggered. A prior mount, another page (Setup shares the same
+  // ParamStore), or a post-write confirm re-fetch (magCal) can all leave a
+  // pull running when this page mounts or is already sitting on the loaded
+  // table; `fetchProgress.active` is checked ahead of `load.kind` at render
+  // time so none of those cases ever get mistaken for "done" just because
+  // `paramStore.all` already has a few entries in it.
+  const [fetchProgress, setFetchProgress] = useState<FetchProgressState>(() => paramStore?.fetchProgress ?? NO_FETCH_PROGRESS)
   const [version, setVersion] = useState(0) // bumped on every ParamStore.onChange to force paramsArray to re-derive from the live cache
   const [query, setQuery] = useState('')
   const [group, setGroup] = useState<string | null>(null)
@@ -88,6 +99,7 @@ export function ParamsPage() {
     prevParamStoreRef.current = paramStore
     setDiscardedNotice(paramStore ? null : discardedCount)
     setLoad(paramStore && paramStore.all.size > 0 ? { kind: 'loaded' } : { kind: 'idle' })
+    setFetchProgress(paramStore?.fetchProgress ?? NO_FETCH_PROGRESS)
     setPending(new Map())
     setWriteStatus(new Map())
     setWriting(false)
@@ -100,22 +112,28 @@ export function ParamsPage() {
 
   // A real ArduPilot fetchAll delivers 800+ PARAM_VALUEs, each firing onChange
   // — bumping `version` (and so re-deriving paramsArray/groups/filtered) on
-  // every single one would be pure waste while the 'loading' screen (which
-  // shows none of that; it only reads fetchAll's own onProgress callback)
-  // is what's on screen. `loadKindRef` lets the onChange subscription (kept
-  // stable across `load` transitions — resubscribing per keystroke-like
-  // state change would be its own waste) skip bumping until there's
-  // something to show. `load.kind` is in paramsArray's own deps below so
-  // the eventual loading -> loaded transition still forces one fresh
-  // derivation even if no bump happened to land exactly on it.
-  const loadKindRef = useRef(load.kind)
-  loadKindRef.current = load.kind
+  // every single one would be pure waste while the progress screen (which
+  // shows none of that; it only reads `fetchProgress`) is what's on screen.
+  // `fetchActiveRef` lets the onChange subscription (kept stable across
+  // `fetchProgress` updates — resubscribing on every arrival would be its own
+  // waste) skip bumping until there's something to show, regardless of
+  // whether *this page* is the one that called fetchAll(). `fetchProgress.active`
+  // is in paramsArray's own deps below so the eventual pull -> done
+  // transition still forces one fresh derivation even if no bump happened to
+  // land exactly on it.
+  const fetchActiveRef = useRef(fetchProgress.active)
+  fetchActiveRef.current = fetchProgress.active
 
   useEffect(() => {
     if (!paramStore) return
     return paramStore.onChange(() => {
-      if (loadKindRef.current !== 'loading') setVersion((v) => v + 1)
+      if (!fetchActiveRef.current) setVersion((v) => v + 1)
     })
+  }, [paramStore])
+
+  useEffect(() => {
+    if (!paramStore) return
+    return paramStore.onFetchProgress(setFetchProgress)
   }, [paramStore])
 
   // Unsaved-changes guard: Sidebar consults `guardNavigation` before switching
@@ -142,13 +160,13 @@ export function ParamsPage() {
 
   const paramsArray = useMemo(() => {
     // Deliberate cache-bust: paramStore.all is a live, mutated-in-place Map,
-    // so re-deriving whenever `version` OR `load.kind` changes (not just
-    // when the paramStore instance itself changes) is the whole point of
+    // so re-deriving whenever `version` OR `fetchProgress.active` changes (not
+    // just when the paramStore instance itself changes) is the whole point of
     // listing them as deps despite neither being read in the body.
     void version
-    void load.kind
+    void fetchProgress.active
     return paramStore ? [...paramStore.all.values()] : []
-  }, [paramStore, version, load.kind])
+  }, [paramStore, version, fetchProgress.active])
   const groups = useMemo(() => topGroups(paramsArray, GROUP_CHIP_MAX), [paramsArray])
   const filtered = useMemo(() => filterParams(paramsArray, query, group), [paramsArray, query, group])
   const pageSize = paramPageSize()
@@ -177,11 +195,12 @@ export function ParamsPage() {
 
   async function handleLoad(): Promise<void> {
     if (!paramStore) return
-    setLoad({ kind: 'loading', got: 0, total: undefined })
+    // No local 'loading' state to set here: the `fetchProgress.active` render
+    // gate below picks this fetch up the moment fetchAll() flips it on (see
+    // ParamStore.fetchProgress), the same path any other page's fetch would
+    // be observed through.
     try {
-      await paramStore.fetchAll({
-        onProgress: (got, total) => setLoad({ kind: 'loading', got, total }),
-      })
+      await paramStore.fetchAll()
       setLoad({ kind: 'loaded' })
     } catch (err) {
       setLoad({ kind: 'error', message: fetchErrorMessage(err, t) })
@@ -252,6 +271,35 @@ export function ParamsPage() {
     )
   }
 
+  // Checked ahead of `load.kind`: a pull can be running even when this page
+  // never called handleLoad() itself (another page shares the same
+  // ParamStore, or this page mounted mid-pull) — see the `fetchProgress`
+  // state doc above. While it's active, this is the only thing on screen:
+  // the loaded table's "N of M shown" header must never stand in for pull
+  // status.
+  if (fetchProgress.active) {
+    const pct = fetchProgressPercent(fetchProgress.got, fetchProgress.total)
+    return (
+      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 px-5">
+        <div className="font-heading text-[19px] font-bold text-nvx-text">{t('params.title')}</div>
+        <div className="font-mono text-[12px] text-nvx-muted">
+          {fetchProgress.total !== undefined ? t('params.loading', { got: fetchProgress.got, total: fetchProgress.total }) : t('params.loadingIndeterminate')}
+        </div>
+        {/* GPU-safe fill: only `transform` is animated (never `width`), with a
+            linear transition — a constant-rate pull deserves a constant-rate
+            fill (per emil-design-eng). No striped/marquee texture: that would
+            animate `background-position`, which this ticket's motion
+            criterion rules out for this element. */}
+        <div className="h-2 w-[280px] overflow-hidden rounded-full bg-nvx-field">
+          <div
+            className="h-full origin-left rounded-full bg-nvx-primary transition-transform duration-200 ease-linear"
+            style={{ transform: `scaleX(${pct !== undefined ? pct / 100 : 0.35})` }}
+          />
+        </div>
+      </div>
+    )
+  }
+
   if (load.kind === 'idle') {
     return (
       <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3.5 px-5">
@@ -263,24 +311,6 @@ export function ParamsPage() {
         >
           {t('params.loadCta')}
         </button>
-      </div>
-    )
-  }
-
-  if (load.kind === 'loading') {
-    const pct = load.total !== undefined ? Math.min(100, Math.round((load.got / load.total) * 100)) : undefined
-    return (
-      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3 px-5">
-        <div className="font-heading text-[19px] font-bold text-nvx-text">{t('params.title')}</div>
-        <div className="font-mono text-[12px] text-nvx-muted">
-          {load.total !== undefined ? t('params.loading', { got: load.got, total: load.total }) : t('params.loadingIndeterminate')}
-        </div>
-        <div className="h-2 w-[280px] overflow-hidden rounded-full bg-nvx-field">
-          <div
-            className="h-full animate-nvxBar rounded-full bg-nvx-primary bg-[length:28px_100%] bg-[repeating-linear-gradient(45deg,rgba(255,255,255,.3)_0,rgba(255,255,255,.3)_10px,transparent_10px,transparent_20px)]"
-            style={{ width: pct !== undefined ? `${pct}%` : '35%' }}
-          />
-        </div>
       </div>
     )
   }

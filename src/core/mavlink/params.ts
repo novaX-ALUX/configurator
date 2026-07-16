@@ -33,6 +33,12 @@
  *
  * ## fetchAll
  *
+ * `fetchAll`'s per-call `onProgress` only reaches the caller that started the
+ * fetch. `fetchProgress`/`onFetchProgress` expose the same numbers store-wide
+ * — any page can tell "a pull is running, X of Y so far" even when a *different*
+ * page's call triggered it, since a `PARAM_VALUE` updates the shared cache no
+ * matter who asked for it.
+ *
  * `PARAM_REQUEST_LIST` triggers a "storm" of `PARAM_VALUE`s from the FC, in
  * whatever order and with whatever duplicates the link produces — `fetchAll`
  * collects into an index-keyed table (`param_index` is the key; a duplicate
@@ -163,6 +169,23 @@ export interface Param {
   /** MAV_PARAM_TYPE (1-10). */
   type: number
   index: number
+}
+
+/**
+ * Live `fetchAll()` progress, readable by any consumer — not just whichever
+ * call started the fetch. Every `PARAM_VALUE` updates the shared cache
+ * unconditionally (see module doc), so a page that never called `fetchAll()`
+ * itself (e.g. it mounted mid-pull, or another page triggered the pull) still
+ * needs an honest way to know a pull is in progress rather than mistaking a
+ * partially-populated cache for a finished one.
+ */
+export interface FetchProgressState {
+  /** True while a `fetchAll()` is in flight on this store, from any caller. */
+  active: boolean
+  /** `PARAM_VALUE`s collected so far in the current (or most recently finished) fetch. */
+  got: number
+  /** `param_count` reported by the stream, once known; `undefined` before the first `PARAM_VALUE` arrives. */
+  total: number | undefined
 }
 
 /**
@@ -343,6 +366,9 @@ export class ParamStore {
   private fetchArrivalHandler: ((param: Param, count: number) => void) | undefined
   /** Names with a `set()` currently in flight — guards against a second concurrent `set()` for the same name (see `ParamWriteBusyError`). */
   private readonly activeSetNames = new Set<string>()
+  /** Backing store for the public `fetchProgress` getter — see `FetchProgressState`. */
+  private fetchProgressState: FetchProgressState = { active: false, got: 0, total: undefined }
+  private readonly fetchProgressListeners = new Set<(s: FetchProgressState) => void>()
 
   constructor(
     private readonly router: MavRouter,
@@ -378,6 +404,24 @@ export class ParamStore {
     }
   }
 
+  /** Current `fetchAll()` progress — see `FetchProgressState`. Read this at mount instead of assuming an empty-vs-nonempty `all` means idle-vs-done. */
+  get fetchProgress(): FetchProgressState {
+    return this.fetchProgressState
+  }
+
+  /** Subscribes to `fetchAll()` progress changes (start, each arrival, and completion/failure — `active` flips back to `false` either way). Returns an unsubscribe function. */
+  onFetchProgress(cb: (s: FetchProgressState) => void): () => void {
+    this.fetchProgressListeners.add(cb)
+    return () => {
+      this.fetchProgressListeners.delete(cb)
+    }
+  }
+
+  private setFetchProgress(state: FetchProgressState): void {
+    this.fetchProgressState = state
+    for (const cb of this.fetchProgressListeners) cb(state)
+  }
+
   /** Unsubscribes from the router and rejects any in-flight `fetchAll`/`set` with `ParamStoreDisposedError`. Idempotent-ish: safe to call once; a second call is a harmless no-op. */
   dispose(): void {
     this.unsubscribeRouter()
@@ -392,6 +436,7 @@ export class ParamStore {
     if (signal?.aborted) throw toAbortError()
 
     this.fetchActive = true
+    this.setFetchProgress({ active: true, got: 0, total: undefined })
     const received = new Map<number, Param>()
     let expectedCount: number | undefined
     let driftError: ParamCountDriftError | undefined
@@ -406,12 +451,13 @@ export class ParamStore {
         driftError = new ParamCountDriftError(expectedCount, count)
       }
       received.set(param.index, param)
-      // Skip onProgress once drift is detected (including on the very
-      // arrival that triggers it): received.size can coincidentally equal
-      // the *stale* expectedCount at that instant, which would report a
-      // lying "(N, N)" (looks complete) moments before fetchAll rejects.
+      // Skip onProgress/fetchProgress once drift is detected (including on
+      // the very arrival that triggers it): received.size can coincidentally
+      // equal the *stale* expectedCount at that instant, which would report
+      // a lying "(N, N)" (looks complete) moments before fetchAll rejects.
       if (!driftError) {
         onProgress?.(received.size, expectedCount)
+        this.setFetchProgress({ active: true, got: received.size, total: expectedCount })
       }
       this.notifyFetchArrival?.()
     }
@@ -471,6 +517,10 @@ export class ParamStore {
       this.fetchActive = false
       this.notifyFetchArrival = undefined
       this.fetchArrivalHandler = undefined
+      // Frozen, not reset: `got`/`total` stay at their last known values so a
+      // consumer reading `fetchProgress` right after a stall/failure sees
+      // honestly what was collected, not a lie that nothing ever arrived.
+      this.setFetchProgress({ ...this.fetchProgressState, active: false })
     }
   }
 

@@ -72,6 +72,19 @@ export function diffStatusMessage(status: DiffRowStatus, t: TFunction): string {
   }
 }
 
+/**
+ * Rounds a `fetchAll()` pull's `(got, total)` to an integer 0-100 percent for
+ * the progress bar's fill, or `undefined` while `total` isn't known yet
+ * (before the first `PARAM_VALUE` names the stream's `param_count`) — the
+ * caller falls back to an indeterminate display in that case. Clamped to 100
+ * so a stray duplicate arrival past `total` (harmless overwrite per
+ * `ParamStore`'s module doc) can never render an over-full bar.
+ */
+export function fetchProgressPercent(got: number, total: number | undefined): number | undefined {
+  if (total === undefined || total <= 0) return undefined
+  return Math.min(100, Math.round((got / total) * 100))
+}
+
 /** Maps a rejected `ParamStore.fetchAll()` to a user-facing message — same failure modes regardless of which page triggered the fetch. */
 export function fetchErrorMessage(err: unknown, t: TFunction): string {
   if (err instanceof ParamFetchNoResponseError) return t('params.errorNoResponse')
