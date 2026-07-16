@@ -141,14 +141,38 @@
   },
   "charts": {
     "notConnectedTitle": "No chart data yet",
-    "notConnectedBody": "Connect a flight controller to chart telemetry live. Roll, pitch, and yaw scroll through a rolling 60-second window; after a disconnect the last minute stays on screen for review.",
+    "notConnectedBody": "Connect a flight controller to chart telemetry live. Selected Series scroll through a rolling 60-second window; after a disconnect the last minute stays on screen for review.",
     "connectCta": "Connect flight controller",
-    "attitude": {
-      "title": "Attitude",
-      "unit": "deg",
+    "pickerTitle": "Series",
+    "emptyTitle": "No Series selected",
+    "emptyBody": "Pick one or more Series above — a chart appears for each unit as soon as something is selected.",
+    "blocks": {
+      "attitude": "Attitude",
+      "power": "Power",
+      "gps": "GPS",
+      "rc": "RC",
+      "servo": "Servo"
+    },
+    "series": {
       "roll": "Roll",
       "pitch": "Pitch",
-      "yaw": "Yaw"
+      "yaw": "Yaw",
+      "voltage": "Voltage",
+      "current": "Current",
+      "batteryRemaining": "Battery remaining",
+      "satellites": "Satellites",
+      "hdop": "HDOP",
+      "ch": "CH{{n}}",
+      "rssi": "RSSI",
+      "out": "OUT{{n}}"
+    },
+    "units": {
+      "deg": "deg",
+      "V": "V",
+      "A": "A",
+      "pct": "%",
+      "us": "µs",
+      "count": "count"
     }
   },
   "setup": {

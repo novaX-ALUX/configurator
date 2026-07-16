@@ -141,14 +141,38 @@
   },
   "charts": {
     "notConnectedTitle": "チャートデータはまだありません",
-    "notConnectedBody": "フライトコントローラーに接続すると、テレメトリーをリアルタイムでチャート表示できます。ロール・ピッチ・ヨーが60秒のローリングウィンドウで流れ、切断後も直近1分間は画面に残り確認できます。",
+    "notConnectedBody": "フライトコントローラーに接続すると、テレメトリーをリアルタイムでチャート表示できます。選択した系列が60秒のローリングウィンドウで流れ、切断後も直近1分間は画面に残り確認できます。",
     "connectCta": "フライトコントローラーに接続",
-    "attitude": {
-      "title": "姿勢",
-      "unit": "度",
+    "pickerTitle": "系列",
+    "emptyTitle": "系列が選択されていません",
+    "emptyBody": "上で系列を1つ以上選択してください。選択すると単位ごとにチャートが表示されます。",
+    "blocks": {
+      "attitude": "姿勢",
+      "power": "電源",
+      "gps": "GPS",
+      "rc": "RC",
+      "servo": "サーボ"
+    },
+    "series": {
       "roll": "ロール",
       "pitch": "ピッチ",
-      "yaw": "ヨー"
+      "yaw": "ヨー",
+      "voltage": "電圧",
+      "current": "電流",
+      "batteryRemaining": "バッテリー残量",
+      "satellites": "衛星数",
+      "hdop": "HDOP",
+      "ch": "CH{{n}}",
+      "rssi": "RSSI",
+      "out": "OUT{{n}}"
+    },
+    "units": {
+      "deg": "度",
+      "V": "V",
+      "A": "A",
+      "pct": "%",
+      "us": "µs",
+      "count": "カウント"
     }
   },
   "setup": {

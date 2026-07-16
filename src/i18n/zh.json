@@ -141,14 +141,38 @@
   },
   "charts": {
     "notConnectedTitle": "暂无图表数据",
-    "notConnectedBody": "连接飞控后即可实时绘制遥测曲线。横滚、俯仰、偏航以 60 秒滚动窗口滚动显示；断开连接后，最后一分钟的数据会保留在屏幕上供查看。",
+    "notConnectedBody": "连接飞控后即可实时绘制遥测曲线。所选序列以 60 秒滚动窗口滚动显示；断开连接后，最后一分钟的数据会保留在屏幕上供查看。",
     "connectCta": "连接飞控",
-    "attitude": {
-      "title": "姿态",
-      "unit": "度",
+    "pickerTitle": "数据序列",
+    "emptyTitle": "未选择任何序列",
+    "emptyBody": "在上方选择一个或多个序列，图表会立即按单位分组显示。",
+    "blocks": {
+      "attitude": "姿态",
+      "power": "电源",
+      "gps": "GPS",
+      "rc": "遥控",
+      "servo": "舵机"
+    },
+    "series": {
       "roll": "横滚",
       "pitch": "俯仰",
-      "yaw": "偏航"
+      "yaw": "偏航",
+      "voltage": "电压",
+      "current": "电流",
+      "batteryRemaining": "剩余电量",
+      "satellites": "卫星数",
+      "hdop": "HDOP",
+      "ch": "CH{{n}}",
+      "rssi": "RSSI",
+      "out": "OUT{{n}}"
+    },
+    "units": {
+      "deg": "度",
+      "V": "V",
+      "A": "A",
+      "pct": "%",
+      "us": "µs",
+      "count": "计数"
     }
   },
   "setup": {

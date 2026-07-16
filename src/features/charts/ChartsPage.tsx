@@ -3,29 +3,36 @@ import { useConnectionStore } from '../../store/connection'
 import { RETENTION_MS } from '../../core/mavlink/recorder'
 import { useTelemetry } from '../dashboard/useTelemetry'
 import { ChartHost } from './ChartHost'
+import { useChartSelectionStore } from './chartSelectionStore'
+import { BLOCK_ORDER, SERIES_CATALOG, UNIT_GROUP_ORDER, type SeriesDef } from './seriesCatalog'
 
 /**
- * The degrees Unit Group of this tracer bullet (issue #3): the three attitude
- * Series, hardwired until the Series picker ticket lands. The Recorder
- * appends all three from one attitude Block update, so their Sample arrays
- * are index-aligned and share receive timestamps — roll's timestamps serve as
- * the subplot's shared X values. Colors are nvx design tokens (primary /
- * success / warning).
+ * Trace colors, assigned by position within a subplot (nvx design tokens
+ * first, then more distinguishable hues). A subplot rarely holds more than a
+ * handful of Series; the µs group can technically hold all 34 RC+servo
+ * Series, where colors repeat — accepted, that view is unreadable regardless
+ * of palette size.
  */
-const ATTITUDE_SERIES = [
-  { id: 'attitude.roll', labelKey: 'charts.attitude.roll', color: '#2B5CE6' },
-  { id: 'attitude.pitch', labelKey: 'charts.attitude.pitch', color: '#1E9E6A' },
-  { id: 'attitude.yaw', labelKey: 'charts.attitude.yaw', color: '#D97706' },
+const PALETTE = [
+  '#2B5CE6', '#1E9E6A', '#D97706', '#DC2626', '#7C3AED',
+  '#0891B2', '#DB2777', '#65A30D', '#475569', '#B45309',
 ] as const
 
 /**
- * Telemetry Charts page. Reads the History Buffer directly (it is not
- * reactive — see `ConnectionState.history`), using `useTelemetry`'s throttled
- * re-renders as the redraw trigger, so the chart advances at the data's real
- * arrival rate and freezes the moment the session ends. History recorded
- * before this page mounts is picked up on first render, and the placeholder
- * only appears when there is truly nothing to show: not connected AND no
- * recorded history.
+ * Telemetry Charts page. The user picks Series (grouped by Block, all 43
+ * from the catalog); the selection — persisted by `chartSelectionStore` —
+ * is partitioned into Unit Groups, one true-scale subplot per group present,
+ * stacked in `UNIT_GROUP_ORDER`. All subplots pin their rolling window to
+ * the page-wide newest Sample so they share one time axis.
+ *
+ * Reads the History Buffer directly (it is not reactive — see
+ * `ConnectionState.history`), using `useTelemetry`'s throttled re-renders as
+ * the redraw trigger, so the charts advance at the data's real arrival rate
+ * and freeze the moment the session ends. History recorded before this page
+ * mounts is picked up on first render, and the connect placeholder only
+ * appears when there is truly nothing to show: not connected AND no recorded
+ * history. An empty *selection* is a different state: the picker stays, the
+ * subplot area shows a hint.
  */
 export function ChartsPage() {
   const { t } = useTranslation()
@@ -34,13 +41,16 @@ export function ChartsPage() {
   const connect = useConnectionStore((s) => s.connect)
   const session = useConnectionStore((s) => s.session)
   const history = useConnectionStore((s) => s.history)
+  const selectedIds = useChartSelectionStore((s) => s.selectedIds)
+  const toggleSeries = useChartSelectionStore((s) => s.toggleSeries)
 
   // Redraw trigger only — the snapshot itself isn't read; the Recorder has
   // already turned it into Samples by the time this notification fires.
   useTelemetry(session)
 
-  const timestampsMs = history.getSamples(ATTITUDE_SERIES[0].id).map((s) => s.ts)
-  const hasHistory = timestampsMs.length > 0
+  // A Series id only appears once something was appended for it, so key
+  // presence is "has history" (the newest Sample is never evicted).
+  const hasHistory = history.seriesIds().length > 0
 
   if (phase !== 'connected' && !hasHistory) {
     return (
@@ -65,26 +75,88 @@ export function ChartsPage() {
     )
   }
 
+  const selectedDefs = SERIES_CATALOG.filter((def) => selectedIds.includes(def.id))
+  const groups = UNIT_GROUP_ORDER.map((unitGroup) => ({
+    unitGroup,
+    defs: selectedDefs.filter((def) => def.unitGroup === unitGroup),
+  })).filter((g) => g.defs.length > 0)
+
+  // One buffer read per selected Series per render, shared by the window-end
+  // scan below and the ChartHost props.
+  const samplesById = new Map(selectedDefs.map((def) => [def.id, history.getSamples(def.id)]))
+
+  // The shared rolling window's trailing edge: the newest Sample across every
+  // selected Series (Blocks tick at different times — a per-subplot newest
+  // would let the subplots' time axes drift apart).
+  let windowEndMs = 0
+  for (const samples of samplesById.values()) {
+    if (samples.length > 0) windowEndMs = Math.max(windowEndMs, samples[samples.length - 1].ts)
+  }
+
   return (
     <div className="px-5 pb-6 pt-[18px]">
       <div className="mb-3.5 flex items-baseline">
         <span className="font-heading text-[19px] font-bold text-nvx-text">{t('nav.charts')}</span>
       </div>
-      <div className="rounded-xl border border-nvx-border bg-white p-4 shadow-card">
-        <div className="mb-3 flex items-baseline gap-2">
-          <span className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('charts.attitude.title')}</span>
-          <span className="font-mono text-[10.5px] text-nvx-faint">{t('charts.attitude.unit')}</span>
-        </div>
-        <ChartHost
-          timestampsMs={timestampsMs}
-          series={ATTITUDE_SERIES.map((def) => ({
-            label: t(def.labelKey),
-            color: def.color,
-            values: history.getSamples(def.id).map((s) => s.value),
-          }))}
-          windowSec={RETENTION_MS / 1000}
-        />
+
+      <div className="mb-4 rounded-xl border border-nvx-border bg-white p-4 shadow-card">
+        <div className="mb-3 text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('charts.pickerTitle')}</div>
+        {BLOCK_ORDER.map((block) => (
+          <div key={block} className="mb-2.5 flex flex-wrap items-baseline gap-1.5 last:mb-0">
+            <span className="w-[72px] shrink-0 text-[11px] font-bold text-nvx-muted">{t(`charts.blocks.${block}`)}</span>
+            {SERIES_CATALOG.filter((def) => def.block === block).map((def) => {
+              const selected = selectedIds.includes(def.id)
+              return (
+                <label
+                  key={def.id}
+                  className={`cursor-pointer select-none rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                    selected
+                      ? 'border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText'
+                      : 'border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={selected}
+                    onChange={() => toggleSeries(def.id)}
+                  />
+                  {t(def.labelKey, def.labelParams)}
+                </label>
+              )
+            })}
+          </div>
+        ))}
       </div>
+
+      {groups.length === 0 ? (
+        <div className="rounded-xl border border-nvx-border bg-white px-5 py-10 text-center shadow-card">
+          <div className="font-heading text-[15px] font-bold text-nvx-text">{t('charts.emptyTitle')}</div>
+          <div className="mt-1.5 text-[13px] text-nvx-muted">{t('charts.emptyBody')}</div>
+        </div>
+      ) : (
+        groups.map(({ unitGroup, defs }) => (
+          <div key={unitGroup} data-testid={`subplot-${unitGroup}`} className="mb-4 rounded-xl border border-nvx-border bg-white p-4 shadow-card last:mb-0">
+            <div className="mb-3 font-mono text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t(`charts.units.${unitGroup}`)}</div>
+            <ChartHost
+              // Remount on any change to the subplot's composition — ChartHost
+              // fixes its series definitions for the life of the instance.
+              key={defs.map((def) => def.id).join()}
+              series={defs.map((def: SeriesDef, i: number) => {
+                const samples = samplesById.get(def.id) ?? []
+                return {
+                  label: t(def.labelKey, def.labelParams),
+                  color: PALETTE[i % PALETTE.length],
+                  timestampsMs: samples.map((s) => s.ts),
+                  values: samples.map((s) => s.value),
+                }
+              })}
+              windowEndMs={windowEndMs}
+              windowSec={RETENTION_MS / 1000}
+            />
+          </div>
+        ))
+      )}
     </div>
   )
 }
