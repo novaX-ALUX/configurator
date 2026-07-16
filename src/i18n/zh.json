@@ -144,6 +144,8 @@
     "notConnectedBody": "连接飞控后即可实时绘制遥测曲线。所选序列以 60 秒滚动窗口滚动显示；断开连接后，最后一分钟的数据会保留在屏幕上供查看。",
     "connectCta": "连接飞控",
     "pickerTitle": "数据序列",
+    "pause": "暂停",
+    "resume": "继续",
     "emptyTitle": "未选择任何序列",
     "emptyBody": "在上方选择一个或多个序列，图表会立即按单位分组显示。",
     "blocks": {

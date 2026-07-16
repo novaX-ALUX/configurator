@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../../i18n'
 import { ChartsPage } from '../ChartsPage'
@@ -10,12 +10,16 @@ import type { MavSession } from '../../../core/mavlink/session'
 
 // jsdom has no canvas, so uPlot cannot render here (issue #3's testing
 // decision): the chart host is stubbed and these tests assert the page's
-// states plus the exact data handed to the host. uPlot's actual drawing is
-// verified manually in a browser.
+// states plus the exact data handed to the host. uPlot's actual drawing —
+// including the crosshair — is verified manually in a browser; the stub
+// captures each host's `onCursor` so the legend's readout *reaction* (plain
+// React) is still testable here.
+const cursorCallbacks: NonNullable<ChartHostProps['onCursor']>[] = []
 vi.mock('../ChartHost', () => ({
-  ChartHost: (props: ChartHostProps) => (
-    <div data-testid="chart-host" data-props={JSON.stringify(props)} />
-  ),
+  ChartHost: (props: ChartHostProps) => {
+    if (props.onCursor) cursorCallbacks.push(props.onCursor)
+    return <div data-testid="chart-host" data-props={JSON.stringify(props)} />
+  },
 }))
 
 const initialConnection = useConnectionStore.getState()
@@ -23,6 +27,7 @@ const DEFAULT_SELECTION = ['attitude.roll', 'attitude.pitch', 'attitude.yaw']
 
 beforeEach(() => {
   localStorage.clear()
+  cursorCallbacks.length = 0
   useChartSelectionStore.setState({ selectedIds: [...DEFAULT_SELECTION] })
 })
 
@@ -191,6 +196,101 @@ describe('ChartsPage', () => {
     expect(screen.getByRole('checkbox', { name: 'Voltage' })).toBeChecked()
     expect(screen.getByTestId('subplot-V')).toBeInTheDocument()
     expect(JSON.parse(localStorage.getItem('novax.charts.selectedSeries')!)).toContain('power.voltage')
+  })
+
+  it('legend lists each visible Series with its latest value; a trailing gap reads as absent, not zero', () => {
+    // attitudeHistory(2): latest roll 11, pitch -4, yaw null (the i===1 gap)
+    connectedWith(attitudeHistory(2))
+    render(<ChartsPage />)
+
+    const subplot = screen.getByTestId('subplot-deg')
+    expect(within(subplot).getByText('Roll')).toBeInTheDocument()
+    expect(within(subplot).getByText('11')).toBeInTheDocument()
+    expect(within(subplot).getByText('-4')).toBeInTheDocument()
+    expect(within(subplot).getByText('—')).toBeInTheDocument()
+    expect(within(subplot).queryByText('0')).not.toBeInTheDocument()
+  })
+
+  it('while hovering, the legend reads out the cursor values and timestamp; leaving snaps back to latest', () => {
+    connectedWith(attitudeHistory(2)) // latest: roll 11, pitch -4, yaw — (gap)
+    render(<ChartsPage />)
+    const subplot = screen.getByTestId('subplot-deg')
+
+    act(() => {
+      cursorCallbacks.at(-1)!({
+        tsMs: 1000,
+        series: [
+          { value: 10, tsMs: 1000 },
+          { value: -5, tsMs: 1000 },
+          // resolved from its own nearest Sample, 75ms off the crosshair —
+          // the mixed-Block case where the row must carry its true timestamp
+          { value: 90, tsMs: 1075 },
+        ],
+      })
+    })
+    expect(within(subplot).getByText('10')).toBeInTheDocument()
+    expect(within(subplot).getByText('-5')).toBeInTheDocument()
+    expect(within(subplot).getByText('90')).toBeInTheDocument()
+    expect(within(subplot).getByText(/\.000$/)).toBeInTheDocument() // crosshair timestamp in the header
+    expect(within(subplot).getByText(/\.075$/)).toBeInTheDocument() // the off-crosshair row's own timestamp
+    expect(within(subplot).getAllByText(/\.\d{3}$/)).toHaveLength(2) // rows matching the crosshair stay clean
+
+    act(() => {
+      cursorCallbacks.at(-1)!(null)
+    })
+    expect(within(subplot).getByText('11')).toBeInTheDocument()
+    expect(within(subplot).getByText('—')).toBeInTheDocument()
+    expect(within(subplot).queryByText(/\.000$/)).not.toBeInTheDocument()
+  })
+
+  it('Pause freezes the display while recording continues; Resume shows everything recorded meanwhile', () => {
+    const history = attitudeHistory(2) // ts 1000, 1100
+    connectedWith(history)
+    const { rerender } = render(<ChartsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    // the Recorder keeps appending while the display is paused
+    history.append('attitude.roll', 1200, 12)
+    history.append('attitude.pitch', 1200, -3)
+    history.append('attitude.yaw', 1200, 92)
+    rerender(<ChartsPage />) // the telemetry-cadence redraw that would normally advance the chart
+
+    let props = hostProps('deg')
+    expect(props.series[0].timestampsMs).toEqual([1000, 1100]) // display frozen…
+    expect(props.windowEndMs).toBe(1100)
+    expect(within(screen.getByTestId('subplot-deg')).getByText('11')).toBeInTheDocument() // …legend too
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    props = hostProps('deg')
+    expect(props.series[0].timestampsMs).toEqual([1000, 1100, 1200]) // nothing recorded during the pause was lost
+    expect(props.windowEndMs).toBe(1200)
+  })
+
+  it('pause is display-local state: a remount starts live again', () => {
+    connectedWith(attitudeHistory(2))
+    const { unmount } = render(<ChartsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    unmount()
+
+    render(<ChartsPage />)
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+  })
+
+  it('a new session (reconnect) resets pause to live', () => {
+    const history = attitudeHistory(2)
+    connectedWith(history)
+    render(<ChartsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+
+    history.append('attitude.roll', 1200, 12)
+    history.append('attitude.pitch', 1200, -3)
+    history.append('attitude.yaw', 1200, 92)
+    act(() => {
+      useConnectionStore.setState({ session: fakeSession() })
+    })
+
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument()
+    expect(hostProps('deg').series[0].timestampsMs).toEqual([1000, 1100, 1200])
   })
 
   it('disconnected with history: the frozen traces stay inspectable instead of the placeholder', () => {

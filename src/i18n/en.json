@@ -144,6 +144,8 @@
     "notConnectedBody": "Connect a flight controller to chart telemetry live. Selected Series scroll through a rolling 60-second window; after a disconnect the last minute stays on screen for review.",
     "connectCta": "Connect flight controller",
     "pickerTitle": "Series",
+    "pause": "Pause",
+    "resume": "Resume",
     "emptyTitle": "No Series selected",
     "emptyBody": "Pick one or more Series above — a chart appears for each unit as soon as something is selected.",
     "blocks": {

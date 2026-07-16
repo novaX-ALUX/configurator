@@ -1,22 +1,24 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
-import { RETENTION_MS } from '../../core/mavlink/recorder'
+import { RETENTION_MS, type Sample } from '../../core/mavlink/recorder'
 import { useTelemetry } from '../dashboard/useTelemetry'
-import { ChartHost } from './ChartHost'
+import { ChartSubplot } from './ChartSubplot'
 import { useChartSelectionStore } from './chartSelectionStore'
-import { BLOCK_ORDER, SERIES_CATALOG, UNIT_GROUP_ORDER, type SeriesDef } from './seriesCatalog'
+import { BLOCK_ORDER, SERIES_CATALOG, UNIT_GROUP_ORDER } from './seriesCatalog'
 
 /**
- * Trace colors, assigned by position within a subplot (nvx design tokens
- * first, then more distinguishable hues). A subplot rarely holds more than a
- * handful of Series; the µs group can technically hold all 34 RC+servo
- * Series, where colors repeat — accepted, that view is unreadable regardless
- * of palette size.
+ * A frozen copy of the display at the moment Pause was clicked (issue #5).
+ * Copies, not references: the History Buffer mutates its arrays in place
+ * (append/evict), and recording deliberately continues while paused — the
+ * frozen view must survive both, even past the 60s retention window.
+ * Selection changes while paused show a Series only if it was captured here;
+ * one selected during the pause renders empty until Resume.
  */
-const PALETTE = [
-  '#2B5CE6', '#1E9E6A', '#D97706', '#DC2626', '#7C3AED',
-  '#0891B2', '#DB2777', '#65A30D', '#475569', '#B45309',
-] as const
+interface PausedView {
+  windowEndMs: number
+  samplesById: Map<string, readonly Sample[]>
+}
 
 /**
  * Telemetry Charts page. The user picks Series (grouped by Block, all 43
@@ -33,6 +35,10 @@ const PALETTE = [
  * appears when there is truly nothing to show: not connected AND no recorded
  * history. An empty *selection* is a different state: the picker stays, the
  * subplot area shows a hint.
+ *
+ * Pause is display-local `useState` — deliberately not persisted and not in
+ * a store: a page switch, reload, or new session (see the render-phase reset
+ * below) always starts live, per the spec's "pausing is never a dead end".
  */
 export function ChartsPage() {
   const { t } = useTranslation()
@@ -43,6 +49,16 @@ export function ChartsPage() {
   const history = useConnectionStore((s) => s.history)
   const selectedIds = useChartSelectionStore((s) => s.selectedIds)
   const toggleSeries = useChartSelectionStore((s) => s.toggleSeries)
+
+  const [pausedView, setPausedView] = useState<PausedView | null>(null)
+  // "Adjusting state when a prop changes" (same pattern as useTelemetry): a
+  // new session identity — reconnect — snaps the display back to live, so a
+  // pause can never show a previous session's frozen data as if current.
+  const [prevSession, setPrevSession] = useState(session)
+  if (session !== prevSession) {
+    setPrevSession(session)
+    setPausedView(null)
+  }
 
   // Redraw trigger only — the snapshot itself isn't read; the Recorder has
   // already turned it into Samples by the time this notification fires.
@@ -93,10 +109,37 @@ export function ChartsPage() {
     if (samples.length > 0) windowEndMs = Math.max(windowEndMs, samples[samples.length - 1].ts)
   }
 
+  // What the subplots actually show: the live buffer, or the frozen copy.
+  const displaySamples = (id: string): readonly Sample[] =>
+    pausedView !== null ? (pausedView.samplesById.get(id) ?? []) : (samplesById.get(id) ?? [])
+  const displayWindowEndMs = pausedView !== null ? pausedView.windowEndMs : windowEndMs
+
+  const togglePause = () => {
+    setPausedView(
+      pausedView !== null
+        ? null
+        : {
+            windowEndMs,
+            samplesById: new Map(selectedDefs.map((def) => [def.id, [...(samplesById.get(def.id) ?? [])]])),
+          },
+    )
+  }
+
   return (
     <div className="px-5 pb-6 pt-[18px]">
-      <div className="mb-3.5 flex items-baseline">
+      <div className="mb-3.5 flex items-baseline justify-between">
         <span className="font-heading text-[19px] font-bold text-nvx-text">{t('nav.charts')}</span>
+        <button
+          type="button"
+          onClick={togglePause}
+          className={`rounded-[10px] border px-3.5 py-1.5 text-[12px] font-bold ${
+            pausedView !== null
+              ? 'border-nvx-warningBorder bg-nvx-warningSoft text-nvx-warningText'
+              : 'border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
+          }`}
+        >
+          {t(pausedView !== null ? 'charts.resume' : 'charts.pause')}
+        </button>
       </div>
 
       <div className="mb-4 rounded-xl border border-nvx-border bg-white p-4 shadow-card">
@@ -136,25 +179,13 @@ export function ChartsPage() {
         </div>
       ) : (
         groups.map(({ unitGroup, defs }) => (
-          <div key={unitGroup} data-testid={`subplot-${unitGroup}`} className="mb-4 rounded-xl border border-nvx-border bg-white p-4 shadow-card last:mb-0">
-            <div className="mb-3 font-mono text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t(`charts.units.${unitGroup}`)}</div>
-            <ChartHost
-              // Remount on any change to the subplot's composition — ChartHost
-              // fixes its series definitions for the life of the instance.
-              key={defs.map((def) => def.id).join()}
-              series={defs.map((def: SeriesDef, i: number) => {
-                const samples = samplesById.get(def.id) ?? []
-                return {
-                  label: t(def.labelKey, def.labelParams),
-                  color: PALETTE[i % PALETTE.length],
-                  timestampsMs: samples.map((s) => s.ts),
-                  values: samples.map((s) => s.value),
-                }
-              })}
-              windowEndMs={windowEndMs}
-              windowSec={RETENTION_MS / 1000}
-            />
-          </div>
+          <ChartSubplot
+            key={unitGroup}
+            unitGroup={unitGroup}
+            series={defs.map((def) => ({ def, samples: displaySamples(def.id) }))}
+            windowEndMs={displayWindowEndMs}
+            windowSec={RETENTION_MS / 1000}
+          />
         ))
       )}
     </div>
