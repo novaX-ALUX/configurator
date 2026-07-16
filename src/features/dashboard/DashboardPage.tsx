@@ -7,12 +7,10 @@ import { PowerCard } from './PowerCard'
 import { GpsCard } from './GpsCard'
 import { MotorOutputsCard } from './MotorOutputsCard'
 import { RcChannelsCard } from './RcChannelsCard'
+import { PREARM_PREFIX } from './dashboardUtils'
 
 /** ArduPilot's FRAME_CLASS param — VehicleCard's own doc: DashboardPage resolves `frame` from this cached value, if any, rather than guessing. */
 const FRAME_CLASS_PARAM = 'FRAME_CLASS'
-
-/** ArduPilot always prefixes pre-arm-check STATUSTEXT with this literal (case varies by firmware version) — VehicleCard's own doc: only a real captured message is ever shown, never a fabricated "all checks passed". */
-const PREARM_PREFIX = /^PreArm:/i
 
 /**
  * Live telemetry view (read-only, no writes anywhere on this page — task

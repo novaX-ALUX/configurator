@@ -2,6 +2,7 @@ import './i18n'
 import { useTranslation } from 'react-i18next'
 import { Sidebar } from './layout/Sidebar'
 import { TopBar } from './layout/TopBar'
+import { TelemetryStrip } from './layout/TelemetryStrip'
 import { PagePlaceholder } from './layout/PagePlaceholder'
 import { DisconnectToast } from './layout/DisconnectToast'
 import { StatusPanel } from './features/debug/StatusPanel'
@@ -93,11 +94,12 @@ function App() {
   const page = NAV_PAGES.find((p) => p.id === activePage)
 
   return (
-    <div className="grid h-screen min-w-[1024px] grid-cols-[64px_1fr] grid-rows-[auto_56px_minmax(0,1fr)] bg-nvx-bg font-sans text-nvx-text">
+    <div className="grid h-screen min-w-[1024px] grid-cols-[64px_1fr] grid-rows-[auto_56px_auto_minmax(0,1fr)] bg-nvx-bg font-sans text-nvx-text">
       <SafetyBanners />
       <TopBar />
+      <TelemetryStrip />
       <Sidebar />
-      <main className="col-start-2 row-start-3 min-w-0 overflow-auto">
+      <main className="col-start-2 row-start-4 min-w-0 overflow-auto">
         {activePage === 'debug' ? (
           <StatusPanel />
         ) : activePage === 'parameters' ? (

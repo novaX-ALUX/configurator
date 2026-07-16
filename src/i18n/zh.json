@@ -22,6 +22,13 @@
     "unknownBoard": "未知板型",
     "language": "Language"
   },
+  "strip": {
+    "ariaLabel": "遥测状态",
+    "prearmReady": "就绪",
+    "prearmNotReady": "未就绪 +{{count}}",
+    "statusView": "查看状态消息",
+    "linkLoss": "丢包 {{pct}}%"
+  },
   "toast": {
     "disconnected": "已断开连接:{{reason}}"
   },

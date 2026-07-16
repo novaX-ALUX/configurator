@@ -2,6 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Design tokens (issue #11, UI G4 rider): every color tailwind.config.js's
+ * `theme.extend.colors.nvx` exposes as an nvx-* utility class is defined
+ * here as a CSS custom property and referenced from the config via
+ * `var(--nvx-*)` — same colors, same call sites (`bg-nvx-primary` etc. are
+ * unchanged), but the values now live in one place a future dark theme can
+ * override. Tokens only: no `prefers-color-scheme` override ships in this
+ * ticket. Ported verbatim from docs/design/novaX-Configurator.dc.html
+ * (single visual source of truth) — same source the two literal hex spots
+ * below (scrollbar/range input) already claimed to follow before this
+ * change folded them into the same variables.
+ */
+:root {
+  --nvx-bg: #f5f7fa;
+  --nvx-surface: #ffffff;
+  --nvx-field: #eff2f6;
+  --nvx-text: #171a20;
+  --nvx-muted: #5c6470;
+  --nvx-subtle: #7a828e;
+  --nvx-faint: #98a1ae;
+  --nvx-disabled: #b6bec9;
+  --nvx-border: #e3e8ef;
+  --nvx-border-strong: #d8dee6;
+  --nvx-primary: #2b5ce6;
+  --nvx-primary-hover: #2450c7;
+  --nvx-primary-soft: #e7edfc;
+  --nvx-primary-soft-text: #23479f;
+  --nvx-info-border: #b9c9f5;
+  --nvx-success: #1e9e6a;
+  --nvx-success-text: #14603f;
+  --nvx-success-muted: #3f8a65;
+  --nvx-success-soft: #e4f5ec;
+  --nvx-warning: #d97706;
+  --nvx-warning-text: #8a5a0b;
+  --nvx-warning-soft: #fdf6e9;
+  --nvx-warning-border: #f0c98a;
+  --nvx-danger: #dc2626;
+  --nvx-danger-hover: #b91c1c;
+  --nvx-danger-soft: #fbeaea;
+  --nvx-danger-border: #f3b9b9;
+  --nvx-scroll-thumb: #d3dae3;
+}
+
 html,
 body,
 #root {
@@ -10,13 +53,10 @@ body,
 
 body {
   margin: 0;
-  background-color: #f5f7fa;
-  color: #171a20;
+  background-color: var(--nvx-bg);
+  color: var(--nvx-text);
   font-family: Manrope, system-ui, sans-serif;
 }
-
-/* Design tokens below are ported verbatim from the <helmet> block of
-   docs/design/novaX-Configurator.dc.html (single visual source of truth). */
 
 ::-webkit-scrollbar {
   width: 10px;
@@ -24,9 +64,9 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d3dae3;
+  background: var(--nvx-scroll-thumb);
   border-radius: 6px;
-  border: 2px solid #f5f7fa;
+  border: 2px solid var(--nvx-bg);
 }
 
 ::-webkit-scrollbar-track {
@@ -38,7 +78,7 @@ input[type='range'].nvx {
   appearance: none;
   height: 6px;
   border-radius: 3px;
-  background: #eff2f6;
+  background: var(--nvx-field);
   cursor: pointer;
 }
 
@@ -47,8 +87,8 @@ input[type='range'].nvx::-webkit-slider-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #ffffff;
-  border: 1.5px solid #2b5ce6;
+  background: var(--nvx-surface);
+  border: 1.5px solid var(--nvx-primary);
   box-shadow: 0 1px 4px rgba(23, 26, 32, 0.2);
   cursor: grab;
 }
@@ -59,6 +99,6 @@ input[type='range'].nvx:disabled {
 }
 
 input[type='range'].nvx:disabled::-webkit-slider-thumb {
-  border-color: #b6bec9;
+  border-color: var(--nvx-disabled);
   cursor: not-allowed;
 }

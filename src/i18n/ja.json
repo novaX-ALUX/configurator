@@ -22,6 +22,13 @@
     "unknownBoard": "不明なボード",
     "language": "Language"
   },
+  "strip": {
+    "ariaLabel": "テレメトリーステータス",
+    "prearmReady": "準備完了",
+    "prearmNotReady": "準備未完了 +{{count}}",
+    "statusView": "ステータスメッセージを表示",
+    "linkLoss": "損失 {{pct}}%"
+  },
   "toast": {
     "disconnected": "切断されました:{{reason}}"
   },

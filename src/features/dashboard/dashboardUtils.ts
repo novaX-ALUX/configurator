@@ -43,6 +43,9 @@ export function arduCopterModeName(customMode: number): string {
   return ARDUCOPTER_MODES[customMode] ?? `MODE ${customMode}`
 }
 
+/** ArduPilot always prefixes pre-arm-check STATUSTEXT with this literal (case varies by firmware version). Shared by DashboardPage (VehicleCard's `prearmText`) and the global telemetry strip (issue #11) — both derive PreArm state from the same real captured messages, never a fabricated "all checks passed" claim. */
+export const PREARM_PREFIX = /^PreArm:/i
+
 /**
  * SERVO_OUTPUT_RAW / RC_CHANNELS both use the 1000-2000µs convention —
  * normalizes to a 0-100 display percent. A channel at or below 1000µs (or a

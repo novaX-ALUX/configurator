@@ -86,7 +86,17 @@ async function connectSession(frameClass = 1, frameType = 1): Promise<{ transpor
   router.start()
   const target = { sysid: 1, compid: 1 }
   const paramStore = new ParamStore(router, target)
-  const session: MavSession = { router, target, paramStore, telemetry: {} as MavSession['telemetry'] }
+  // Minimal double for the one thing any `useTelemetry(session)` consumer
+  // reads (`session.telemetry.getState()`/`.subscribe()`) — this file never
+  // exercises telemetry itself, but issue #11's globally-mounted
+  // TelemetryStrip now renders inside every `<App />` tree, including this
+  // one, so the stub needs to satisfy that hook's contract, not just sit
+  // unused. Same shape as DashboardPage.test.tsx's own `fakeSession`.
+  const telemetry: MavSession['telemetry'] = {
+    getState: () => ({}),
+    subscribe: () => () => {},
+  } as unknown as MavSession['telemetry']
+  const session: MavSession = { router, target, paramStore, telemetry }
   useConnectionStore.setState({ phase: 'connected', session, paramStore })
   // Quad X (4 motors) -- feed FRAME_CLASS/FRAME_TYPE straight into the cache
   // via the same PARAM_VALUE path ParamStore itself uses, no fetchAll needed.

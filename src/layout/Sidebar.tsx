@@ -85,7 +85,7 @@ export function Sidebar() {
   return (
     <nav
       aria-label={t('nav.ariaLabel')}
-      className="col-start-1 row-start-3 flex flex-col items-center gap-1 border-r border-nvx-border bg-nvx-surface py-3"
+      className="col-start-1 row-start-4 flex flex-col items-center gap-1 border-r border-nvx-border bg-nvx-surface py-3"
     >
       {NAV_PAGES.map((page) => {
         const label = t(page.labelKey)

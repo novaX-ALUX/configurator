@@ -6,42 +6,47 @@ export default {
       // Design tokens lifted from docs/design/novaX-Configurator.dc.html (single visual
       // source of truth). Keep this list scoped to what the shell + page skeletons
       // actually use; feature pages extend it as they land against the same design file.
+      //
+      // Values are CSS custom properties (issue #11, UI G4 rider), defined once in
+      // index.css's `:root` — this file just maps each nvx-* utility class to its
+      // variable so every existing call site (`bg-nvx-primary`, `text-nvx-text`, ...)
+      // keeps working unchanged. Tokens only: no dark-theme override ships here.
       colors: {
         nvx: {
-          bg: '#F5F7FA',
-          surface: '#FFFFFF',
-          field: '#EFF2F6',
-          text: '#171A20',
-          muted: '#5C6470',
-          subtle: '#7A828E',
-          faint: '#98A1AE',
-          disabled: '#B6BEC9',
-          border: '#E3E8EF',
-          borderStrong: '#D8DEE6',
-          primary: '#2B5CE6',
-          primaryHover: '#2450C7',
-          primarySoft: '#E7EDFC',
-          primarySoftText: '#23479F',
-          infoBorder: '#B9C9F5',
-          success: '#1E9E6A',
-          successText: '#14603F',
-          successMuted: '#3F8A65',
-          successSoft: '#E4F5EC',
-          warning: '#D97706',
-          warningText: '#8A5A0B',
-          warningSoft: '#FDF6E9',
-          warningBorder: '#F0C98A',
-          danger: '#DC2626',
-          dangerHover: '#B91C1C',
+          bg: 'var(--nvx-bg)',
+          surface: 'var(--nvx-surface)',
+          field: 'var(--nvx-field)',
+          text: 'var(--nvx-text)',
+          muted: 'var(--nvx-muted)',
+          subtle: 'var(--nvx-subtle)',
+          faint: 'var(--nvx-faint)',
+          disabled: 'var(--nvx-disabled)',
+          border: 'var(--nvx-border)',
+          borderStrong: 'var(--nvx-border-strong)',
+          primary: 'var(--nvx-primary)',
+          primaryHover: 'var(--nvx-primary-hover)',
+          primarySoft: 'var(--nvx-primary-soft)',
+          primarySoftText: 'var(--nvx-primary-soft-text)',
+          infoBorder: 'var(--nvx-info-border)',
+          success: 'var(--nvx-success)',
+          successText: 'var(--nvx-success-text)',
+          successMuted: 'var(--nvx-success-muted)',
+          successSoft: 'var(--nvx-success-soft)',
+          warning: 'var(--nvx-warning)',
+          warningText: 'var(--nvx-warning-text)',
+          warningSoft: 'var(--nvx-warning-soft)',
+          warningBorder: 'var(--nvx-warning-border)',
+          danger: 'var(--nvx-danger)',
+          dangerHover: 'var(--nvx-danger-hover)',
           // Not lifted verbatim from the design file (unlike the tokens above) — the
           // design only ever uses #DC2626/#B91C1C as solid banner/button backgrounds,
           // never as a soft row tint. Task 3.1 needs a light "error" row background for
           // STATUSTEXT severity coloring (design only demonstrates warning/default
           // tiers), so this is a same-lightness-relationship interpolation from
           // warningSoft/warningBorder onto the danger hue. Documented in task-3.1-report.md.
-          dangerSoft: '#FBEAEA',
-          dangerBorder: '#F3B9B9',
-          scrollThumb: '#D3DAE3',
+          dangerSoft: 'var(--nvx-danger-soft)',
+          dangerBorder: 'var(--nvx-danger-border)',
+          scrollThumb: 'var(--nvx-scroll-thumb)',
         },
       },
       fontFamily: {
