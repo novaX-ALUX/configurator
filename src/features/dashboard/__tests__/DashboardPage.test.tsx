@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../../i18n'
 import { DashboardPage } from '../DashboardPage'
 import { useConnectionStore, type StatusTextEntry } from '../../../store/connection'
@@ -27,32 +27,65 @@ function entry(overrides: Partial<StatusTextEntry> = {}): StatusTextEntry {
 }
 
 describe('DashboardPage', () => {
-  it('not connected: shows the empty state; CTA calls connect() only while truly disconnected', () => {
-    const calls: unknown[] = []
-    useConnectionStore.setState({
-      phase: 'disconnected',
-      baud: 115200,
-      session: null,
-      connect: (baud, opts) => {
-        calls.push([baud, opts])
-        return Promise.resolve()
-      },
-    })
+  it('disconnected: renders the full card layout (not a full-page placeholder), with an "Offline" chip on every Block card and em-dash/no-data fallbacks — nothing pretends to be live (UI G5, issue #10)', () => {
+    useConnectionStore.setState({ phase: 'disconnected', session: null, paramStore: null, statustext: [] })
 
     render(<DashboardPage />)
 
-    expect(screen.getByText('No flight controller connected')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Connect flight controller' }))
-    expect(calls).toEqual([[115200, undefined]])
+    // Full layout intact — every card's title still renders.
+    expect(screen.getByText('Attitude')).toBeInTheDocument()
+    expect(screen.getByText('Vehicle')).toBeInTheDocument()
+    expect(screen.getByText('Power')).toBeInTheDocument()
+    expect(screen.getByText('GPS')).toBeInTheDocument()
+    expect(screen.getByText('Motor Outputs')).toBeInTheDocument()
+    expect(screen.getByText('RC Channels')).toBeInTheDocument()
+    // One "Offline" chip per Block (attitude, vehicle, power, gps, motors, rc).
+    expect(screen.getAllByText('Offline')).toHaveLength(6)
+    // No live data is fabricated — the same no-data fallbacks used while
+    // connected-but-no-telemetry-yet.
+    expect(screen.getByText('No heartbeat')).toBeInTheDocument()
+    expect(screen.getByText('No data')).toBeInTheDocument()
+    expect(screen.getByText('No motor output telemetry yet.')).toBeInTheDocument()
+    expect(screen.getByText('No RC channel telemetry yet.')).toBeInTheDocument()
   })
 
-  it('connecting/lost: the empty-state CTA is disabled (connect() would be a silent no-op there)', () => {
+  it('connecting/lost: still full layout with "Offline" chips (only "connected" counts as online)', () => {
     useConnectionStore.setState({ phase: 'connecting', session: null })
+    const { unmount } = render(<DashboardPage />)
+    expect(screen.getAllByText('Offline')).toHaveLength(6)
+    unmount()
+
+    useConnectionStore.setState({ phase: 'lost' })
     render(<DashboardPage />)
-    expect(screen.getByRole('button', { name: 'Connect flight controller' })).toBeDisabled()
+    expect(screen.getAllByText('Offline')).toHaveLength(6)
   })
 
-  it('connected with no session/telemetry yet: renders every card in its own no-data state without crashing', () => {
+  it('reconnecting restores live rendering without a remount — the "Offline" chips fade out (not vanish) and are gone once the exit transition finishes', async () => {
+    vi.useFakeTimers()
+    try {
+      useConnectionStore.setState({ phase: 'disconnected', session: null, paramStore: null, statustext: [] })
+      render(<DashboardPage />)
+      expect(screen.getAllByText('Offline')).toHaveLength(6)
+
+      act(() => {
+        useConnectionStore.setState({ phase: 'connected' })
+      })
+
+      // Still present but marked `aria-hidden` immediately — mid-fade, not
+      // pretending to be a live status for assistive tech.
+      for (const chip of screen.getAllByText('Offline')) {
+        expect(chip).toHaveAttribute('aria-hidden', 'true')
+      }
+
+      await vi.advanceTimersByTimeAsync(200)
+
+      expect(screen.queryByText('Offline')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('connected with no session/telemetry yet: renders every card in its own no-data state without crashing, and no "Offline" chip', () => {
     useConnectionStore.setState({ phase: 'connected', session: null, paramStore: null, statustext: [] })
 
     render(<DashboardPage />)
@@ -61,6 +94,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('No data')).toBeInTheDocument()
     expect(screen.getByText('No motor output telemetry yet.')).toBeInTheDocument()
     expect(screen.getByText('No RC channel telemetry yet.')).toBeInTheDocument()
+    expect(screen.queryByText('Offline')).not.toBeInTheDocument()
   })
 
   it('connected with a full telemetry snapshot: populates every card, and resolves frame/pre-arm from paramStore/statustext', () => {

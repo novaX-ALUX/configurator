@@ -92,12 +92,7 @@
     "statusError": "Write failed: {{message}}"
   },
   "dashboard": {
-    "notConnectedTitle": "No flight controller connected",
-    "notConnectedBody": "Plug your board in via USB, pick its serial port in the top bar, and hit Connect. Telemetry, sensors and motors will light up here.",
-    "connectCta": "Connect flight controller",
-    "hintStep1": "Plug in USB",
-    "hintStep2": "Select port",
-    "hintStep3": "Connect",
+    "offline": "Offline",
     "attitude": {
       "title": "Attitude",
       "roll": "ROLL",
@@ -141,9 +136,9 @@
     }
   },
   "charts": {
-    "notConnectedTitle": "No chart data yet",
-    "notConnectedBody": "Connect a flight controller to chart telemetry live. Selected Series scroll through a rolling 60-second window; after a disconnect the last minute stays on screen for review.",
-    "connectCta": "Connect flight controller",
+    "offline": "Offline",
+    "offlineFrozen": "Offline — frozen",
+    "awaitingConnection": "Awaiting connection",
     "pickerTitle": "Series",
     "pause": "Pause",
     "resume": "Resume",

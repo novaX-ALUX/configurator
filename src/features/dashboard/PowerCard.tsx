@@ -1,9 +1,12 @@
 import { useTranslation } from 'react-i18next'
 import type { TelemetryState } from '../../core/mavlink/telemetry'
+import { OfflineChip } from '../../layout/OfflineChip'
 import { isVoltageImplausible } from './dashboardUtils'
 
 interface PowerCardProps {
   power?: TelemetryState['power']
+  /** UI G5 (issue #10): renders an explicit "Offline" chip instead of pretending the em-dash fallback below is live data. */
+  offline?: boolean
 }
 
 /** Real percent-based color tiers (not a guessed voltage range — see the card's own doc below). */
@@ -38,14 +41,17 @@ const BAR_CLASSES: Record<BatteryTier, string> = {
  * qualifier — the FC's number is still shown as reported, never fabricated
  * or hidden, just no longer presented as mutually confirming the voltage.
  */
-export function PowerCard({ power }: PowerCardProps) {
+export function PowerCard({ power, offline = false }: PowerCardProps) {
   const { t } = useTranslation()
   const pct = power?.batteryRemaining
   const implausible = pct !== undefined && power?.voltage !== undefined && isVoltageImplausible(power.voltage)
 
   return (
     <div className="flex flex-col rounded-xl border border-nvx-border bg-white p-4 shadow-card">
-      <div className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('dashboard.power.title')}</div>
+      <div className="flex items-center justify-between">
+        <span className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('dashboard.power.title')}</span>
+        <OfflineChip active={offline} label={t('dashboard.offline')} />
+      </div>
       <div className="mt-2.5 flex items-baseline gap-3">
         <span className="font-mono text-[27px] font-semibold text-nvx-text">
           {power?.voltage !== undefined ? power.voltage.toFixed(2) : '—'}

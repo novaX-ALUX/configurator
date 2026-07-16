@@ -92,12 +92,7 @@
     "statusError": "쓰기 실패: {{message}}"
   },
   "dashboard": {
-    "notConnectedTitle": "연결된 비행 컨트롤러가 없습니다",
-    "notConnectedBody": "USB로 보드를 연결하고, 상단 바에서 포트를 선택한 후 연결을 클릭하세요. 텔레메트리, 센서, 모터 정보가 여기에 표시됩니다.",
-    "connectCta": "비행 컨트롤러 연결",
-    "hintStep1": "USB 연결",
-    "hintStep2": "포트 선택",
-    "hintStep3": "연결",
+    "offline": "오프라인",
     "attitude": {
       "title": "자세",
       "roll": "롤",
@@ -141,9 +136,9 @@
     }
   },
   "charts": {
-    "notConnectedTitle": "차트 데이터가 아직 없습니다",
-    "notConnectedBody": "비행 컨트롤러를 연결하면 텔레메트리를 실시간 차트로 볼 수 있습니다. 선택한 시리즈가 60초 롤링 창으로 흐르며, 연결이 끊겨도 마지막 1분은 화면에 남아 확인할 수 있습니다.",
-    "connectCta": "비행 컨트롤러 연결",
+    "offline": "오프라인",
+    "offlineFrozen": "오프라인 — 정지됨",
+    "awaitingConnection": "연결 대기 중",
     "pickerTitle": "시리즈",
     "pause": "일시정지",
     "resume": "재개",

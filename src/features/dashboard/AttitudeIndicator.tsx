@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { TelemetryState } from '../../core/mavlink/telemetry'
+import { OfflineChip } from '../../layout/OfflineChip'
 import { formatSignedDeg, normalizeHeadingDeg } from './dashboardUtils'
 
 /** px-per-degree factors match the design file's own `pitchPx`/`tapeShift` formulas (`docs/design/novaX-Configurator.dc.html`). */
@@ -8,6 +9,8 @@ const HEADING_TAPE_PX_PER_DEG = 1.6
 
 interface AttitudeIndicatorProps {
   attitude?: TelemetryState['attitude']
+  /** UI G5 (issue #10): renders an explicit "Offline" chip instead of pretending the level/0° fallback below is live data. */
+  offline?: boolean
 }
 
 /**
@@ -17,7 +20,7 @@ interface AttitudeIndicatorProps {
  * plus a scrolling heading tape. Renders level (0/0) with "—" readouts
  * before the first ATTITUDE message ever arrives.
  */
-export function AttitudeIndicator({ attitude }: AttitudeIndicatorProps) {
+export function AttitudeIndicator({ attitude, offline = false }: AttitudeIndicatorProps) {
   const { t } = useTranslation()
   const rollDeg = attitude?.rollDeg ?? 0
   const pitchDeg = attitude?.pitchDeg ?? 0
@@ -25,7 +28,10 @@ export function AttitudeIndicator({ attitude }: AttitudeIndicatorProps) {
 
   return (
     <div className="rounded-xl border border-nvx-border bg-white p-4 shadow-card">
-      <div className="mb-3 text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('dashboard.attitude.title')}</div>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('dashboard.attitude.title')}</span>
+        <OfflineChip active={offline} label={t('dashboard.offline')} />
+      </div>
       <div className="flex justify-center">
         <div className="relative h-[240px] w-[240px] overflow-hidden rounded-full shadow-[inset_0_0_0_5px_#272C34,0_0_0_1px_#E3E8EF,inset_0_6px_14px_rgba(0,0,0,.28)]">
           <div

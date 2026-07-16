@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { RETENTION_MS, type Sample } from '../../core/mavlink/recorder'
 import { useTelemetry } from '../dashboard/useTelemetry'
+import { OfflineChip } from '../../layout/OfflineChip'
 import { ChartSubplot } from './ChartSubplot'
 import { useChartSelectionStore } from './chartSelectionStore'
 import { BLOCK_ORDER, SERIES_CATALOG, UNIT_GROUP_ORDER } from './seriesCatalog'
@@ -30,11 +31,19 @@ interface PausedView {
  * Reads the History Buffer directly (it is not reactive — see
  * `ConnectionState.history`), using `useTelemetry`'s throttled re-renders as
  * the redraw trigger, so the charts advance at the data's real arrival rate
- * and freeze the moment the session ends. History recorded before this page
- * mounts is picked up on first render, and the connect placeholder only
- * appears when there is truly nothing to show: not connected AND no recorded
- * history. An empty *selection* is a different state: the picker stays, the
- * subplot area shows a hint.
+ * and freeze the moment the session ends.
+ *
+ * UI G5 (issue #10): this always renders its full layout, offline or not —
+ * `CONTEXT.md`'s History Buffer promise ("survives disconnect frozen") means
+ * the picker + subplots must stay visible so a previous session's Samples
+ * stay inspectable. History recorded before this page mounts is picked up on
+ * first render. Three cases fall out of the same render path: connected
+ * (live), offline with recorded history (frozen — subplots show the last
+ * Samples, an "Offline — frozen" chip marks it), and offline with nothing
+ * recorded yet (the picker renders with its checkboxes disabled — nothing to
+ * select into — and the subplot area is simply empty, same as the existing
+ * "no Series selected" case). An empty *selection* is a separate state from
+ * "no history": the picker stays enabled, the subplot area shows a hint.
  *
  * Pause is display-local `useState` — deliberately not persisted and not in
  * a store: a page switch, reload, or new session (see the render-phase reset
@@ -43,8 +52,6 @@ interface PausedView {
 export function ChartsPage() {
   const { t } = useTranslation()
   const phase = useConnectionStore((s) => s.phase)
-  const baud = useConnectionStore((s) => s.baud)
-  const connect = useConnectionStore((s) => s.connect)
   const session = useConnectionStore((s) => s.session)
   const history = useConnectionStore((s) => s.history)
   const selectedIds = useChartSelectionStore((s) => s.selectedIds)
@@ -67,29 +74,11 @@ export function ChartsPage() {
   // A Series id only appears once something was appended for it, so key
   // presence is "has history" (the newest Sample is never evicted).
   const hasHistory = history.seriesIds().length > 0
-
-  if (phase !== 'connected' && !hasHistory) {
-    return (
-      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3.5 px-5">
-        <div className="flex h-[74px] w-[74px] items-center justify-center rounded-[22px] border border-nvx-border bg-white text-nvx-faint shadow-card">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4.5 4.5v15h15" />
-            <path d="M7.5 14.5l3.4-4 3 2.5 4.6-6" />
-          </svg>
-        </div>
-        <div className="font-heading text-[19px] font-bold text-nvx-text">{t('charts.notConnectedTitle')}</div>
-        <div className="max-w-[420px] text-center text-[13px] leading-relaxed text-nvx-muted">{t('charts.notConnectedBody')}</div>
-        <button
-          type="button"
-          disabled={phase !== 'disconnected'}
-          onClick={() => void connect(baud)}
-          className="rounded-[10px] bg-nvx-primary px-[22px] py-2.5 text-[13px] font-bold text-white hover:bg-nvx-primaryHover disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {t('charts.connectCta')}
-        </button>
-      </div>
-    )
-  }
+  const offline = phase !== 'connected'
+  // Nothing to select into yet — the picker still renders (per the layered
+  // empty-state policy), but toggling a Series while there's no Recorder
+  // attached and no prior Samples wouldn't do anything until a connect.
+  const awaitingConnection = offline && !hasHistory
 
   const selectedDefs = SERIES_CATALOG.filter((def) => selectedIds.includes(def.id))
   const groups = UNIT_GROUP_ORDER.map((unitGroup) => ({
@@ -128,7 +117,10 @@ export function ChartsPage() {
   return (
     <div className="px-5 pb-6 pt-[18px]">
       <div className="mb-3.5 flex items-baseline justify-between">
-        <span className="font-heading text-[19px] font-bold text-nvx-text">{t('nav.charts')}</span>
+        <span className="flex items-center gap-2.5">
+          <span className="font-heading text-[19px] font-bold text-nvx-text">{t('nav.charts')}</span>
+          <OfflineChip active={offline} label={t(hasHistory ? 'charts.offlineFrozen' : 'charts.offline')} />
+        </span>
         <button
           type="button"
           onClick={togglePause}
@@ -143,7 +135,10 @@ export function ChartsPage() {
       </div>
 
       <div className="mb-4 rounded-xl border border-nvx-border bg-white p-4 shadow-card">
-        <div className="mb-3 text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('charts.pickerTitle')}</div>
+        <div className="mb-3 flex items-baseline justify-between">
+          <span className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('charts.pickerTitle')}</span>
+          {awaitingConnection && <span className="text-[11px] font-semibold text-nvx-faint">{t('charts.awaitingConnection')}</span>}
+        </div>
         {BLOCK_ORDER.map((block) => (
           <div key={block} className="mb-2.5 flex flex-wrap items-baseline gap-1.5 last:mb-0">
             <span className="w-[72px] shrink-0 text-[11px] font-bold text-nvx-muted">{t(`charts.blocks.${block}`)}</span>
@@ -152,16 +147,19 @@ export function ChartsPage() {
               return (
                 <label
                   key={def.id}
-                  className={`cursor-pointer select-none rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                    selected
-                      ? 'border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText'
-                      : 'border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
+                  className={`select-none rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                    awaitingConnection
+                      ? 'cursor-not-allowed border-nvx-border bg-white text-nvx-disabled'
+                      : selected
+                        ? 'cursor-pointer border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText'
+                        : 'cursor-pointer border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
                   }`}
                 >
                   <input
                     type="checkbox"
                     className="sr-only"
                     checked={selected}
+                    disabled={awaitingConnection}
                     onChange={() => toggleSeries(def.id)}
                   />
                   {t(def.labelKey, def.labelParams)}

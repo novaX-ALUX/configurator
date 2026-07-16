@@ -69,31 +69,55 @@ function hostProps(group: string): ChartHostProps {
 }
 
 describe('ChartsPage', () => {
-  it('not connected with no recorded history: shows the placeholder; CTA calls connect() only while truly disconnected', () => {
-    const calls: unknown[] = []
-    useConnectionStore.setState({
-      phase: 'disconnected',
-      baud: 115200,
-      session: null,
-      history: new HistoryBuffer(),
-      connect: (baud, opts) => {
-        calls.push([baud, opts])
-        return Promise.resolve()
-      },
-    })
+  it('disconnected with no recorded history: renders the full layout (picker + empty chart area), not a full-page placeholder — the picker is marked awaiting connection and its checkboxes are disabled (UI G5, issue #10)', () => {
+    useConnectionStore.setState({ phase: 'disconnected', session: null, history: new HistoryBuffer() })
 
     render(<ChartsPage />)
 
-    expect(screen.getByText('No chart data yet')).toBeInTheDocument()
-    expect(screen.queryByTestId('chart-host')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Connect flight controller' }))
-    expect(calls).toEqual([[115200, undefined]])
+    // Picker still renders, all 43 Series still listed.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(43)
+    expect(screen.getByText('Awaiting connection')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeDisabled()
+    // "Offline" (not "— frozen": there's nothing recorded yet).
+    expect(screen.getByText('Offline')).toBeInTheDocument()
+    expect(screen.queryByText('Offline — frozen')).not.toBeInTheDocument()
+    // The default selection's empty chart layout still renders (real
+    // subplot, zero Samples) rather than a connect-first placeholder.
+    expect(screen.getByTestId('subplot-deg')).toBeInTheDocument()
+    expect(hostProps('deg').series.every((s) => s.timestampsMs.length === 0)).toBe(true)
   })
 
-  it('connecting: the placeholder CTA is disabled (connect() would be a silent no-op there)', () => {
+  it('connecting: same awaiting-connection layout — only "connected" counts as online', () => {
     useConnectionStore.setState({ phase: 'connecting', session: null, history: new HistoryBuffer() })
     render(<ChartsPage />)
-    expect(screen.getByRole('button', { name: 'Connect flight controller' })).toBeDisabled()
+    expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeDisabled()
+    expect(screen.getByText('Awaiting connection')).toBeInTheDocument()
+  })
+
+  it('reconnecting enables the picker immediately and fades the "Offline" marker out (rather than vanishing) without a remount', async () => {
+    vi.useFakeTimers()
+    try {
+      useConnectionStore.setState({ phase: 'disconnected', session: null, history: new HistoryBuffer() })
+      render(<ChartsPage />)
+      expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeDisabled()
+
+      act(() => {
+        useConnectionStore.setState({ phase: 'connected', session: fakeSession() })
+      })
+
+      // The picker's enabled state isn't animated — it flips the same tick.
+      expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeEnabled()
+      expect(screen.queryByText('Awaiting connection')).not.toBeInTheDocument()
+      // The "Offline" chip is still mid-fade (aria-hidden immediately, but
+      // still in the DOM) rather than gone the instant `phase` flips.
+      expect(screen.getByText('Offline')).toHaveAttribute('aria-hidden', 'true')
+
+      await vi.advanceTimersByTimeAsync(200)
+
+      expect(screen.queryByText('Offline')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('lists all 43 Series as checkboxes grouped by Block; fix_type is absent', () => {
@@ -293,12 +317,16 @@ describe('ChartsPage', () => {
     expect(hostProps('deg').series[0].timestampsMs).toEqual([1000, 1100, 1200])
   })
 
-  it('disconnected with history: the frozen traces stay inspectable instead of the placeholder', () => {
+  it('disconnected with history: the frozen History Buffer stays inspectable, marked "Offline — frozen" (CONTEXT.md: survives disconnect frozen, cleared only on next connect)', () => {
     useConnectionStore.setState({ phase: 'disconnected', session: null, history: attitudeHistory(2) })
 
     render(<ChartsPage />)
 
     expect(hostProps('deg').series[0].timestampsMs).toEqual([1000, 1100])
-    expect(screen.queryByText('No chart data yet')).not.toBeInTheDocument()
+    expect(screen.getByText('Offline — frozen')).toBeInTheDocument()
+    // There IS recorded history, so the picker is not disabled — the user
+    // can still change which Series are inspected in the frozen buffer.
+    expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeEnabled()
+    expect(screen.queryByText('Awaiting connection')).not.toBeInTheDocument()
   })
 })

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import type { TelemetryState } from '../../core/mavlink/telemetry'
+import { OfflineChip } from '../../layout/OfflineChip'
 import { pctFromUs } from './dashboardUtils'
 
 /** SERVO_OUTPUT_RAW carries 16 output slots; this shows the first 8 — enough for any common multirotor frame (quad through octo), with unused channels just reading idle/gray. */
@@ -7,14 +8,19 @@ const MOTOR_COUNT = 8
 
 interface MotorOutputsCardProps {
   servo?: TelemetryState['servo']
+  /** UI G5 (issue #10): renders an explicit "Offline" chip instead of pretending the "no telemetry yet" fallback below is live data. */
+  offline?: boolean
 }
 
-export function MotorOutputsCard({ servo }: MotorOutputsCardProps) {
+export function MotorOutputsCard({ servo, offline = false }: MotorOutputsCardProps) {
   const { t } = useTranslation()
 
   return (
     <div className="flex flex-col rounded-xl border border-nvx-border bg-white p-4 shadow-card">
-      <div className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('dashboard.motors.title')}</div>
+      <div className="flex items-center justify-between">
+        <span className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('dashboard.motors.title')}</span>
+        <OfflineChip active={offline} label={t('dashboard.offline')} />
+      </div>
       {!servo ? (
         <p className="mt-2.5 text-[12px] text-nvx-faint">{t('dashboard.motors.noData')}</p>
       ) : (

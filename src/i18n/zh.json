@@ -92,12 +92,7 @@
     "statusError": "写入失败:{{message}}"
   },
   "dashboard": {
-    "notConnectedTitle": "尚未连接飞控",
-    "notConnectedBody": "通过 USB 插入飞控，在顶部栏选择串口，然后点击连接。遥测、传感器和电机数据将在此显示。",
-    "connectCta": "连接飞控",
-    "hintStep1": "插入 USB",
-    "hintStep2": "选择串口",
-    "hintStep3": "连接",
+    "offline": "离线",
     "attitude": {
       "title": "姿态",
       "roll": "横滚",
@@ -141,9 +136,9 @@
     }
   },
   "charts": {
-    "notConnectedTitle": "暂无图表数据",
-    "notConnectedBody": "连接飞控后即可实时绘制遥测曲线。所选序列以 60 秒滚动窗口滚动显示；断开连接后，最后一分钟的数据会保留在屏幕上供查看。",
-    "connectCta": "连接飞控",
+    "offline": "离线",
+    "offlineFrozen": "离线 — 已冻结",
+    "awaitingConnection": "等待连接",
     "pickerTitle": "数据序列",
     "pause": "暂停",
     "resume": "继续",

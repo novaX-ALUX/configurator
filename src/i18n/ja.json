@@ -92,12 +92,7 @@
     "statusError": "書き込みに失敗しました:{{message}}"
   },
   "dashboard": {
-    "notConnectedTitle": "フライトコントローラーが接続されていません",
-    "notConnectedBody": "USB でボードを接続し、上部バーでシリアルポートを選んで接続をクリックしてください。テレメトリー、センサー、モーターの情報がここに表示されます。",
-    "connectCta": "フライトコントローラーに接続",
-    "hintStep1": "USB を接続",
-    "hintStep2": "ポートを選択",
-    "hintStep3": "接続",
+    "offline": "オフライン",
     "attitude": {
       "title": "姿勢",
       "roll": "ロール",
@@ -141,9 +136,9 @@
     }
   },
   "charts": {
-    "notConnectedTitle": "チャートデータはまだありません",
-    "notConnectedBody": "フライトコントローラーに接続すると、テレメトリーをリアルタイムでチャート表示できます。選択した系列が60秒のローリングウィンドウで流れ、切断後も直近1分間は画面に残り確認できます。",
-    "connectCta": "フライトコントローラーに接続",
+    "offline": "オフライン",
+    "offlineFrozen": "オフライン — 停止中",
+    "awaitingConnection": "接続待ち",
     "pickerTitle": "系列",
     "pause": "一時停止",
     "resume": "再開",
