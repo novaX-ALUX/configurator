@@ -100,7 +100,12 @@
     "importCta": "导入 .param 文件",
     "importParseError": "导入失败: {{message}}",
     "importSummary": "已暂存 {{staged}} 个参数，跳过 {{unknown}} 个(此设备未知)，跳过 {{unchanged}} 个(无变化)",
-    "importSummaryWithPrecision": "已暂存 {{staged}} 个参数，跳过 {{unknown}} 个(此设备未知)，跳过 {{unchanged}} 个(无变化)，跳过 {{precision}} 个(精度会丢失)"
+    "importSummaryWithPrecision": "已暂存 {{staged}} 个参数，跳过 {{unknown}} 个(此设备未知)，跳过 {{unchanged}} 个(无变化)，跳过 {{precision}} 个(精度会丢失)",
+    "rebootRequiredBadge": "需要重启",
+    "rebootBannerText": "需要重启飞控才能使更改生效",
+    "rebootCta": "重启",
+    "rebooting": "正在重启…",
+    "rebootConfirm": "现在重启飞控吗？连接会中断，直到飞控重新上线。"
   },
   "dashboard": {
     "offline": "离线",

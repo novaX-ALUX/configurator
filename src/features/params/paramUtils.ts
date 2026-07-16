@@ -199,6 +199,20 @@ export function isEnumValue(meta: ParamMetaEntry | undefined, value: number): bo
 }
 
 /**
+ * True if any name in `writtenNames` (a just-succeeded write batch) has
+ * `ParamMetaEntry.rebootRequired` set — the sole condition `ParamsPage` uses
+ * to show the post-write "Reboot required" banner (PRD #12 Ticket 5).
+ * `lookupMeta` is `undefined` when metadata never loaded, in which case this
+ * always returns `false` (same additive-fallback principle as
+ * `filterParams`: no metadata means no reboot-required signal, not a
+ * guess).
+ */
+export function batchNeedsReboot(writtenNames: readonly string[], lookupMeta?: (name: string) => ParamMetaEntry | undefined): boolean {
+  if (!lookupMeta) return false
+  return writtenNames.some((name) => lookupMeta(name)?.rebootRequired === true)
+}
+
+/**
  * Advisory range/units caption text (e.g. "0–100 %"), or `undefined` if
  * metadata has neither — never rendered as an HTML `min`/`max` or used to
  * block staging (PRD §2.3: ArduPilot's documented range is a suggestion in

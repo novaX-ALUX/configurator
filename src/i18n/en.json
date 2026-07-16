@@ -100,7 +100,12 @@
     "importCta": "Import .param file",
     "importParseError": "Couldn't import: {{message}}",
     "importSummary": "{{staged}} parameter(s) staged, {{unknown}} skipped (unknown to this vehicle), {{unchanged}} skipped (unchanged)",
-    "importSummaryWithPrecision": "{{staged}} parameter(s) staged, {{unknown}} skipped (unknown to this vehicle), {{unchanged}} skipped (unchanged), {{precision}} skipped (would lose precision)"
+    "importSummaryWithPrecision": "{{staged}} parameter(s) staged, {{unknown}} skipped (unknown to this vehicle), {{unchanged}} skipped (unchanged), {{precision}} skipped (would lose precision)",
+    "rebootRequiredBadge": "Reboot required",
+    "rebootBannerText": "Reboot required for changes to take effect",
+    "rebootCta": "Reboot",
+    "rebooting": "Rebooting…",
+    "rebootConfirm": "Reboot the flight controller now? The connection will drop until it comes back up."
   },
   "dashboard": {
     "offline": "Offline",

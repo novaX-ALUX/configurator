@@ -4,10 +4,11 @@ import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
 import { ParamStoreDisposedError, type FetchProgressState } from '../../core/mavlink/params'
 import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata } from '../../core/paramMetadata'
+import { rebootFlightController } from '../../core/mavlink/reboot'
 import { ParamRow } from './ParamRow'
 import { DiffDrawer, type DiffRowStatus } from './DiffDrawer'
 import { downloadParamFile, parseParamFile, planImport, serializeParamFile, type ImportPlan } from './paramFileUtils'
-import { fetchErrorMessage, fetchProgressPercent, filterParams, groupParams, withoutKey, writeErrorStatus } from './paramUtils'
+import { batchNeedsReboot, fetchErrorMessage, fetchProgressPercent, filterParams, groupParams, withoutKey, writeErrorStatus } from './paramUtils'
 
 type LoadState = { kind: 'idle' } | { kind: 'error'; message: string } | { kind: 'loaded' }
 
@@ -54,6 +55,7 @@ export function ParamsPage() {
   const connect = useConnectionStore((s) => s.connect)
   const paramStore = useConnectionStore((s) => s.paramStore)
   const identity = useConnectionStore((s) => s.identity)
+  const session = useConnectionStore((s) => s.session)
   const setGuardNavigation = useNavigationStore((s) => s.setGuardNavigation)
 
   // Lazy initializer, not a plain `{ kind: 'idle' }` literal: `paramStore` may
@@ -82,6 +84,13 @@ export function ParamsPage() {
   const [writeStatus, setWriteStatus] = useState<Map<string, DiffRowStatus>>(new Map())
   const [writing, setWriting] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // Post-write "Reboot required" banner (PRD #12 Ticket 5) — shown once a
+  // write batch that succeeded included any `rebootRequired` param, until
+  // dismissed or a reboot is actually sent. Session-scoped like every other
+  // piece of state here: reset on disconnect/reconnect below, since a stale
+  // banner from a previous session is meaningless.
+  const [rebootBanner, setRebootBanner] = useState(false)
+  const [rebooting, setRebooting] = useState(false)
   const [discardedNotice, setDiscardedNotice] = useState<number | null>(null)
   // Additive param documentation (issue #13) — `null` until loaded, and left
   // `null` forever on a fetch failure (unsupported firmware, asset missing,
@@ -124,6 +133,8 @@ export function ParamsPage() {
     setWriteStatus(new Map())
     setWriting(false)
     setDrawerOpen(false)
+    setRebootBanner(false)
+    setRebooting(false)
     setQuery('')
     setExpandedGroups(new Set())
     setMeta(null)
@@ -307,6 +318,11 @@ export function ParamsPage() {
   async function handleWriteAll(): Promise<void> {
     if (!paramStore) return
     setWriting(true)
+    // Names that actually wrote OK this batch — the sole input to the
+    // post-write "Reboot required" banner (PRD #12 Ticket 5): a param that
+    // failed to write never took effect, so it can't be the reason a reboot
+    // is now needed.
+    const writtenNames: string[] = []
     for (const [name, value] of [...pending.entries()]) {
       // The link can drop mid-batch: teardown disposes this exact ParamStore
       // and the paramStore-change effect above already wiped pending/
@@ -317,6 +333,7 @@ export function ParamsPage() {
       setWriteStatus((s) => new Map(s).set(name, { kind: 'writing' }))
       try {
         await paramStore.set(name, value)
+        writtenNames.push(name)
         // Show "Written and verified" for a moment rather than vanishing the
         // row immediately (spec: per-row status is writing/ok/mismatch/
         // timeout/busy — 'ok' is a real state, not just an instant clear).
@@ -338,6 +355,31 @@ export function ParamsPage() {
       }
     }
     setWriting(false)
+    if (batchNeedsReboot(writtenNames, meta ? (name) => lookupParamMeta(meta.table, name) : undefined)) setRebootBanner(true)
+  }
+
+  async function handleReboot(): Promise<void> {
+    if (!session) return
+    if (!window.confirm(t('params.rebootConfirm'))) return
+    setRebooting(true)
+    try {
+      await rebootFlightController(session)
+    } catch (err) {
+      // `rebootFlightController` already resolves `undefined` (not a
+      // rejection) for the ACK-timeout case a real reboot almost always hits
+      // (its own module doc) — a rejection here is a genuine, rarer failure
+      // (e.g. a transport-level send error). There's no dedicated error UI
+      // for this trivial-hazard, no-stop-path bench operation (PRD #12
+      // Ticket 5); only logged for diagnosis, same tolerance connection.ts
+      // itself uses for other fire-and-forget commands.
+      console.error('ParamsPage: rebootFlightController failed', err)
+    } finally {
+      // The banner's job (prompt the user to reboot) is done once the
+      // command has gone out, whatever the outcome — the connection itself
+      // dropping (or not) is the real signal from here on.
+      setRebooting(false)
+      setRebootBanner(false)
+    }
   }
 
   if (phase !== 'connected') {
@@ -451,6 +493,26 @@ export function ParamsPage() {
             className="flex-none font-bold text-nvx-warningText hover:opacity-70"
           >
             ×
+          </button>
+        </div>
+      )}
+
+      {/* Post-write "Reboot required" banner (PRD #12 Ticket 5) — plain
+          conditional render, no exit-fade state machine (unlike
+          layout/OfflineChip.tsx): dismissal/reboot here is a hard state
+          change, not something that needs to animate out. `@starting-style`
+          fires the moment this element is newly inserted, giving the
+          entrance fade for free. */}
+      {rebootBanner && (
+        <div className="mb-3 flex items-center gap-2.5 rounded-lg border border-nvx-warningBorder bg-nvx-warningSoft px-3.5 py-2.5 text-[12px] text-nvx-warningText opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none [@starting-style]:opacity-0">
+          <span className="flex-1 font-semibold">{t('params.rebootBannerText')}</span>
+          <button
+            type="button"
+            onClick={() => void handleReboot()}
+            disabled={!session || rebooting}
+            className="flex-none rounded-[9px] bg-nvx-primary px-3.5 py-1.5 text-[12px] font-bold text-white hover:bg-nvx-primaryHover disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {rebooting ? t('params.rebooting') : t('params.rebootCta')}
           </button>
         </div>
       )}
@@ -597,6 +659,7 @@ export function ParamsPage() {
             current: paramStore?.get(name)?.value ?? 0,
             next,
             status: writeStatus.get(name),
+            rebootRequired: meta ? lookupParamMeta(meta.table, name)?.rebootRequired : undefined,
           }))}
           writing={writing}
           onDiscard={discard}

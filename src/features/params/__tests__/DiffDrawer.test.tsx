@@ -123,6 +123,22 @@ describe('DiffDrawer', () => {
     expect(screen.getByText('Write 0 parameter(s)?')).toBeInTheDocument()
   })
 
+  it('shows a reboot-required badge next to a row whose rebootRequired is true, and none for a row without it', () => {
+    render(
+      <DiffDrawer
+        rows={[row({ name: 'RC_OPTIONS', rebootRequired: true }), row({ name: 'THR_MIN', rebootRequired: false })]}
+        writing={false}
+        onDiscard={vi.fn()}
+        onWriteAll={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByTitle('Reboot required')).toBeInTheDocument()
+    // Exactly one badge -- THR_MIN's row (rebootRequired: false) gets none.
+    expect(screen.getAllByTitle('Reboot required')).toHaveLength(1)
+  })
+
   it('the row list scrolls internally instead of clipping a large batch (issue #16)', () => {
     const manyRows = Array.from({ length: 250 }, (_, i) => row({ name: `PARAM_${i}` }))
     const { container } = render(<DiffDrawer rows={manyRows} writing={false} onDiscard={vi.fn()} onWriteAll={vi.fn()} onClose={vi.fn()} />)

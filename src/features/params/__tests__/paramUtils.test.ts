@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Param } from '../../../core/mavlink/params'
 import type { ParamMetaEntry } from '../../../core/paramMetadata'
 import {
+  batchNeedsReboot,
   deriveGroup,
   fetchProgressPercent,
   filterParams,
@@ -178,5 +179,33 @@ describe('rangeUnitsCaption', () => {
   it('is undefined when there is neither, or no metadata at all', () => {
     expect(rangeUnitsCaption({ displayName: 'x', description: 'y' })).toBeUndefined()
     expect(rangeUnitsCaption(undefined)).toBeUndefined()
+  })
+})
+
+describe('batchNeedsReboot', () => {
+  const table: Record<string, ParamMetaEntry> = {
+    RC_OPTIONS: { displayName: 'x', description: 'y', rebootRequired: true },
+    THR_MIN: { displayName: 'x', description: 'y' },
+  }
+  const lookup = (name: string): ParamMetaEntry | undefined => table[name]
+
+  it('true when any written name has rebootRequired', () => {
+    expect(batchNeedsReboot(['THR_MIN', 'RC_OPTIONS'], lookup)).toBe(true)
+  })
+
+  it('false when no written name has rebootRequired', () => {
+    expect(batchNeedsReboot(['THR_MIN'], lookup)).toBe(false)
+  })
+
+  it('false for an empty batch', () => {
+    expect(batchNeedsReboot([], lookup)).toBe(false)
+  })
+
+  it('false when metadata never loaded (no lookupMeta given) -- additive-fallback, not a guess', () => {
+    expect(batchNeedsReboot(['RC_OPTIONS'])).toBe(false)
+  })
+
+  it('false for a name with no metadata match', () => {
+    expect(batchNeedsReboot(['UNKNOWN_PARAM'], lookup)).toBe(false)
   })
 })

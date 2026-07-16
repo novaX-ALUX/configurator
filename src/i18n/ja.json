@@ -100,7 +100,12 @@
     "importCta": ".paramファイルをインポート",
     "importParseError": "インポートできませんでした: {{message}}",
     "importSummary": "{{staged}}件のパラメータをステージしました、{{unknown}}件スキップ(この機体では未知)、{{unchanged}}件スキップ(変更なし)",
-    "importSummaryWithPrecision": "{{staged}}件のパラメータをステージしました、{{unknown}}件スキップ(この機体では未知)、{{unchanged}}件スキップ(変更なし)、{{precision}}件スキップ(精度が失われるため)"
+    "importSummaryWithPrecision": "{{staged}}件のパラメータをステージしました、{{unknown}}件スキップ(この機体では未知)、{{unchanged}}件スキップ(変更なし)、{{precision}}件スキップ(精度が失われるため)",
+    "rebootRequiredBadge": "再起動が必要",
+    "rebootBannerText": "変更を反映するには再起動が必要です",
+    "rebootCta": "再起動",
+    "rebooting": "再起動中…",
+    "rebootConfirm": "フライトコントローラーを今すぐ再起動しますか? 再起動が完了するまで接続が切断されます。"
   },
   "dashboard": {
     "offline": "オフライン",

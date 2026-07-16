@@ -8,6 +8,8 @@ export interface DiffRow {
   current: number
   next: number
   status: DiffRowStatus | undefined
+  /** `ParamMetaEntry.rebootRequired` for this param, or `undefined` if metadata never loaded/matched — renders a small badge next to the name (PRD #12 Ticket 5). */
+  rebootRequired?: boolean
 }
 
 interface DiffDrawerProps {
@@ -65,7 +67,26 @@ export function DiffDrawer({ rows, writing, onDiscard, onWriteAll, onClose }: Di
               return (
                 <div key={row.name} className="border-t border-nvx-border px-3.5 py-2">
                   <div className="grid grid-cols-[1.4fr_1fr_1fr_70px] items-center gap-2 font-mono text-[12.5px]">
-                    <span className="font-semibold text-nvx-muted">{row.name}</span>
+                    <span className="flex items-center gap-1 font-semibold text-nvx-muted">
+                      {row.name}
+                      {row.rebootRequired && (
+                        <svg
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="flex-none text-nvx-warningText"
+                        >
+                          <title>{t('params.rebootRequiredBadge')}</title>
+                          <path d="M3 12a9 9 0 0 1 15.3-6.4M21 12a9 9 0 0 1-15.3 6.4" />
+                          <path d="M18 3v4h-4M6 21v-4h4" />
+                        </svg>
+                      )}
+                    </span>
                     <span className="text-nvx-faint">{row.current}</span>
                     <span className={`font-bold ${tone === 'failed' ? 'text-nvx-danger' : tone === 'ok' ? 'text-nvx-successText' : 'text-nvx-warningText'}`}>
                       {row.next}
