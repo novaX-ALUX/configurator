@@ -5,6 +5,7 @@
     "parameters": "Parameters",
     "debug": "Debug / Status",
     "dashboard": "Dashboard",
+    "charts": "Charts",
     "setup": "Setup",
     "calibration": "Calibration",
     "motors": "Motors",
@@ -136,6 +137,18 @@
       "title": "RC チャンネル",
       "channel": "CH{{n}}",
       "noData": "RC チャンネルのテレメトリーはまだありません。"
+    }
+  },
+  "charts": {
+    "notConnectedTitle": "チャートデータはまだありません",
+    "notConnectedBody": "フライトコントローラーに接続すると、テレメトリーをリアルタイムでチャート表示できます。ロール・ピッチ・ヨーが60秒のローリングウィンドウで流れ、切断後も直近1分間は画面に残り確認できます。",
+    "connectCta": "フライトコントローラーに接続",
+    "attitude": {
+      "title": "姿勢",
+      "unit": "度",
+      "roll": "ロール",
+      "pitch": "ピッチ",
+      "yaw": "ヨー"
     }
   },
   "setup": {

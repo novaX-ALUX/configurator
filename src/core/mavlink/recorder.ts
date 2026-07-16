@@ -30,8 +30,8 @@
  */
 import type { Telemetry, TelemetryState } from './telemetry'
 
-/** Rolling retention window — fixed at 60s in v1 (spec), not configurable. */
-const RETENTION_MS = 60_000
+/** Rolling retention window — fixed at 60s in v1 (spec), not configurable. Exported because the chart window IS the retention window (CONTEXT.md: the buffer "retains the most recent chart window"), so the Charts page derives its x-axis span from this rather than duplicating the constant. */
+export const RETENTION_MS = 60_000
 
 export interface Sample {
   /** The owning Block's receive time (`TelemetryState[block].ts`), never a clock read of the Recorder's own — Samples are plotted at real arrival times. */

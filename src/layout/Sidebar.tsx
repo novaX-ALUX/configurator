@@ -34,6 +34,12 @@ const NAV_ICONS: Record<PageId, ReactNode> = {
       <circle cx="12" cy="14.5" r="1.1" fill="currentColor" stroke="none" />
     </svg>
   ),
+  charts: (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 4.5v15h15" />
+      <path d="M7.5 14.5l3.4-4 3 2.5 4.6-6" />
+    </svg>
+  ),
   setup: (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <path d="M4.5 7.5h15M4.5 12h15M4.5 16.5h15" />

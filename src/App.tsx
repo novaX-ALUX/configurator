@@ -8,6 +8,7 @@ import { StatusPanel } from './features/debug/StatusPanel'
 import { ParamsPage } from './features/params/ParamsPage'
 import { FirmwarePage } from './features/firmware/FirmwarePage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
+import { ChartsPage } from './features/charts/ChartsPage'
 import { SetupPage } from './features/setup/SetupPage'
 import { CalibrationPage } from './features/calibration/CalibrationPage'
 import { MotorTestPage } from './features/motors/MotorTestPage'
@@ -105,6 +106,8 @@ function App() {
           <FirmwarePage />
         ) : activePage === 'dashboard' ? (
           <DashboardPage />
+        ) : activePage === 'charts' ? (
+          <ChartsPage />
         ) : activePage === 'setup' ? (
           <SetupPage />
         ) : activePage === 'calibration' ? (

@@ -5,6 +5,7 @@
     "parameters": "Parameters",
     "debug": "Debug / Status",
     "dashboard": "Dashboard",
+    "charts": "Charts",
     "setup": "Setup",
     "calibration": "Calibration",
     "motors": "Motors",
@@ -136,6 +137,18 @@
       "title": "RC Channels",
       "channel": "CH{{n}}",
       "noData": "No RC channel telemetry yet."
+    }
+  },
+  "charts": {
+    "notConnectedTitle": "No chart data yet",
+    "notConnectedBody": "Connect a flight controller to chart telemetry live. Roll, pitch, and yaw scroll through a rolling 60-second window; after a disconnect the last minute stays on screen for review.",
+    "connectCta": "Connect flight controller",
+    "attitude": {
+      "title": "Attitude",
+      "unit": "deg",
+      "roll": "Roll",
+      "pitch": "Pitch",
+      "yaw": "Yaw"
     }
   },
   "setup": {

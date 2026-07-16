@@ -5,6 +5,7 @@
     "parameters": "Parameters",
     "debug": "Debug / Status",
     "dashboard": "Dashboard",
+    "charts": "Charts",
     "setup": "Setup",
     "calibration": "Calibration",
     "motors": "Motors",
@@ -136,6 +137,18 @@
       "title": "RC 채널",
       "channel": "CH{{n}}",
       "noData": "아직 RC 채널 텔레메트리가 없습니다."
+    }
+  },
+  "charts": {
+    "notConnectedTitle": "차트 데이터가 아직 없습니다",
+    "notConnectedBody": "비행 컨트롤러를 연결하면 텔레메트리를 실시간 차트로 볼 수 있습니다. 롤·피치·요가 60초 롤링 창으로 흐르며, 연결이 끊겨도 마지막 1분은 화면에 남아 확인할 수 있습니다.",
+    "connectCta": "비행 컨트롤러 연결",
+    "attitude": {
+      "title": "자세",
+      "unit": "도",
+      "roll": "롤",
+      "pitch": "피치",
+      "yaw": "요"
     }
   },
   "setup": {

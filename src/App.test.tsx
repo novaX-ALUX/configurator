@@ -14,6 +14,9 @@ describe('App shell', () => {
     // Dashboard shipped in M2 (Task 6.2) and is now clickable too.
     expect(screen.getByRole('button', { name: 'Dashboard' })).toBeEnabled()
 
+    // Charts shipped with the Telemetry Charts tracer bullet (issue #3).
+    expect(screen.getByRole('button', { name: 'Charts' })).toBeEnabled()
+
     // Future pages are listed but disabled.
     expect(screen.getByRole('button', { name: 'Console' })).toBeDisabled()
 
