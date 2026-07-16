@@ -28,6 +28,7 @@ import { defs } from '../core/mavlink/defs'
 import { MavRouter, type MavRouterStats } from '../core/mavlink/router'
 import { ParamStore } from '../core/mavlink/params'
 import { Telemetry, type TelemetryMsg } from '../core/mavlink/telemetry'
+import { HistoryBuffer, Recorder } from '../core/mavlink/recorder'
 import type { MavSession } from '../core/mavlink/session'
 import { sendCommand } from '../core/mavlink/command'
 
@@ -181,6 +182,17 @@ export interface ConnectionState {
    * instance as this state's own `paramStore` (Task 5.4).
    */
   session: MavSession | null
+  /**
+   * Rolling History Buffer of telemetry Samples (Telemetry Charts, issue
+   * #2). Deliberately NOT part of `session`: it must survive a disconnect
+   * frozen for post-mortem inspection, so the store itself owns it and only
+   * clears it when the next connect reaches 'connected' — right before the
+   * new Recorder attaches, so a new session never shows stale Samples and a
+   * disconnect never destroys evidence. The instance is stable for the
+   * store's lifetime; readers poll its contents rather than reacting to
+   * zustand updates.
+   */
+  history: HistoryBuffer
 
   setBaud: (baud: number) => void
   connect: (baud: number, opts?: { anyDevice?: boolean }) => Promise<void>
@@ -200,13 +212,18 @@ export interface ConnectionState {
   takeoverForFlash: () => Transport | null
 }
 
+export interface ConnectionStoreOpts {
+  /** Clock handed to the session's `Telemetry` (and therefore every Block/Sample `ts`) — same injectable-`now` convention as `TelemetryOpts.now`, default `Date.now`. Lets issue #2's recording tests drive the 60s History Buffer window through this store's seam. */
+  now?: () => number
+}
+
 /**
  * Factory so tests can inject a fake `PortPicker` (`navigator.serial` doesn't
  * exist in jsdom) and get a store instance fully isolated from the app's
  * singleton. `useConnectionStore` below is just `createConnectionStore()`
  * with the real picker.
  */
-export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
+export function createConnectionStore(pickPort: PortPicker = defaultPickPort, { now }: ConnectionStoreOpts = {}) {
   return create<ConnectionState>((set, get) => {
     // Per-generation session state, never reused across a disconnect/reconnect
     // cycle (see module doc's architectural fact) — deliberately kept outside
@@ -217,7 +234,12 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
     let statsTimer: ReturnType<typeof setInterval> | undefined
     let paramStoreRef: ParamStore | undefined
     let telemetryRef: Telemetry | undefined
+    let recorderRef: Recorder | undefined
     let identityRequested = false
+    // Store-lifetime, not per-generation (see `ConnectionState.history`'s
+    // doc): teardown disposes the Recorder writing into it but leaves the
+    // buffer itself untouched; only the next 'connected' clears it.
+    const history = new HistoryBuffer()
     // Captured so `takeoverForFlash()` can unsubscribe `teardown` from the
     // transport being handed off — without this, the flash session's own
     // later `transport.close()` (after sending the reboot-to-bootloader
@@ -241,6 +263,8 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
         clearInterval(statsTimer)
         statsTimer = undefined
       }
+      recorderRef?.dispose()
+      recorderRef = undefined
       telemetryRef?.dispose()
       telemetryRef = undefined
       paramStoreRef?.dispose()
@@ -273,6 +297,7 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
       lastDisconnectReason: null,
       paramStore: null,
       session: null,
+      history,
 
       setBaud(baud) {
         set({ baud })
@@ -323,8 +348,13 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort) {
               const targetIds = { sysid: target.sysid, compid: target.compid }
               const store = new ParamStore(router, targetIds)
               paramStoreRef = store
-              const telemetry = new Telemetry(router, targetIds)
+              const telemetry = new Telemetry(router, targetIds, { now })
               telemetryRef = telemetry
+              // Clear-on-next-connect (issue #2): the previous link's
+              // Samples survive every disconnect and are discarded only
+              // here, right before the new Recorder can append anything.
+              history.clear()
+              recorderRef = new Recorder(telemetry, history)
               set({
                 paramStore: store,
                 session: { router, target: targetIds, paramStore: store, telemetry },
