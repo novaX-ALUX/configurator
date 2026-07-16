@@ -11,6 +11,7 @@ import { encodePayload } from '../../../core/mavlink/encode'
 import { decodePayload } from '../../../core/mavlink/decode'
 import { MavRouter } from '../../../core/mavlink/router'
 import { ParamStore } from '../../../core/mavlink/params'
+import type { ParamMetaFile } from '../../../core/paramMetadata'
 
 const PARAM_SET_MSGID = 23
 const MAV_PARAM_TYPE_REAL32 = 9
@@ -23,6 +24,7 @@ afterEach(() => {
   useNavigationStore.setState(initialNavigationState, true)
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function paramValueFrame(opts: { name: string; value: number; type?: number; count: number; index: number }): Uint8Array {
@@ -212,6 +214,81 @@ describe('ParamsPage', () => {
       expect(screen.queryByText(/Fetching parameters/)).not.toBeInTheDocument()
       expect(screen.getByText('STAT_RUNTIME')).toBeInTheDocument()
       expect(screen.getByText('1277 of 1277 shown')).toBeInTheDocument()
+    })
+  })
+
+  // Issue #13 tracer bullet: additive param metadata (display name +
+  // description) fetched same-origin after connect, plus the
+  // version-mismatch/unknown-fw banner. The "fetch fails" case runs first
+  // in this block deliberately — `AVAILABLE_METADATA_VERSIONS` currently
+  // bundles exactly one version, so every scenario here resolves to the
+  // same in-memory cache key in `core/paramMetadata.ts`; a rejected fetch
+  // doesn't cache (covered on its own in paramMetadata.test.ts), but a
+  // successful one does, so the fetch-failure case must run before any
+  // success case primes that cache for the rest of the file.
+  describe('parameter metadata (issue #13)', () => {
+    function mockMetaFetch(body: ParamMetaFile, ok = true): void {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })),
+      )
+    }
+
+    async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>, fwVersion?: string) {
+      const { transport, paramStore } = await makeConnectedParamStore()
+      await feedAll(transport, entries)
+      useConnectionStore.setState({ phase: 'connected', paramStore, identity: fwVersion ? { fwVersion } : null })
+      render(<ParamsPage />)
+      return { transport, paramStore }
+    }
+
+    it('a metadata fetch failure degrades the whole page to raw rendering, not an error state', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })))
+      await renderLoaded([{ name: 'COMPASS_AUTO_ROT', value: 1 }], '4.6.3')
+      await tick()
+
+      // The table itself is entirely unaffected — same raw rendering as
+      // if metadata never existed, no crash, no error banner.
+      expect(screen.getByText('COMPASS_AUTO_ROT')).toBeInTheDocument()
+      expect(screen.queryByText('Automatically check orientation')).not.toBeInTheDocument()
+    })
+
+    it('shows the generated display name + description on a matched row, and leaves an unmatched row exactly as before', async () => {
+      mockMetaFetch({
+        COMPASS_AUTO_ROT: {
+          displayName: 'Automatically check orientation',
+          description: 'Checks compass orientation after calibration.',
+        },
+      })
+      await renderLoaded([
+        { name: 'COMPASS_AUTO_ROT', value: 1 },
+        { name: 'NOT_IN_METADATA', value: 0 },
+      ], '4.6.3')
+      await tick()
+
+      expect(screen.getByText('Automatically check orientation')).toBeInTheDocument()
+      expect(screen.getByText('Checks compass orientation after calibration.')).toBeInTheDocument()
+      // Unmatched row: raw name renders, no metadata line — regression guard for the additive fallback.
+      expect(screen.getByText('NOT_IN_METADATA')).toBeInTheDocument()
+    })
+
+    it('shows the version-mismatch banner (and no banner once dismissed) when fwVersion does not match the bundled branch', async () => {
+      mockMetaFetch({ SOME_PARAM: { displayName: 'x', description: 'y' } })
+      await renderLoaded([{ name: 'SOME_PARAM', value: 0 }], '5.1.0')
+      await tick()
+
+      expect(screen.getByText(/this vehicle reports 5\.1\.0/)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+      expect(screen.queryByText(/this vehicle reports 5\.1\.0/)).not.toBeInTheDocument()
+    })
+
+    it('shows the unknown-firmware banner when fwVersion never arrived', async () => {
+      mockMetaFetch({ SOME_PARAM: { displayName: 'x', description: 'y' } })
+      await renderLoaded([{ name: 'SOME_PARAM', value: 0 }], undefined)
+      await tick()
+
+      expect(screen.getByText(/Firmware version unknown/)).toBeInTheDocument()
     })
   })
 

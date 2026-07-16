@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
 import { ParamStoreDisposedError, type FetchProgressState } from '../../core/mavlink/params'
+import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata } from '../../core/paramMetadata'
 import { ParamRow } from './ParamRow'
 import { DiffDrawer, type DiffRowStatus } from './DiffDrawer'
 import { fetchErrorMessage, fetchProgressPercent, filterParams, paginate, paramPageSize, topGroups, totalPages, withoutKey, writeErrorStatus } from './paramUtils'
@@ -52,6 +53,7 @@ export function ParamsPage() {
   const baud = useConnectionStore((s) => s.baud)
   const connect = useConnectionStore((s) => s.connect)
   const paramStore = useConnectionStore((s) => s.paramStore)
+  const identity = useConnectionStore((s) => s.identity)
   const setGuardNavigation = useNavigationStore((s) => s.setGuardNavigation)
 
   // Lazy initializer, not a plain `{ kind: 'idle' }` literal: `paramStore` may
@@ -78,6 +80,12 @@ export function ParamsPage() {
   const [writing, setWriting] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [discardedNotice, setDiscardedNotice] = useState<number | null>(null)
+  // Additive param documentation (issue #13) — `null` until loaded, and left
+  // `null` forever on a fetch failure (unsupported firmware, asset missing,
+  // offline): every row already renders its raw name/type/index without
+  // this, so there is no error state here, only "not available yet".
+  const [meta, setMeta] = useState<LoadedParamMetadata | null>(null)
+  const [metaBannerDismissed, setMetaBannerDismissed] = useState(false)
 
   const prevParamStoreRef = useRef(paramStore)
   // Mirrors `writeStatus` for the scheduled ok-then-clear timeout below to
@@ -107,8 +115,33 @@ export function ParamsPage() {
     setQuery('')
     setGroup(null)
     setPage(1)
+    setMeta(null)
+    setMetaBannerDismissed(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramStore])
+
+  // Same-origin lazy fetch after connect (core/firmware/manifest.ts's fetch
+  // pattern) — independent of the param *table* fetch above (`handleLoad`/
+  // `fetchProgress`): metadata is documentation, not part of the live
+  // parameter cache, so it loads on its own schedule and a failure here
+  // never blocks or errors the table. Re-runs if `fwVersion` resolves after
+  // this first fires (AUTOPILOT_VERSION can arrive a beat after 'connected')
+  // — cheap, since `fetchParamMetadata` caches by version and the version
+  // picked rarely changes.
+  useEffect(() => {
+    if (!paramStore) return
+    let cancelled = false
+    loadParamMetadata(identity?.fwVersion)
+      .then((result) => {
+        if (!cancelled) setMeta(result)
+      })
+      .catch(() => {
+        if (!cancelled) setMeta(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [paramStore, identity?.fwVersion])
 
   // A real ArduPilot fetchAll delivers 800+ PARAM_VALUEs, each firing onChange
   // — bumping `version` (and so re-deriving paramsArray/groups/filtered) on
@@ -340,6 +373,24 @@ export function ParamsPage() {
         <span className="ml-auto font-mono text-[11px] text-nvx-faint">{t('params.count', { shown: filtered.length, total: paramsArray.length })}</span>
       </div>
 
+      {meta && meta.banner.kind !== 'exact' && !metaBannerDismissed && (
+        <div className="mb-3 flex items-start gap-2.5 rounded-lg border border-nvx-warningBorder bg-nvx-warningSoft px-3.5 py-2.5 text-[12px] text-nvx-warningText">
+          <span className="flex-1">
+            {meta.banner.kind === 'mismatch'
+              ? t('params.metaVersionMismatch', { bundled: meta.banner.bundled, fwVersion: meta.banner.fwVersion })
+              : t('params.metaVersionUnknown', { bundled: meta.banner.bundled })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setMetaBannerDismissed(true)}
+            aria-label={t('params.metaBannerDismiss')}
+            className="flex-none font-bold text-nvx-warningText hover:opacity-70"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           value={query}
@@ -383,7 +434,9 @@ export function ParamsPage() {
           {pageItems.length === 0 ? (
             <p className="px-4 py-3 text-[12px] text-nvx-faint">{t('params.noResults')}</p>
           ) : (
-            pageItems.map((p) => <ParamRow key={p.name} param={p} stagedValue={pending.get(p.name)} onStage={stage} />)
+            pageItems.map((p) => (
+              <ParamRow key={p.name} param={p} stagedValue={pending.get(p.name)} onStage={stage} meta={meta ? lookupParamMeta(meta.table, p.name) : undefined} />
+            ))
           )}
         </div>
         <div className="flex items-center justify-between border-t border-nvx-border px-4 py-2 text-[11.5px] text-nvx-muted">

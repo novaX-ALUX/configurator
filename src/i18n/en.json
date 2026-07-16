@@ -96,7 +96,10 @@
     "statusTimeout": "No confirmation from the board (timed out)",
     "statusBusy": "Write already in progress for this parameter",
     "statusPrecision": "Value too large to store exactly — not sent",
-    "statusError": "Write failed: {{message}}"
+    "statusError": "Write failed: {{message}}",
+    "metaVersionMismatch": "Parameter descriptions are for ArduCopter {{bundled}}; this vehicle reports {{fwVersion}} — some parameters may be undocumented or described slightly differently.",
+    "metaVersionUnknown": "Firmware version unknown — parameter descriptions are for ArduCopter {{bundled}} and may not match exactly.",
+    "metaBannerDismiss": "Dismiss"
   },
   "dashboard": {
     "offline": "Offline",

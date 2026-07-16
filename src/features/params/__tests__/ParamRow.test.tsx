@@ -91,4 +91,31 @@ describe('ParamRow', () => {
     expect(onStage).not.toHaveBeenCalled()
     expect(screen.getByRole('alert')).toBeInTheDocument()
   })
+
+  // Issue #13: additive display-name/description line, purely additional to
+  // the raw name — never a replacement for it (PRD #12 §2.1/§1.4).
+  describe('meta (issue #13 param metadata)', () => {
+    it('renders the raw name exactly as before when no metadata is available (regression guard for the additive fallback)', () => {
+      render(<ParamRow param={param()} stagedValue={undefined} onStage={vi.fn()} />)
+
+      expect(screen.getByText('THR_MIN')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('100')).toBeInTheDocument()
+      expect(screen.getByText('INT32')).toBeInTheDocument()
+    })
+
+    it('renders the display name and description alongside the raw name when metadata matches', () => {
+      render(
+        <ParamRow
+          param={param()}
+          stagedValue={undefined}
+          onStage={vi.fn()}
+          meta={{ displayName: 'Throttle minimum', description: 'Minimum throttle output.' }}
+        />,
+      )
+
+      expect(screen.getByText('THR_MIN')).toBeInTheDocument()
+      expect(screen.getByText('Throttle minimum')).toBeInTheDocument()
+      expect(screen.getByText('Minimum throttle output.')).toBeInTheDocument()
+    })
+  })
 })

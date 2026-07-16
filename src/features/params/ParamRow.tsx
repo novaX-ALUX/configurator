@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Param } from '../../core/mavlink/params'
+import type { ParamMetaEntry } from '../../core/paramMetadata'
 import { isIntegerParamType, paramTypeLabel, wouldLosePrecision } from './paramUtils'
 
 interface ParamRowProps {
@@ -8,6 +9,14 @@ interface ParamRowProps {
   /** Staged edit for this param (from `ParamsPage`'s pending map), or `undefined` if untouched. */
   stagedValue: number | undefined
   onStage: (name: string, value: number) => void
+  /**
+   * Generated documentation for this param (`core/paramMetadata.ts`), or
+   * `undefined` if metadata never loaded or this specific name has no exact
+   * or pattern match — either way the row renders exactly as it did before
+   * this field existed (PRD #12 §1.4/§2.1, issue #13's tracer bullet: purely
+   * additive, no grouping/enum/default change).
+   */
+  meta?: ParamMetaEntry
 }
 
 /**
@@ -19,7 +28,7 @@ interface ParamRowProps {
  * (`ParamPrecisionLossError`), so catching it here means the diff drawer
  * never queues a write that's guaranteed to fail.
  */
-export function ParamRow({ param, stagedValue, onStage }: ParamRowProps) {
+export function ParamRow({ param, stagedValue, onStage, meta }: ParamRowProps) {
   const { t } = useTranslation()
   const displayValue = stagedValue ?? param.value
   const [text, setText] = useState(String(displayValue))
@@ -68,10 +77,14 @@ export function ParamRow({ param, stagedValue, onStage }: ParamRowProps) {
         pending ? 'bg-nvx-warningSoft' : ''
       }`}
     >
-      <span className={`flex items-center gap-1.5 font-mono text-[12px] font-semibold ${pending ? 'text-nvx-warningText' : 'text-nvx-text'}`}>
-        {pending && <span title={t('params.modifiedTitle')} className="h-1.5 w-1.5 flex-none rounded-full bg-nvx-warning" />}
-        {param.name}
-      </span>
+      <div className="flex flex-col gap-0.5 py-1">
+        <span className={`flex items-center gap-1.5 font-mono text-[12px] font-semibold ${pending ? 'text-nvx-warningText' : 'text-nvx-text'}`}>
+          {pending && <span title={t('params.modifiedTitle')} className="h-1.5 w-1.5 flex-none rounded-full bg-nvx-warning" />}
+          {param.name}
+          {meta && <span className="truncate font-sans text-[11px] font-medium text-nvx-muted">{meta.displayName}</span>}
+        </span>
+        {meta && <span className="text-[10.5px] leading-snug text-nvx-faint">{meta.description}</span>}
+      </div>
       <div className="flex flex-col gap-0.5">
         <input
           aria-label={param.name}

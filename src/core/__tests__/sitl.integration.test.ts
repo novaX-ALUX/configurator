@@ -16,14 +16,45 @@
  *
  * @vitest-environment node
  */
+import { existsSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { WebSocketTransport } from '../transport/websocket'
 import { defs } from '../mavlink/defs'
 import { MavRouter, type LinkState } from '../mavlink/router'
 import { ParamStore } from '../mavlink/params'
+import { AVAILABLE_METADATA_VERSIONS, buildParamMetaTable, lookupParamMeta, matchFirmwareVersion, type ParamMetaFile, type ParamMetaTable } from '../paramMetadata'
 
 const BRIDGE_URL = process.env.SITL_WS_URL ?? 'ws://localhost:5761'
 const TEST_PARAM = 'LOG_BITMASK'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = path.resolve(__dirname, '../../..')
+const METADATA_DIR = path.join(REPO_ROOT, 'public/param-metadata')
+
+/**
+ * Reads the generated metadata file straight off disk (`node:fs`, not
+ * `fetchParamMetadata`'s HTTP `fetch`) — this test runs under Vitest's
+ * `node` environment with no dev/preview server behind it, so there's no
+ * same-origin URL to fetch. `public/param-metadata/*.json` is committed
+ * (PRD #12 §1.1), so a normal checkout already has it; if the submodule pin
+ * has moved since it was last regenerated, re-run
+ * `node tools/generate-param-metadata.mjs` first, same as this test already
+ * requires building SITL itself (docs/notes/sitl.md).
+ */
+function loadBundledMetadataForTest(): ParamMetaTable {
+  const version = matchFirmwareVersion(AVAILABLE_METADATA_VERSIONS, undefined) // newest bundled — this test doesn't decode AUTOPILOT_VERSION itself
+  const filePath = path.join(METADATA_DIR, `${version}.json`)
+  if (!existsSync(filePath)) {
+    throw new Error(
+      `SITL integration: ${filePath} not found — run \`node tools/generate-param-metadata.mjs\` first ` +
+        '(requires the ardupilot submodule + python3, see that script\'s own module doc)',
+    )
+  }
+  const json = JSON.parse(readFileSync(filePath, 'utf8')) as ParamMetaFile
+  return buildParamMetaTable(json)
+}
 
 // SITL over a TCP round trip (plus its own param-storm pacing) is much
 // slower than the MockTransport-backed unit tests elsewhere in mavlink/ —
@@ -92,6 +123,17 @@ describe.skipIf(process.env.SITL !== '1')('SITL integration (real ArduPilot via 
           await store.fetchAll()
           expect(store.all.size).toBeGreaterThan(500)
           console.info(`SITL integration: fetchAll collected ${store.all.size} params`)
+
+          // Proves the generated JSON actually matches live protocol data
+          // (issue #13 / PRD #12 §4) — a real param name fetched from a live
+          // SITL instance built from the same pinned submodule commit must
+          // resolve through lookupParamMeta against the bundled metadata,
+          // not just round-trip the generation script's own output.
+          const metaTable = loadBundledMetadataForTest()
+          const meta = lookupParamMeta(metaTable, TEST_PARAM)
+          expect(meta).toBeDefined()
+          expect(meta!.displayName.length).toBeGreaterThan(0)
+          console.info(`SITL integration: ${TEST_PARAM} metadata -> "${meta!.displayName}"`)
 
           const original = store.get(TEST_PARAM)
           expect(original).toBeDefined()

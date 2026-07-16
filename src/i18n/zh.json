@@ -96,7 +96,10 @@
     "statusTimeout": "飞控未确认（已超时）",
     "statusBusy": "该参数正在写入中",
     "statusPrecision": "数值过大，无法精确存储 — 未发送",
-    "statusError": "写入失败:{{message}}"
+    "statusError": "写入失败:{{message}}",
+    "metaVersionMismatch": "参数说明基于 ArduCopter {{bundled}}；此设备报告的版本是 {{fwVersion}} — 部分参数可能缺少文档或描述略有出入。",
+    "metaVersionUnknown": "固件版本未知 — 参数说明基于 ArduCopter {{bundled}}，可能无法完全匹配。",
+    "metaBannerDismiss": "关闭"
   },
   "dashboard": {
     "offline": "离线",

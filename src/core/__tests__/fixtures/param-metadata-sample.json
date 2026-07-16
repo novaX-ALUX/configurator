@@ -1,0 +1,108 @@
+{
+  "COMPASS_AUTO_ROT": {
+    "displayName": "Automatically check orientation",
+    "description": "When enabled this will automatically check the orientation of compasses on successful completion of compass calibration. If set to 2 then external compasses will have their orientation automatically corrected.",
+    "values": [
+      {
+        "value": 0,
+        "label": "Disabled"
+      },
+      {
+        "value": 1,
+        "label": "CheckOnly"
+      },
+      {
+        "value": 2,
+        "label": "CheckAndFix"
+      },
+      {
+        "value": 3,
+        "label": "use same tolerance to auto rotate 45 deg rotations"
+      }
+    ]
+  },
+  "MOT_PWM_TYPE": {
+    "displayName": "Output PWM type",
+    "description": "This selects the output PWM type, allowing for normal PWM continuous output, OneShot, brushed or DShot motor output.PWMRange and PWMAngle are PWM special/rare cases for ESCs that dont calibrate normally (some Sub motors) or where each ESC must have its PWM range set individually using the Servo params instead of PWM_MIN/MAX parameters.",
+    "values": [
+      {
+        "value": 0,
+        "label": "Normal"
+      },
+      {
+        "value": 1,
+        "label": "OneShot"
+      },
+      {
+        "value": 2,
+        "label": "OneShot125"
+      },
+      {
+        "value": 3,
+        "label": "Brushed"
+      },
+      {
+        "value": 4,
+        "label": "DShot150"
+      },
+      {
+        "value": 5,
+        "label": "DShot300"
+      },
+      {
+        "value": 6,
+        "label": "DShot600"
+      },
+      {
+        "value": 7,
+        "label": "DShot1200"
+      },
+      {
+        "value": 8,
+        "label": "PWMRange"
+      },
+      {
+        "value": 9,
+        "label": "PWMAngle"
+      }
+    ],
+    "rebootRequired": true
+  },
+  "LOG_BITMASK": {
+    "displayName": "Log bitmask",
+    "description": "Bitmap of what on-board log types to enable. This value is made up of the sum of each of the log types you want to be saved. It is usually best just to enable all basiclog types by setting this to 65535. Note that if you want to reduce log sizes you should consider using LOG_FILE_RATEMAX instead of disabling logging items with this parameter."
+  },
+  "RC{idx}_MIN": {
+    "displayName": "RC min PWM",
+    "description": "RC minimum PWM pulse width in microseconds. Typically 1000 is lower limit, 1500 is neutral and 2000 is upper limit.",
+    "units": "PWM",
+    "range": [
+      800,
+      2200
+    ],
+    "increment": 1
+  },
+  "SERVO{idx}_FUNCTION": {
+    "displayName": "Servo output function",
+    "description": "Function assigned to this servo. Setting this to Disabled(0) will setup this output for control by auto missions or MAVLink servo set commands. any other value will enable the corresponding function",
+    "values": [
+      {
+        "value": -1,
+        "label": "GPIO"
+      },
+      {
+        "value": 0,
+        "label": "Disabled"
+      },
+      {
+        "value": 1,
+        "label": "RCPassThru"
+      },
+      {
+        "value": 6,
+        "label": "Mount1Yaw"
+      }
+    ],
+    "rebootRequired": true
+  }
+}
