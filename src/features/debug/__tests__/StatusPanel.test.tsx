@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import '../../../i18n'
 import { StatusPanel } from '../StatusPanel'
 import { useConnectionStore, type StatusTextEntry } from '../../../store/connection'
+import { MessageAggregateStore } from '../../../core/mavlink/inspector'
+import type { DecodedMessage } from '../../../core/mavlink/decode'
 
 const initialState = useConnectionStore.getState()
 
@@ -55,6 +57,18 @@ describe('StatusPanel', () => {
     expect(screen.getByText('info thing')).toBeInTheDocument()
     expect(screen.getByText('2 messages · buffer 500')).toBeInTheDocument()
     expect(screen.getByText('42 in · 3 out · 1 CRC errors · 2 dropped')).toBeInTheDocument()
+  })
+
+  it('connected: mounts the bare Messages table (tracer, issue #24 Ticket 1), reading the store\'s inspector', () => {
+    const inspector = new MessageAggregateStore()
+    const heartbeat: DecodedMessage = { msgid: 0, name: 'HEARTBEAT', fields: { type: 2 } }
+    inspector.record(heartbeat, 1000)
+    useConnectionStore.setState({ phase: 'connected', statustext: [], inspector })
+
+    render(<StatusPanel />)
+
+    expect(screen.getByText('Messages')).toBeInTheDocument()
+    expect(screen.getByText('HEARTBEAT')).toBeInTheDocument()
   })
 
   it('connected with an empty buffer: shows the "no messages yet" row', () => {

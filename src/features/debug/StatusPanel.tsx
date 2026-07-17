@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore, type StatusTextEntry } from '../../store/connection'
 import { formatTime } from '../../utils/time'
+import { MessagesTable } from '../console/MessagesTable'
 
 /**
  * MAV_SEVERITY (0 EMERGENCY .. 7 DEBUG) collapsed into the 4 visual tiers this
@@ -51,6 +52,7 @@ export function StatusPanel() {
   const phase = useConnectionStore((s) => s.phase)
   const statustext = useConnectionStore((s) => s.statustext)
   const linkStats = useConnectionStore((s) => s.linkStats)
+  const inspector = useConnectionStore((s) => s.inspector)
   const connect = useConnectionStore((s) => s.connect)
   const baud = useConnectionStore((s) => s.baud)
   const clearStatustext = useConnectionStore((s) => s.clearStatustext)
@@ -170,6 +172,12 @@ export function StatusPanel() {
           </span>
         )}
       </div>
+
+      {/* Bare tracer table (issue #24 Ticket 1): proves the
+          MessageAggregateStore tap point end-to-end before Ticket 2 moves
+          this into the real Console page. Temporary — mounted here only for
+          this ticket, not a permanent StatusPanel feature. */}
+      <MessagesTable inspector={inspector} />
     </div>
   )
 }

@@ -29,6 +29,7 @@ import { MavRouter, type MavRouterStats } from '../core/mavlink/router'
 import { ParamStore } from '../core/mavlink/params'
 import { Telemetry, type TelemetryMsg } from '../core/mavlink/telemetry'
 import { HistoryBuffer, Recorder } from '../core/mavlink/recorder'
+import { MessageAggregateStore } from '../core/mavlink/inspector'
 import type { MavSession } from '../core/mavlink/session'
 import { sendCommand } from '../core/mavlink/command'
 
@@ -193,6 +194,16 @@ export interface ConnectionState {
    * zustand updates.
    */
   history: HistoryBuffer
+  /**
+   * Store-lifetime `MessageAggregateStore` (Console/Inspector, issue #24):
+   * per-msgid count/Hz-window/lastSeen/latest decoded fields for every
+   * message from the resolved target, fed by a direct `router.subscribe()`
+   * tap added alongside `unsubStatusText` below. Deliberately NOT part of
+   * `session` and, like `history`, never cleared in `resetSession()`/
+   * teardown() — a disconnect must never destroy evidence a still-open
+   * Console page is showing; only the next connect clears it.
+   */
+  inspector: MessageAggregateStore
 
   setBaud: (baud: number) => void
   connect: (baud: number, opts?: { anyDevice?: boolean }) => Promise<void>
@@ -240,6 +251,9 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort, { 
     // doc): teardown disposes the Recorder writing into it but leaves the
     // buffer itself untouched; only the next 'connected' clears it.
     const history = new HistoryBuffer()
+    // Store-lifetime, same freeze/clear-on-next-connect contract as
+    // `history` above (see `ConnectionState.inspector`'s doc).
+    const inspector = new MessageAggregateStore()
     // Captured so `takeoverForFlash()` can unsubscribe `teardown` from the
     // transport being handed off — without this, the flash session's own
     // later `transport.close()` (after sending the reboot-to-bootloader
@@ -298,6 +312,7 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort, { 
       paramStore: null,
       session: null,
       history,
+      inspector,
 
       setBaud(baud) {
         set({ baud })
@@ -354,7 +369,21 @@ export function createConnectionStore(pickPort: PortPicker = defaultPickPort, { 
               // Samples survive every disconnect and are discarded only
               // here, right before the new Recorder can append anything.
               history.clear()
+              // Same clear-on-next-connect instant for the Inspector's
+              // aggregate map (issue #24, PRD §4) — a new session must
+              // never show a stale previous session's data.
+              inspector.clear()
               recorderRef = new Recorder(telemetry, history)
+              // Tap point (PRD §2): every decoded message from the resolved
+              // target, added beside `unsubStatusText` below — no new class
+              // wraps the subscription itself, just one more entry in
+              // `router`'s existing subscribers Set. No sysid/compid
+              // literal: `targetIds` is the same resolved target already
+              // threaded through the identity requests just below.
+              const unsubInspector = router.subscribe(targetIds, (msg) => {
+                inspector.record(msg, Date.now())
+              })
+              cleanupFns.push(unsubInspector)
               set({
                 paramStore: store,
                 session: { router, target: targetIds, paramStore: store, telemetry },
