@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   AVAILABLE_METADATA_VERSIONS,
   buildParamMetaTable,
+  fetchParamDefaults,
   fetchParamMetadata,
+  loadParamDefaults,
   loadParamMetadata,
   lookupParamMeta,
   matchFirmwareVersion,
@@ -168,5 +170,73 @@ describe('loadParamMetadata', () => {
     expect(banner).toEqual({ kind: 'exact' })
     expect(fetchFn).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}param-metadata/${AVAILABLE_METADATA_VERSIONS[0]}.json`, { cache: 'no-cache' })
     expect(lookupParamMeta(table, 'COMPASS_AUTO_ROT')).toBeDefined()
+  })
+})
+
+// PRD #12 §2.4 (issue #15): the second generated asset, ArduCopter SITL
+// default values (`{version}.defaults.json`, `Record<string, number>`) —
+// same same-origin/lazy/cached-per-version fetch pattern as
+// `fetchParamMetadata`/`loadParamMetadata` above, but a separate cache and a
+// separate structural check (every value must be a `number`, not a
+// `ParamMetaEntry` object).
+describe('fetchParamDefaults', () => {
+  const sampleDefaults = { THR_MIN: 0, ATC_RAT_YAW_P: 0.3, COMPASS_OFS_X: 5 }
+
+  it('fetches the same-origin versioned defaults file and returns a plain name->number record', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => sampleDefaults })
+
+    const defaults = await fetchParamDefaults('9.9', fetchFn)
+
+    expect(fetchFn).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}param-metadata/9.9.defaults.json`, { cache: 'no-cache' })
+    expect(defaults).toEqual(sampleDefaults)
+  })
+
+  it('throws on a non-2xx response', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 404 })
+    await expect(fetchParamDefaults('0.0-defaults', fetchFn)).rejects.toThrow(/404/)
+  })
+
+  it.each([
+    ['a JSON array instead of an object', ['not', 'an', 'object']],
+    ['an entry that is not a number (a metadata entry shape, by mistake)', { FOO: { displayName: 'x' } }],
+    ['an entry that is a string', { FOO: '1.0' }],
+  ])('rejects malformed defaults JSON: %s', async (_label, body) => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => body })
+    await expect(fetchParamDefaults(`bad-defaults-${_label}`, fetchFn)).rejects.toThrow()
+  })
+
+  it('caches the result so a second call for the same version does not refetch', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => sampleDefaults })
+    await fetchParamDefaults('7.7-defaults', fetchFn)
+    await fetchParamDefaults('7.7-defaults', fetchFn)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not cache a rejected fetch, so a later call can retry', async () => {
+    const fetchFn = vi.fn().mockRejectedValueOnce(new TypeError('network down')).mockResolvedValueOnce({ ok: true, json: async () => sampleDefaults })
+    await expect(fetchParamDefaults('8.8-defaults', fetchFn)).rejects.toThrow('network down')
+    await expect(fetchParamDefaults('8.8-defaults', fetchFn)).resolves.toBeDefined()
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('loadParamDefaults', () => {
+  // Deliberately before the success case below — see the identical ordering
+  // note on `describe('loadParamMetadata')` above: `AVAILABLE_METADATA_VERSIONS`
+  // has exactly one bundled version, so both tests resolve to the same
+  // `defaultsCache` key; running the rejecting fetch first keeps that key
+  // unprimed for the success test that follows.
+  it('rejects if the underlying fetch fails, leaving degrade-to-no-defaults to the caller', async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError('offline'))
+    await expect(loadParamDefaults(undefined, fetchFn)).rejects.toThrow('offline')
+  })
+
+  it('resolves the same bundled version matchFirmwareVersion would pick, independent of loadParamMetadata', async () => {
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ THR_MIN: 0 }) })
+
+    const defaults = await loadParamDefaults('4.6.3', fetchFn)
+
+    expect(fetchFn).toHaveBeenCalledWith(`${import.meta.env.BASE_URL}param-metadata/${AVAILABLE_METADATA_VERSIONS[0]}.defaults.json`, { cache: 'no-cache' })
+    expect(defaults).toEqual({ THR_MIN: 0 })
   })
 })

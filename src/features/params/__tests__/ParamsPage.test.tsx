@@ -11,7 +11,7 @@ import { encodePayload } from '../../../core/mavlink/encode'
 import { decodePayload } from '../../../core/mavlink/decode'
 import { MavRouter } from '../../../core/mavlink/router'
 import { ParamStore } from '../../../core/mavlink/params'
-import type { ParamMetaFile } from '../../../core/paramMetadata'
+import type { ParamDefaultsFile, ParamMetaFile } from '../../../core/paramMetadata'
 
 const PARAM_SET_MSGID = 23
 const MAV_PARAM_TYPE_REAL32 = 9
@@ -94,6 +94,25 @@ function mockMetaFetch(body: ParamMetaFile, ok = true): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })),
+  )
+}
+
+/**
+ * Stubs `fetch` for both same-origin param assets at once — the `.json`
+ * metadata file and the `.defaults.json` SITL-defaults file (issue #15,
+ * PRD #12 §2.4) — routing by URL so a test can mock them independently (a
+ * defaults-fetch failure must never affect metadata, and vice versa, PRD
+ * §1.4's additive-fallback principle extended to the second asset).
+ */
+function mockParamAssetFetch(opts: { meta?: ParamMetaFile; metaOk?: boolean; defaults?: ParamDefaultsFile; defaultsOk?: boolean }): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      if (url.includes('.defaults.json')) {
+        return new Response(JSON.stringify(opts.defaults ?? {}), { status: opts.defaultsOk === false ? 404 : 200 })
+      }
+      return new Response(JSON.stringify(opts.meta ?? {}), { status: opts.metaOk === false ? 404 : 200 })
+    }),
   )
 }
 
@@ -320,6 +339,93 @@ describe('ParamsPage', () => {
       await tick()
 
       expect(screen.getByText(/Firmware version unknown/)).toBeInTheDocument()
+    })
+  })
+
+  // Issue #15 (PRD #12 §2.4): default markers ("Default: {n}" caption +
+  // warning-tone highlight) and the "Not Default" filter toggle, both driven
+  // by the second generated asset (`{version}.defaults.json`) fetched
+  // independently of display-name/description metadata.
+  //
+  // Ordering note (same reasoning as the "parameter metadata (issue #13)"
+  // block above): `AVAILABLE_METADATA_VERSIONS` bundles exactly one version,
+  // so `core/paramMetadata.ts`'s module-level `defaultsCache` resolves every
+  // test below to the same cache key — a rejected fetch doesn't cache
+  // (covered on its own in paramMetadata.test.ts), but a successful one
+  // does. The fetch-failure (disabled-toggle) case therefore runs first,
+  // then exactly one successful fetch (`SHARED_DEFAULTS`) primes the cache
+  // for every remaining test in this block, which reuse it rather than
+  // re-mocking (a later `mockParamAssetFetch({ defaults: ... })` call would
+  // be silently ignored once the cache is warm).
+  describe('default markers + Not Default filter (issue #15)', () => {
+    const SHARED_DEFAULTS = { THR_MIN: 50, THR_MAX: 900 }
+
+    async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>, fwVersion = '4.6.3') {
+      const { transport, paramStore } = await makeConnectedParamStore()
+      await feedAll(transport, entries)
+      useConnectionStore.setState({ phase: 'connected', paramStore, identity: { fwVersion } })
+      render(<ParamsPage />)
+      expandAllGroups()
+      return { transport, paramStore }
+    }
+
+    it('disables the toggle until defaults data has loaded, rather than a silently-empty filter', async () => {
+      mockParamAssetFetch({ defaultsOk: false })
+      await renderLoaded([{ name: 'THR_MIN', value: 100 }])
+      await tick()
+
+      expect(screen.getByRole('button', { name: 'Not Default' })).toBeDisabled()
+      // The table itself is unaffected by the defaults-fetch failure — same
+      // additive-fallback principle as a metadata-fetch failure (PRD §1.4).
+      expect(screen.getByText('THR_MIN')).toBeInTheDocument()
+    })
+
+    it('shows the "Default: {n}" caption + warning highlight only on a row that differs; no caption when it matches or has no bundled default', async () => {
+      mockParamAssetFetch({ defaults: SHARED_DEFAULTS }) // primes the shared cache for the rest of this block
+      await renderLoaded([
+        { name: 'THR_MIN', value: 100 }, // differs from its bundled default (50)
+        { name: 'THR_MAX', value: 900 }, // matches its bundled default
+        { name: 'NO_DEFAULT_PARAM', value: 1 }, // no entry in the defaults file at all
+      ])
+      await tick()
+
+      expect(screen.getByText('Default: 50')).toBeInTheDocument()
+      expect(screen.queryAllByText(/^Default:/)).toHaveLength(1) // only THR_MIN's row
+    })
+
+    it('shows the accuracy caveat prominently next to the "Not Default" toggle', async () => {
+      await renderLoaded([{ name: 'THR_MIN', value: 100 }])
+      await tick()
+
+      expect(screen.getByRole('button', { name: 'Not Default' })).toBeInTheDocument()
+      expect(screen.getByText(/Compared against ArduCopter SITL defaults/)).toBeInTheDocument()
+    })
+
+    it('toggling "Not Default" filters the table to only rows that differ from their bundled default, and back off shows everything again', async () => {
+      await renderLoaded([
+        { name: 'THR_MIN', value: 100 }, // differs
+        { name: 'THR_MAX', value: 900 }, // matches
+      ])
+      await tick()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Not Default' }))
+      expect(screen.getByText('THR_MIN')).toBeInTheDocument()
+      expect(screen.queryByText('THR_MAX')).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Not Default' }))
+      expect(screen.getByText('THR_MAX')).toBeInTheDocument()
+    })
+
+    it('a param with no bundled default is excluded from the Not-Default filter\'s positive set — never guessed', async () => {
+      await renderLoaded([
+        { name: 'THR_MIN', value: 100 }, // differs, has a default -> included
+        { name: 'NO_DEFAULT_PARAM', value: 12345 }, // no default entry -> excluded even though never touched
+      ])
+      await tick()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Not Default' }))
+      expect(screen.getByText('THR_MIN')).toBeInTheDocument()
+      expect(screen.queryByText('NO_DEFAULT_PARAM')).not.toBeInTheDocument()
     })
   })
 

@@ -161,6 +161,48 @@ describe('ParamRow', () => {
     })
   })
 
+  // Issue #15 (PRD #12 §2.4): "Default: {n}" caption + the existing
+  // warning-tone highlight (reused from the pending/staged-edit styling, no
+  // new visual language) when the live value differs from the bundled SITL
+  // default. Comparison uses `param.value` (the live/on-board value), not a
+  // staged edit — the whole point is "has this ever been touched", which a
+  // not-yet-written staged value can't answer.
+  describe('default marker (issue #15)', () => {
+    it('shows the "Default: {n}" caption and the warning-tone highlight when the live value differs from the bundled default', () => {
+      render(<ParamRow param={param({ value: 100 })} stagedValue={undefined} onStage={vi.fn()} defaultValue={50} />)
+
+      expect(screen.getByText('Default: 50')).toBeInTheDocument()
+      expect(screen.getByText('THR_MIN')).toHaveClass('text-nvx-warningText')
+    })
+
+    it('shows no caption, and no highlight, when the live value matches the bundled default', () => {
+      render(<ParamRow param={param({ value: 50 })} stagedValue={undefined} onStage={vi.fn()} defaultValue={50} />)
+
+      expect(screen.queryByText(/^Default:/)).not.toBeInTheDocument()
+      expect(screen.getByText('THR_MIN')).toHaveClass('text-nvx-text')
+    })
+
+    it('shows no caption when there is no bundled default at all — never guessed', () => {
+      render(<ParamRow param={param({ value: 100 })} stagedValue={undefined} onStage={vi.fn()} defaultValue={undefined} />)
+
+      expect(screen.queryByText(/^Default:/)).not.toBeInTheDocument()
+      expect(screen.getByText('THR_MIN')).toHaveClass('text-nvx-text')
+    })
+
+    it('is float32-tolerant: a wire-rounded value that float64-differs from the literal default shows no caption', () => {
+      render(<ParamRow param={param({ name: 'SOME_GAIN', type: MAV_PARAM_TYPE_REAL32, value: Math.fround(0.1) })} stagedValue={undefined} onStage={vi.fn()} defaultValue={0.1} />)
+
+      expect(screen.queryByText(/^Default:/)).not.toBeInTheDocument()
+    })
+
+    it('still highlights a pending (staged) row on top of a default-differs row using the same warning tone, not a second visual language', () => {
+      render(<ParamRow param={param({ value: 100 })} stagedValue={120} onStage={vi.fn()} defaultValue={50} />)
+
+      expect(screen.getByText('Default: 50')).toBeInTheDocument()
+      expect(screen.getByTitle('Modified — not yet written')).toBeInTheDocument()
+    })
+  })
+
   // Issue #14 (PA2): advisory-only caption, never an HTML min/max (PRD #12 §2.3).
   describe('range/units caption (issue #14)', () => {
     it('shows a gray range/units caption when metadata has them, without constraining the input', () => {

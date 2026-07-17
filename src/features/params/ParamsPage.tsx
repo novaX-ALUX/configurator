@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
 import { ParamStoreDisposedError, type FetchProgressState } from '../../core/mavlink/params'
-import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata } from '../../core/paramMetadata'
+import { loadParamDefaults, loadParamMetadata, lookupParamMeta, type LoadedParamMetadata, type ParamDefaultsFile } from '../../core/paramMetadata'
 import { rebootFlightController } from '../../core/mavlink/reboot'
 import { ParamRow } from './ParamRow'
 import { DiffDrawer, type DiffRowStatus } from './DiffDrawer'
@@ -98,6 +98,15 @@ export function ParamsPage() {
   // this, so there is no error state here, only "not available yet".
   const [meta, setMeta] = useState<LoadedParamMetadata | null>(null)
   const [metaBannerDismissed, setMetaBannerDismissed] = useState(false)
+  // Bundled ArduCopter SITL default values (issue #15, PRD #12 §2.4) — same
+  // "null until loaded, stays null forever on a fetch failure" additive
+  // fallback as `meta` above, but a fully independent fetch/state: a
+  // defaults-file 404 must never take down display-name/description
+  // metadata that already loaded, and vice versa.
+  const [defaults, setDefaults] = useState<ParamDefaultsFile | null>(null)
+  // "Not Default" toggle (PRD §2.4) — session-scoped UI state, same as
+  // `query`/`expandedGroups`: reset on disconnect below, never persisted.
+  const [notDefaultOnly, setNotDefaultOnly] = useState(false)
   // `.param` file import/export (issue #16, PRD #12 §3). `importError` is the
   // single top-level parse failure (PRD §3.1: a malformed file rejects the
   // whole import, never partially stages); `importSummary` is the post-parse
@@ -139,6 +148,8 @@ export function ParamsPage() {
     setExpandedGroups(new Set())
     setMeta(null)
     setMetaBannerDismissed(false)
+    setDefaults(null)
+    setNotDefaultOnly(false)
     setImportError(null)
     setImportSummary(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,6 +172,25 @@ export function ParamsPage() {
       })
       .catch(() => {
         if (!cancelled) setMeta(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [paramStore, identity?.fwVersion])
+
+  // Same pattern as the metadata effect just above, for the second generated
+  // asset (issue #15, PRD #12 §2.4) — fetched independently so a failure
+  // here (asset missing, network) only disables the default-marker caption/
+  // Not-Default toggle, never the display-name/description metadata above.
+  useEffect(() => {
+    if (!paramStore) return
+    let cancelled = false
+    loadParamDefaults(identity?.fwVersion)
+      .then((result) => {
+        if (!cancelled) setDefaults(result)
+      })
+      .catch(() => {
+        if (!cancelled) setDefaults(null)
       })
     return () => {
       cancelled = true
@@ -225,7 +255,10 @@ export function ParamsPage() {
     return paramStore ? [...paramStore.all.values()] : []
   }, [paramStore, version, fetchProgress.active])
   const hasQuery = query.trim() !== ''
-  const filtered = useMemo(() => filterParams(paramsArray, query, meta ? (name) => lookupParamMeta(meta.table, name) : undefined), [paramsArray, query, meta])
+  const filtered = useMemo(
+    () => filterParams(paramsArray, query, meta ? (name) => lookupParamMeta(meta.table, name) : undefined, notDefaultOnly, defaults ? (name) => defaults[name] : undefined),
+    [paramsArray, query, meta, notDefaultOnly, defaults],
+  )
   // Derived from the already-filtered array: a group with zero matches on a
   // non-empty query simply has no entries here, which is how "hide
   // zero-match groups on search" falls out for free (PRD #12 §2.5) — no
@@ -552,13 +585,33 @@ export function ParamsPage() {
         </div>
       )}
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
         <input
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
           placeholder={t('params.searchPlaceholder')}
           className="w-[260px] rounded-[9px] border border-nvx-borderStrong px-3 py-2 font-mono text-[12px] focus:border-nvx-primary"
         />
+        {/* Not-Default filter (PRD #12 §2.4, issue #15) — disabled until
+            defaults data has loaded rather than silently rendering an
+            empty table, since every row would otherwise fail the "has a
+            bundled default" check for a reason that has nothing to do with
+            what's actually staged on the board (same additive-fallback
+            principle as Export/Import being no-ops before the table loads,
+            just made visible here since this is a persistent toggle, not a
+            one-shot action). */}
+        <button
+          type="button"
+          aria-pressed={notDefaultOnly}
+          disabled={!defaults}
+          title={!defaults ? t('params.notDefaultUnavailable') : undefined}
+          onClick={() => setNotDefaultOnly((v) => !v)}
+          className={`rounded-[9px] border px-3.5 py-2 text-[12px] font-bold disabled:cursor-not-allowed disabled:opacity-50 ${
+            notDefaultOnly ? 'border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText' : 'border-nvx-borderStrong bg-white text-nvx-text hover:bg-nvx-field'
+          }`}
+        >
+          {t('params.notDefaultCta')}
+        </button>
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -585,6 +638,13 @@ export function ParamsPage() {
           {t('params.exportCta')}
         </button>
       </div>
+      {/* Accuracy caveat (PRD #12 §2.4): rendered prominently next to the
+          toggle, always visible (not a hover-only tooltip) — matches this
+          project's honesty-banner precedent (the metadata version-mismatch
+          banner above), but as a plain caption rather than a dismissible
+          box, since this is evergreen documentation for a permanent
+          feature, not a transient/dismissible notice. */}
+      <p className="mb-3 max-w-[720px] text-[10.5px] leading-snug text-nvx-faint">{t('params.notDefaultCaveat')}</p>
 
       <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-nvx-border bg-white shadow-card">
         <div className="grid grid-cols-[220px_140px_100px_70px] gap-3 border-b border-nvx-border bg-nvx-field px-4 py-[9px] text-[10px] font-extrabold tracking-[.1em] text-nvx-faint">
@@ -625,7 +685,14 @@ export function ParamsPage() {
                   </button>
                   {expanded &&
                     g.items.map((p) => (
-                      <ParamRow key={p.name} param={p} stagedValue={pending.get(p.name)} onStage={stage} meta={meta ? lookupParamMeta(meta.table, p.name) : undefined} />
+                      <ParamRow
+                        key={p.name}
+                        param={p}
+                        stagedValue={pending.get(p.name)}
+                        onStage={stage}
+                        meta={meta ? lookupParamMeta(meta.table, p.name) : undefined}
+                        defaultValue={defaults?.[p.name]}
+                      />
                     ))}
                 </div>
               )

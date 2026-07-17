@@ -105,7 +105,11 @@
     "rebootBannerText": "変更を反映するには再起動が必要です",
     "rebootCta": "再起動",
     "rebooting": "再起動中…",
-    "rebootConfirm": "フライトコントローラーを今すぐ再起動しますか? 再起動が完了するまで接続が切断されます。"
+    "rebootConfirm": "フライトコントローラーを今すぐ再起動しますか? 再起動が完了するまで接続が切断されます。",
+    "defaultCaption": "デフォルト: {{value}}",
+    "notDefaultCta": "デフォルト値以外",
+    "notDefaultUnavailable": "この機体のファームウェアのデフォルト値がまだ読み込まれていません。",
+    "notDefaultCaveat": "ArduCopter の SITL デフォルト値と比較しています。この機体の実際の工場出荷時設定とは異なります — 基板固有のパラメータ（BRD_*、SERIAL*、一部の RC*）は、変更していなくても「変更あり」と表示される場合があります。"
   },
   "dashboard": {
     "offline": "オフライン",

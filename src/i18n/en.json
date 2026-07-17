@@ -105,7 +105,11 @@
     "rebootBannerText": "Reboot required for changes to take effect",
     "rebootCta": "Reboot",
     "rebooting": "Rebooting…",
-    "rebootConfirm": "Reboot the flight controller now? The connection will drop until it comes back up."
+    "rebootConfirm": "Reboot the flight controller now? The connection will drop until it comes back up.",
+    "defaultCaption": "Default: {{value}}",
+    "notDefaultCta": "Not Default",
+    "notDefaultUnavailable": "Default values haven't loaded for this firmware yet.",
+    "notDefaultCaveat": "Compared against ArduCopter SITL defaults, not this board's exact factory values — board-specific parameters (BRD_*, SERIAL*, RC*) may show as changed even if untouched."
   },
   "dashboard": {
     "offline": "Offline",

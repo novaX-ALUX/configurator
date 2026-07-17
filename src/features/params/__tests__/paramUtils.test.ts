@@ -8,6 +8,7 @@ import {
   filterParams,
   groupParams,
   isEnumValue,
+  isNotDefault,
   paramTypeLabel,
   rangeUnitsCaption,
   wouldLosePrecision,
@@ -135,6 +136,71 @@ describe('filterParams', () => {
 
   it('falls back to name-only matching when no lookup is given (metadata never loaded)', () => {
     expect(filterParams(params, 'capacity').map((p) => p.name)).toEqual(['BATT_CAPACITY'])
+  })
+
+  // PRD #12 §2.4 (issue #15): "Not Default" is a third predicate alongside
+  // query/display-name search, not a separate filter pipeline — a row must
+  // pass both to appear.
+  describe('notDefaultOnly (issue #15)', () => {
+    const withDefaults = [
+      param({ name: 'ATC_RAT_PIT_P', value: 0.5 }), // differs from its bundled default (0.15) below
+      param({ name: 'ATC_RAT_YAW_P', value: 0.18 }), // matches its bundled default
+      param({ name: 'BATT_CAPACITY', value: 999 }), // no bundled default at all
+    ]
+    const defaultsByName: Record<string, number> = { ATC_RAT_PIT_P: 0.15, ATC_RAT_YAW_P: 0.18 }
+    const lookupDefault = (name: string) => defaultsByName[name]
+
+    it('keeps only rows whose live value differs from its bundled default', () => {
+      expect(filterParams(withDefaults, '', undefined, true, lookupDefault).map((p) => p.name)).toEqual(['ATC_RAT_PIT_P'])
+    })
+
+    it('excludes a param with no bundled default from the positive set — never guessed', () => {
+      const result = filterParams(withDefaults, '', undefined, true, lookupDefault)
+      expect(result.map((p) => p.name)).not.toContain('BATT_CAPACITY')
+    })
+
+    it('combines with a non-empty search query — a row must match both predicates', () => {
+      const result = filterParams(withDefaults, 'atc', undefined, true, lookupDefault)
+      expect(result.map((p) => p.name)).toEqual(['ATC_RAT_PIT_P'])
+    })
+
+    it('is a no-op (matches filterParams(params, query)) when notDefaultOnly is false or omitted', () => {
+      expect(filterParams(withDefaults, '', undefined, false, lookupDefault)).toHaveLength(3)
+      expect(filterParams(withDefaults, '')).toHaveLength(3)
+    })
+
+    it('returns nothing when notDefaultOnly is set but no lookupDefault is given (defaults never loaded)', () => {
+      expect(filterParams(withDefaults, '', undefined, true)).toEqual([])
+    })
+  })
+})
+
+describe('isNotDefault', () => {
+  it('false when the value equals the bundled default', () => {
+    expect(isNotDefault(0.3, 0.3)).toBe(false)
+  })
+
+  it('true when the value differs from the bundled default', () => {
+    expect(isNotDefault(0.5, 0.3)).toBe(true)
+  })
+
+  it('false when there is no bundled default at all — never guessed (PRD #12 §2.4)', () => {
+    expect(isNotDefault(0.5, undefined)).toBe(false)
+  })
+
+  it('is float32-tolerant at the fround boundary: a float64 literal and its float32 wire-rounded neighbor compare equal', () => {
+    // 0.1 has no exact float32 representation; a value that round-tripped
+    // through the wire as float32 comes back as the nearest float32 neighbor
+    // of 0.1, not the float64 literal 0.1 itself. A strict `!==` would
+    // false-flag this as "changed" even though neither side was ever
+    // actually touched.
+    const wireRoundedValue = Math.fround(0.1)
+    expect(wireRoundedValue).not.toBe(0.1) // the boundary this test exists to cover
+    expect(isNotDefault(wireRoundedValue, 0.1)).toBe(false)
+  })
+
+  it('still detects a real difference smaller than float64 noise but larger than float32 precision', () => {
+    expect(isNotDefault(0.30001, 0.3)).toBe(true)
   })
 })
 

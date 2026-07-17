@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Param } from '../../core/mavlink/params'
 import type { ParamMetaEntry } from '../../core/paramMetadata'
-import { isEnumValue, isIntegerParamType, paramTypeLabel, rangeUnitsCaption, wouldLosePrecision } from './paramUtils'
+import { isEnumValue, isIntegerParamType, isNotDefault, paramTypeLabel, rangeUnitsCaption, wouldLosePrecision } from './paramUtils'
 
 interface ParamRowProps {
   param: Param
@@ -17,6 +17,15 @@ interface ParamRowProps {
    * additive, no grouping/enum/default change).
    */
   meta?: ParamMetaEntry
+  /**
+   * Bundled ArduCopter SITL default for this param (PRD #12 §2.4, issue
+   * #15), or `undefined` if this param has no bundled default at all (never
+   * guessed) or defaults data never loaded. Compared against `param.value`
+   * (the live/on-board value, not `stagedValue`) — "differs from default"
+   * asks whether this param has ever actually been touched, which a
+   * not-yet-written staged edit can't answer.
+   */
+  defaultValue?: number
 }
 
 /**
@@ -34,9 +43,14 @@ interface ParamRowProps {
  * (`ParamPrecisionLossError`), so catching it here means the diff drawer
  * never queues a write that's guaranteed to fail. `meta.range`/`meta.units`
  * render as an advisory gray caption only — never an HTML `min`/`max`, never
- * a staging block (PRD §2.3).
+ * a staging block (PRD §2.3). When `param.value` differs from `defaultValue`
+ * (PRD §2.4), the row shows a "Default: {n}" caption and reuses the exact
+ * same warning-tone highlight as a pending/staged edit — no second visual
+ * language for "this row needs attention." The "Modified — not yet written"
+ * dot stays specific to a staged edit, though: that's about an unwritten
+ * change, not about how the on-board value compares to its factory default.
  */
-export function ParamRow({ param, stagedValue, onStage, meta }: ParamRowProps) {
+export function ParamRow({ param, stagedValue, onStage, meta, defaultValue }: ParamRowProps) {
   const { t } = useTranslation()
   const displayValue = stagedValue ?? param.value
   const [text, setText] = useState(String(displayValue))
@@ -55,6 +69,7 @@ export function ParamRow({ param, stagedValue, onStage, meta }: ParamRowProps) {
   const isInteger = isIntegerParamType(param.type)
   const enumOptions = isEnumValue(meta, displayValue) ? meta?.values : undefined
   const caption = rangeUnitsCaption(meta)
+  const notDefault = isNotDefault(param.value, defaultValue)
 
   function commit(): void {
     const trimmed = text.trim()
@@ -80,15 +95,19 @@ export function ParamRow({ param, stagedValue, onStage, meta }: ParamRowProps) {
   }
 
   const pending = stagedValue !== undefined
+  // Same warning-tone highlight for both "unwritten staged edit" and
+  // "differs from its bundled default" — one visual language for "this row
+  // needs attention," not two (PRD #12 §2.4).
+  const highlighted = pending || notDefault
 
   return (
     <div
       className={`grid grid-cols-[220px_140px_100px_70px] items-center gap-3 border-b border-nvx-border px-4 py-1.5 ${
-        pending ? 'bg-nvx-warningSoft' : ''
+        highlighted ? 'bg-nvx-warningSoft' : ''
       }`}
     >
       <div className="flex flex-col gap-0.5 py-1">
-        <span className={`flex items-center gap-1.5 font-mono text-[12px] font-semibold ${pending ? 'text-nvx-warningText' : 'text-nvx-text'}`}>
+        <span className={`flex items-center gap-1.5 font-mono text-[12px] font-semibold ${highlighted ? 'text-nvx-warningText' : 'text-nvx-text'}`}>
           {pending && <span title={t('params.modifiedTitle')} className="h-1.5 w-1.5 flex-none rounded-full bg-nvx-warning" />}
           {param.name}
           {meta && <span className="truncate font-sans text-[11px] font-medium text-nvx-muted">{meta.displayName}</span>}
@@ -132,6 +151,7 @@ export function ParamRow({ param, stagedValue, onStage, meta }: ParamRowProps) {
           />
         )}
         {caption && !error && <span className="text-[10px] text-nvx-faint">{caption}</span>}
+        {notDefault && !error && <span className="text-[10px] text-nvx-warningText">{t('params.defaultCaption', { value: defaultValue })}</span>}
         {error && (
           <span role="alert" className="text-[10.5px] text-nvx-danger">
             {error}

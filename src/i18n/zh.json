@@ -105,7 +105,11 @@
     "rebootBannerText": "需要重启飞控才能使更改生效",
     "rebootCta": "重启",
     "rebooting": "正在重启…",
-    "rebootConfirm": "现在重启飞控吗？连接会中断，直到飞控重新上线。"
+    "rebootConfirm": "现在重启飞控吗？连接会中断，直到飞控重新上线。",
+    "defaultCaption": "默认值：{{value}}",
+    "notDefaultCta": "仅显示非默认值",
+    "notDefaultUnavailable": "该机型固件的默认值尚未加载。",
+    "notDefaultCaveat": "此处对比的是 ArduCopter SITL 默认值，并非本板卡的实际出厂设置——部分板卡专属参数（BRD_*、SERIAL*、部分 RC*）即使从未改动过，也可能被标记为“已更改”。"
   },
   "dashboard": {
     "offline": "离线",

@@ -176,11 +176,26 @@ export function groupParams(params: readonly Param[]): ParamGroup[] {
  * metadata never loaded, in which case search silently falls back to
  * name-only matching (same fallback principle as everywhere else metadata
  * is additive, PRD §1.4).
+ *
+ * `notDefaultOnly`/`lookupDefault` (PRD #12 §2.4, issue #15) is a third,
+ * independent predicate over the same already-filtered set — a row must
+ * pass the search AND (when the toggle is on) differ from its bundled
+ * default (`isNotDefault`, below). `lookupDefault` is `undefined` when
+ * defaults data never loaded, in which case turning the toggle on returns
+ * nothing rather than guessing (same additive-fallback principle as
+ * `lookupMeta`).
  */
-export function filterParams(params: readonly Param[], query: string, lookupMeta?: (name: string) => ParamMetaEntry | undefined): Param[] {
+export function filterParams(
+  params: readonly Param[],
+  query: string,
+  lookupMeta?: (name: string) => ParamMetaEntry | undefined,
+  notDefaultOnly?: boolean,
+  lookupDefault?: (name: string) => number | undefined,
+): Param[] {
   const q = query.trim().toLowerCase()
-  if (!q) return [...params]
   return params.filter((p) => {
+    if (notDefaultOnly && !isNotDefault(p.value, lookupDefault?.(p.name))) return false
+    if (!q) return true
     if (p.name.toLowerCase().includes(q)) return true
     const displayName = lookupMeta?.(p.name)?.displayName
     return displayName !== undefined && displayName.toLowerCase().includes(q)
@@ -223,4 +238,26 @@ export function rangeUnitsCaption(meta: ParamMetaEntry | undefined): string | un
   const range = meta.range ? `${meta.range[0]}–${meta.range[1]}` : undefined
   if (range && meta.units) return `${range} ${meta.units}`
   return range ?? meta.units
+}
+
+/**
+ * True only when a bundled SITL default exists for this param AND `value`
+ * differs from it (PRD #12 §2.4, issue #15) — the sole condition under which
+ * `ParamRow` shows the "Default: {n}" caption + warning-tone highlight, and
+ * the positive-set predicate the `Not Default` toggle filters on.
+ *
+ * `undefined` `defaultValue` (no bundled default for this param name) always
+ * returns `false` — a row with no default data is never flagged as
+ * "changed," it's simply unknown (never guessed).
+ *
+ * The comparison is float32-tolerant (`Math.fround` both sides): the live
+ * value arrived over MAVLink as a wire float32, and the bundled default was
+ * read out of a `.parm` text file as a float64 literal — two representations
+ * of "the same number" that a strict `!==` would false-flag as different
+ * purely from precision noise neither side actually has (e.g. `0.1`'s
+ * nearest float32 neighbor vs. the float64 literal `0.1`).
+ */
+export function isNotDefault(value: number, defaultValue: number | undefined): boolean {
+  if (defaultValue === undefined) return false
+  return Math.fround(value) !== Math.fround(defaultValue)
 }
