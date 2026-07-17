@@ -19,14 +19,14 @@ describe('navigation store', () => {
       calls.push(next)
       return true
     })
-    useNavigationStore.getState().setActivePage('debug')
-    expect(calls).toEqual(['debug'])
-    expect(useNavigationStore.getState().activePage).toBe('debug')
+    useNavigationStore.getState().setActivePage('charts')
+    expect(calls).toEqual(['charts'])
+    expect(useNavigationStore.getState().activePage).toBe('charts')
   })
 
   it('setActivePage is blocked when the guard returns false', () => {
     useNavigationStore.getState().setGuardNavigation(() => false)
-    useNavigationStore.getState().setActivePage('debug')
+    useNavigationStore.getState().setActivePage('charts')
     expect(useNavigationStore.getState().activePage).toBe('firmware') // unchanged
   })
 

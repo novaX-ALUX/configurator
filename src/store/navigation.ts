@@ -3,7 +3,6 @@ import { create } from 'zustand'
 export type PageId =
   | 'firmware'
   | 'parameters'
-  | 'debug'
   | 'dashboard'
   | 'charts'
   | 'setup'
@@ -14,20 +13,19 @@ export type PageId =
 export interface NavPage {
   id: PageId
   labelKey: string
-  /** M1 shipped firmware/parameters/debug; M2 adds dashboard (Task 6.2), setup (Task 7.2), calibration (Task 8.3) and motors (Task 9.3); console stays disabled for a later milestone. */
+  /** M1 shipped firmware/parameters; M2 adds dashboard (Task 6.2), setup (Task 7.2), calibration (Task 8.3), motors (Task 9.3), and console (issue #25 — the merged Debug/Status page, `debug` retired). */
   enabled: boolean
 }
 
 export const NAV_PAGES: NavPage[] = [
   { id: 'firmware', labelKey: 'nav.firmware', enabled: true },
   { id: 'parameters', labelKey: 'nav.parameters', enabled: true },
-  { id: 'debug', labelKey: 'nav.debug', enabled: true },
   { id: 'dashboard', labelKey: 'nav.dashboard', enabled: true },
   { id: 'charts', labelKey: 'nav.charts', enabled: true },
   { id: 'setup', labelKey: 'nav.setup', enabled: true },
   { id: 'calibration', labelKey: 'nav.calibration', enabled: true },
   { id: 'motors', labelKey: 'nav.motors', enabled: true },
-  { id: 'console', labelKey: 'nav.console', enabled: false },
+  { id: 'console', labelKey: 'nav.console', enabled: true },
 ]
 
 interface NavigationState {

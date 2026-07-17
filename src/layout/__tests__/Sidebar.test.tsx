@@ -29,7 +29,7 @@ describe('Sidebar', () => {
     reset()
     useNavigationStore.getState().setGuardNavigation(() => false)
     render(<Sidebar />)
-    fireEvent.click(screen.getByRole('button', { name: 'Debug / Status' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Console' }))
     expect(useNavigationStore.getState().activePage).toBe('firmware') // unchanged
     reset()
   })
@@ -38,8 +38,8 @@ describe('Sidebar', () => {
     reset()
     useNavigationStore.getState().setGuardNavigation(() => true)
     render(<Sidebar />)
-    fireEvent.click(screen.getByRole('button', { name: 'Debug / Status' }))
-    expect(useNavigationStore.getState().activePage).toBe('debug')
+    fireEvent.click(screen.getByRole('button', { name: 'Console' }))
+    expect(useNavigationStore.getState().activePage).toBe('console')
     reset()
   })
 

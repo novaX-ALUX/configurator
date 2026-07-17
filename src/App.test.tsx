@@ -9,7 +9,6 @@ describe('App shell', () => {
     // M1 pages are present and clickable.
     expect(screen.getByRole('button', { name: 'Firmware' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Parameters' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Debug / Status' })).toBeInTheDocument()
 
     // Dashboard shipped in M2 (Task 6.2) and is now clickable too.
     expect(screen.getByRole('button', { name: 'Dashboard' })).toBeEnabled()
@@ -17,8 +16,9 @@ describe('App shell', () => {
     // Charts shipped with the Telemetry Charts tracer bullet (issue #3).
     expect(screen.getByRole('button', { name: 'Charts' })).toBeEnabled()
 
-    // Future pages are listed but disabled.
-    expect(screen.getByRole('button', { name: 'Console' })).toBeDisabled()
+    // Console (issue #25) merges the old Debug/Status page's STATUSTEXT feed
+    // with the Messages aggregate table (issue #24) and is enabled.
+    expect(screen.getByRole('button', { name: 'Console' })).toBeEnabled()
 
     // Top bar shows the disconnected state: baud rate + "Any device" fallback
     // + Connect are all live controls now that Task 3.1 wired up the

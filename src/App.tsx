@@ -5,7 +5,7 @@ import { TopBar } from './layout/TopBar'
 import { TelemetryStrip } from './layout/TelemetryStrip'
 import { PagePlaceholder } from './layout/PagePlaceholder'
 import { DisconnectToast } from './layout/DisconnectToast'
-import { StatusPanel } from './features/debug/StatusPanel'
+import { ConsolePage } from './features/console/ConsolePage'
 import { ParamsPage } from './features/params/ParamsPage'
 import { FirmwarePage } from './features/firmware/FirmwarePage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
@@ -100,8 +100,8 @@ function App() {
       <TelemetryStrip />
       <Sidebar />
       <main className="col-start-2 row-start-4 min-w-0 overflow-auto">
-        {activePage === 'debug' ? (
-          <StatusPanel />
+        {activePage === 'console' ? (
+          <ConsolePage />
         ) : activePage === 'parameters' ? (
           <ParamsPage />
         ) : activePage === 'firmware' ? (

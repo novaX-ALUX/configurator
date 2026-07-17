@@ -14,9 +14,9 @@ import { OrientationNote } from './OrientationNote'
  * `useCompassCalibration`). See `docs/design/novaX-Configurator.dc.html`'s
  * Calibration screen for the visual source of truth.
  *
- * The empty state below only gates on `phase`, same as Dashboard/Setup/
- * StatusPanel -- *except* it also checks each card's own `interrupted` latch
- * first: if a calibration was cut short by the link dropping, the page must
+ * The empty state below only gates on `phase`, same as Dashboard/Setup
+ * -- *except* it also checks each card's own `interrupted` latch first: if a
+ * calibration was cut short by the link dropping, the page must
  * keep showing that card's interrupt banner (task brief's link-state
  * cross-reference) rather than falling back to "needs a connected board",
  * even once `phase` has fully unwound to `'disconnected'`.

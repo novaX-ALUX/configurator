@@ -1,29 +1,38 @@
 import { Fragment, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { MessageAggregateStore } from '../../core/mavlink/inspector'
 import { hzFromWindow } from '../../core/mavlink/inspector'
 import { formatTime } from '../../utils/time'
 import { formatFieldValue, sortAggregatesByName } from './inspectorUtils'
 
-/** Redraw interval for the Hz column — `MessageAggregateStore` is a plain object like `HistoryBuffer`, not a zustand store, so nothing re-renders this component when `record()` runs. Ticket 2's `ConsolePage` will own gating this against `phase !== 'connected'`; here the table is only ever mounted while `StatusPanel` is already in its connected branch, so the interval's lifetime already matches "connected". */
+/**
+ * Redraw interval for the Hz column — `MessageAggregateStore` is a plain
+ * object like `HistoryBuffer`, not a zustand store, so nothing re-renders
+ * this component when `record()` runs. Gated on `!offline` (PRD §5/§7): a
+ * frozen aggregate's `recentTimestamps` stop changing the moment the link
+ * drops, but re-deriving Hz against a still-advancing `now` would decay
+ * every value to 0 anyway — the tick must stop right alongside the data so
+ * frozen Hz reads as "the rate when the link died," not a fake 0.
+ */
 const TICK_MS = 250
 
 /**
- * Bare tracer table (issue #24 Ticket 1): proves the `MessageAggregateStore`
- * tap point end-to-end — mounted temporarily at the bottom of `StatusPanel`
- * — before Ticket 2 relocates it into the real Console page (severity
- * filters, copy actions, i18n, `ConsolePage`'s offline/frozen framing).
- * English strings are hardcoded here on purpose: PRD §10 assigns the real
- * `console.*` i18n keys to Ticket 2, and adding them now would only be
- * thrown away at that cutover (see the ticket's own note on this tradeoff).
+ * The Messages section of the Console page (PRD §5/§6): the
+ * `MessageAggregateStore` aggregate table with expandable rows. Originally
+ * landed (issue #24 Ticket 1) as a bare tracer mounted at the bottom of the
+ * now-retired `StatusPanel`; this ticket (#25) gives it its real i18n keys
+ * and folds it into `ConsolePage`'s stacked, independently-scrollable layout.
  */
-export function MessagesTable({ inspector }: { inspector: MessageAggregateStore }) {
+export function MessagesTable({ inspector, offline }: { inspector: MessageAggregateStore; offline: boolean }) {
+  const { t } = useTranslation()
   const [now, setNow] = useState(() => Date.now())
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
 
   useEffect(() => {
+    if (offline) return
     const id = setInterval(() => setNow(Date.now()), TICK_MS)
     return () => clearInterval(id)
-  }, [])
+  }, [offline])
 
   const rows = sortAggregatesByName(inspector.all())
 
@@ -37,22 +46,22 @@ export function MessagesTable({ inspector }: { inspector: MessageAggregateStore 
   }
 
   return (
-    <div className="mt-6">
+    <div className="flex min-h-0 flex-[3] flex-col">
       <div className="mb-2 flex items-baseline gap-2">
-        <span className="font-heading text-[15px] font-bold text-nvx-text">Messages</span>
-        <span className="font-mono text-[11px] text-nvx-faint">{rows.length} types</span>
+        <span className="font-heading text-[15px] font-bold text-nvx-text">{t('console.messagesTitle')}</span>
+        <span className="font-mono text-[11px] text-nvx-faint">{t('console.typeCount', { count: rows.length })}</span>
       </div>
-      <div className="max-h-[420px] overflow-auto rounded-xl border border-nvx-border bg-nvx-surface shadow-card">
+      <div className="min-h-[160px] flex-1 overflow-auto rounded-xl border border-nvx-border bg-nvx-surface shadow-card">
         {rows.length === 0 ? (
-          <p className="px-4 py-3 text-[12px] text-nvx-faint">No messages yet.</p>
+          <p className="px-4 py-3 text-[12px] text-nvx-faint">{t('console.messagesEmpty')}</p>
         ) : (
           <table className="w-full border-collapse text-left font-mono text-[11.5px]">
             <thead>
               <tr className="border-b border-nvx-border text-nvx-faint">
-                <th className="px-4 py-1.5 font-semibold">Type</th>
-                <th className="px-4 py-1.5 font-semibold">Hz</th>
-                <th className="px-4 py-1.5 font-semibold">Count</th>
-                <th className="px-4 py-1.5 font-semibold">Last seen</th>
+                <th className="px-4 py-1.5 font-semibold">{t('console.colType')}</th>
+                <th className="px-4 py-1.5 font-semibold">{t('console.colHz')}</th>
+                <th className="px-4 py-1.5 font-semibold">{t('console.colCount')}</th>
+                <th className="px-4 py-1.5 font-semibold">{t('console.colLastSeen')}</th>
               </tr>
             </thead>
             <tbody>
@@ -67,7 +76,13 @@ export function MessagesTable({ inspector }: { inspector: MessageAggregateStore 
                     className="cursor-pointer border-b border-nvx-border last:border-0 hover:bg-nvx-field"
                   >
                     <td className="px-4 py-1.5">
-                      <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span> <span>{row.name}</span>
+                      <span
+                        aria-hidden="true"
+                        className={`inline-block transition-transform duration-150 ease-out motion-reduce:transition-none ${isExpanded ? 'rotate-90' : ''}`}
+                      >
+                        ▸
+                      </span>{' '}
+                      <span>{row.name}</span>
                     </td>
                     <td className="px-4 py-1.5">{hz.toFixed(1)}</td>
                     <td className="px-4 py-1.5">{row.count}</td>

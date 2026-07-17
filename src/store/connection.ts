@@ -1,7 +1,7 @@
 /**
  * Global connection store: owns the transport/router/ParamStore/Telemetry
  * lifecycle for exactly one MAVLink session at a time, plus the state Task
- * 3.1's UI (TopBar, StatusPanel) reads.
+ * 3.1's UI (TopBar, ConsolePage) reads.
  *
  * ARCHITECTURAL FACT (Task 2.3, `router.ts`'s own module doc): `MavRouter` is
  * single-shot per transport-open generation — it is never reused across a

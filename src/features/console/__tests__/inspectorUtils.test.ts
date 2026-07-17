@@ -1,13 +1,14 @@
 /**
- * Issue #24 (bare Messages table, PRD §6/§11.3): pure formatting/sort
- * helpers, no React. Locks in the raw-honest value-formatting table exactly
- * (no toFixed rounding, no enum labels, bigint via toString(), arrays
- * comma-space joined untruncated) and the alphabetical-by-name sort order.
+ * Issue #24/#25 (Console page, PRD §6/§8/§11.3): pure formatting/sort/
+ * severity helpers, no React. Locks in the raw-honest value-formatting table
+ * exactly (no toFixed rounding, no enum labels, bigint via toString(), arrays
+ * comma-space joined untruncated), the alphabetical-by-name sort order, and
+ * §8's 3-group severity boundary.
  */
 import { describe, expect, it } from 'vitest'
 import type { DecodedMessage } from '../../../core/mavlink/decode'
 import type { MessageAggregate } from '../../../core/mavlink/inspector'
-import { formatFieldValue, sortAggregatesByName } from '../inspectorUtils'
+import { formatFieldValue, MAV_SEVERITY_NAMES, severityGroup, sortAggregatesByName } from '../inspectorUtils'
 
 describe('formatFieldValue', () => {
   it('formats a number with String() — full double precision, never toFixed', () => {
@@ -58,5 +59,24 @@ describe('sortAggregatesByName', () => {
     const copy = [...input]
     sortAggregatesByName(input)
     expect(input).toEqual(copy)
+  })
+})
+
+describe('severityGroup', () => {
+  it('groups 0-3 as errors, 4-5 as warnings, 6-7 as info (PRD §8 boundary)', () => {
+    expect(severityGroup(0)).toBe('errors')
+    expect(severityGroup(3)).toBe('errors')
+    expect(severityGroup(4)).toBe('warnings')
+    expect(severityGroup(5)).toBe('warnings')
+    expect(severityGroup(6)).toBe('info')
+    expect(severityGroup(7)).toBe('info')
+  })
+})
+
+describe('MAV_SEVERITY_NAMES', () => {
+  it('has a short badge for all 8 MAV_SEVERITY values', () => {
+    expect(Object.keys(MAV_SEVERITY_NAMES)).toHaveLength(8)
+    expect(MAV_SEVERITY_NAMES[3]).toBe('ERR')
+    expect(MAV_SEVERITY_NAMES[6]).toBe('INFO')
   })
 })

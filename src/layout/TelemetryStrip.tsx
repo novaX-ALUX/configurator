@@ -117,7 +117,7 @@ function NumberSlot({ widthClass, value, align = 'left' }: { widthClass: string;
  * no CPU/temp bar (excluded by the same decision).
  *
  * Read-only consumer of the Telemetry Snapshot (plus the connection store's
- * STATUSTEXT log and link stats, same sources VehicleCard/StatusPanel
+ * STATUSTEXT log and link stats, same sources VehicleCard/ConsolePage
  * already read) — sends nothing, matches ADR-0002's named-operations-only
  * rule trivially since this component has no write path at all.
  *
@@ -153,7 +153,7 @@ export function TelemetryStrip() {
       <ArmChip armed={strip.armed} />
       <ModeChip modeLabel={strip.modeLabel} />
       <Divider />
-      <PrearmChip prearm={strip.prearm} onClick={() => setActivePage('debug')} />
+      <PrearmChip prearm={strip.prearm} onClick={() => setActivePage('console')} />
       <Divider />
       <span data-testid="strip-battery" className="inline-flex items-baseline gap-1 font-mono text-[12px] tabular-nums text-nvx-text">
         <NumberSlot widthClass="w-[40px]" align="right" value={strip.voltage !== undefined ? strip.voltage.toFixed(2) : DASH} />

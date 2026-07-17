@@ -5,9 +5,6 @@ import { useGuideStore } from '../features/guide/guideStore'
 
 /**
  * Sidebar nav icons, ported from the left rail of docs/design/novaX-Configurator.dc.html.
- * The design doesn't have a dedicated "Debug/Status" screen (M1 folds STATUSTEXT/status
- * into that page ahead of the design's own Console screen), so its icon is authored to
- * match the design's stroke style rather than lifted verbatim.
  */
 const NAV_ICONS: Record<PageId, ReactNode> = {
   firmware: (
@@ -20,11 +17,6 @@ const NAV_ICONS: Record<PageId, ReactNode> = {
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <rect x="3.75" y="4.5" width="16.5" height="15" rx="2" />
       <path d="M3.75 9.5h16.5M10 9.5v10" />
-    </svg>
-  ),
-  debug: (
-    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3.5 12h4l2-6 4 12 2-6h5" />
     </svg>
   ),
   dashboard: (

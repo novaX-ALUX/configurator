@@ -4,7 +4,7 @@
  * ACTIVITY … Parameter writes, calibrations and firmware flashes will appear
  * here"), a running record of operations this GCS performed against the
  * board, distinct from the STATUSTEXT feed (`store/connection.ts`,
- * `StatusPanel`) which only ever shows text the board itself sent.
+ * `ConsolePage`'s Status stream) which only ever shows text the board itself sent.
  *
  * Task 8.3 is this store's first consumer: `MagCalibration.start()`'s
  * `onLearnDisclosure` fires because `COMPASS_LEARN=0` is a real, implicit

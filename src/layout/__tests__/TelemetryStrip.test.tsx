@@ -103,7 +103,7 @@ describe('TelemetryStrip', () => {
     expect(screen.getByText('Not Ready +1')).toBeInTheDocument()
   })
 
-  it('disarmed with two distinct PreArm failures: shows "Not Ready +2" and clicking it navigates to the debug page', () => {
+  it('disarmed with two distinct PreArm failures: shows "Not Ready +2" and clicking it navigates to the console page', () => {
     useConnectionStore.setState({
       phase: 'connected',
       session: fakeSession({ heartbeat: { armed: false, customMode: 0, baseMode: 0, systemStatus: 4, ts: 0 } }),
@@ -115,7 +115,7 @@ describe('TelemetryStrip', () => {
 
     const prearmButton = screen.getByRole('button', { name: 'Not Ready +2' })
     fireEvent.click(prearmButton)
-    expect(useNavigationStore.getState().activePage).toBe('debug')
+    expect(useNavigationStore.getState().activePage).toBe('console')
   })
 
   it('renders battery voltage/current, GPS fix + satellite count, and link loss percent from real telemetry/linkStats', () => {
