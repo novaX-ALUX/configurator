@@ -4,8 +4,10 @@ Research note for issue #34 (part of PRD #32). This is the formula basis for the
 Tuning page's initial-tune calculator: a pure function
 `(prop diameter, battery cell count, battery chemistry) → suggested parameter map`.
 
-Governing discipline (ADR-0003 calculator corollary, restated in #34): **outputs the
-official sources do not define are omitted, never invented.** Everything below carries
+Governing discipline (PRD #32 Implementation Decisions — "Outputs the wiki does not
+define are omitted, never invented" — a corollary of ADR-0003's calculator consequence,
+restated in #34): **outputs the official sources do not define are omitted, never
+invented.** Everything below carries
 a citation; anything a competitor computes without an official formula is listed in the
 "Deliberately omitted" section with the reason.
 
@@ -183,7 +185,8 @@ the reason and the evidence.
 
 **Post-flight adjustments — not *initial* tune outputs:** after the first test
 flight, MP's closing dialog instructs `ATC_THR_MIX_MAN → 0.5`,
-`PSC_ACCZ_P → MOT_THST_HOVER`, `PSC_ACCZ_I → 2·MOT_THST_HOVER` (S2 L240). These
+`PSC_ACCZ_P/PSC_D_ACC_P → MOT_THST_HOVER`,
+`PSC_ACCZ_I/PSC_D_ACC_I → 2·MOT_THST_HOVER` (S2 L240). These
 depend on the learned hover throttle from an actual flight, so a bench calculator
 cannot compute them. Candidate for a UI hint next to the calculator, never for the
 output map.
