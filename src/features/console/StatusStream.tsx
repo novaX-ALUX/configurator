@@ -107,7 +107,7 @@ export function StatusStream({
   }
 
   return (
-    <div className="flex min-h-0 flex-[2] flex-col">
+    <div className="flex min-h-0 min-w-0 flex-[2] flex-col">
       <div className="mb-2 flex items-center gap-2">
         <span className="font-heading text-[15px] font-bold text-nvx-text">{t('console.statusTitle')}</span>
         <span className="flex gap-1.5">

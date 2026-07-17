@@ -87,7 +87,7 @@ export function MessagesTable({ inspector, offline }: { inspector: MessageAggreg
   }
 
   return (
-    <div className="flex min-h-0 flex-[3] flex-col">
+    <div className="flex min-h-0 min-w-0 flex-[3] flex-col">
       <div className="mb-2 flex items-baseline gap-2">
         <span className="font-heading text-[15px] font-bold text-nvx-text">{t('console.messagesTitle')}</span>
         <span className="ml-auto flex items-baseline gap-2">
