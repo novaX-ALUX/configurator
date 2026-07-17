@@ -15,9 +15,20 @@ import type { StatusTextEntry } from '../store/connection'
 import type { MavRouterStats } from '../core/mavlink/router'
 import { arduCopterModeName, gpsFixTier, type GpsFixTier, PREARM_PREFIX } from '../features/dashboard/dashboardUtils'
 
+/**
+ * `'unknown'` (issue #19): disarmed with zero PreArm evidence on record.
+ * ArduPilot only broadcasts PreArm failures periodically while disarmed —
+ * there is no push on connect and no "all checks passed" message ever sent —
+ * so silence is indistinguishable from "the first round just hasn't arrived
+ * yet". Rendering that as Ready fabricates a state the session cannot back
+ * up. `'ready'` is shown only once real evidence exists: the vehicle has
+ * actually armed (ArduPilot itself gates arming on every check passing).
+ */
+export type PrearmStatus = 'unknown' | 'ready' | 'notReady'
+
 export interface PrearmStripState {
-  ready: boolean
-  /** Count of distinct "PreArm: ..." STATUSTEXT messages currently on record. Always 0 when `ready`. */
+  status: PrearmStatus
+  /** Count of distinct "PreArm: ..." STATUSTEXT messages currently on record. Only meaningful when `status` is `'notReady'`. */
   count: number
 }
 
@@ -60,11 +71,19 @@ export interface StatusStripData {
  * is the one real signal ArduPilot gives that every check passed — cheaper
  * and more honest than trying to guess when an individual check cleared
  * from the STATUSTEXT stream alone, which never announces a resolution.
+ *
+ * Zero distinct failures while disarmed is deliberately NOT read as Ready
+ * (issue #19): that's exactly the fresh-connect silence the ticket flags,
+ * and it recurs every time the vehicle disarms again with no new failure
+ * logged yet — a stale "Ready" would be just as fabricated the second time
+ * as the first. `'unknown'` until a failure report actually arrives, or the
+ * vehicle proves it by arming.
  */
 function derivePrearm(armed: boolean, statustext: readonly StatusTextEntry[]): PrearmStripState {
-  if (armed) return { ready: true, count: 0 }
+  if (armed) return { status: 'ready', count: 0 }
   const failures = new Set(statustext.filter((e) => PREARM_PREFIX.test(e.text)).map((e) => e.text))
-  return { ready: failures.size === 0, count: failures.size }
+  if (failures.size === 0) return { status: 'unknown', count: 0 }
+  return { status: 'notReady', count: failures.size }
 }
 
 export function deriveStatusStrip(

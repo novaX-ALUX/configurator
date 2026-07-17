@@ -24,9 +24,10 @@ function Divider() {
  * criteria: state chips may transition color/opacity, live numerics never
  * do, and `motion-reduce` drops it entirely).
  */
-function Chip({ className = '', children }: { className?: string; children: ReactNode }) {
+function Chip({ className = '', title, children }: { className?: string; title?: string; children: ReactNode }) {
   return (
     <span
+      title={title}
       className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-bold tabular-nums transition-colors duration-200 ease-out motion-reduce:transition-none ${className}`}
     >
       {children}
@@ -63,11 +64,23 @@ function ModeChip({ modeLabel }: { modeLabel?: string }) {
   )
 }
 
+/**
+ * `undefined` (no HEARTBEAT yet) and `status: 'unknown'` (heartbeat present,
+ * disarmed, zero PreArm evidence — issue #19) both render the same
+ * non-interactive em-dash chip: neither state has anything real to show or
+ * navigate to. `title` on the `'unknown'` case explains *why* it's blank —
+ * unlike the blanket "no data at all" of `undefined`, this is a specific,
+ * time-bound wait for the session's first PreArm evidence.
+ */
 function PrearmChip({ prearm, onClick }: { prearm?: PrearmStripState; onClick: () => void }) {
   const { t } = useTranslation()
 
-  if (prearm === undefined) {
-    return <Chip className="bg-nvx-field text-nvx-faint">{DASH}</Chip>
+  if (prearm === undefined || prearm.status === 'unknown') {
+    return (
+      <Chip className="bg-nvx-field text-nvx-faint" title={prearm ? t('strip.prearmUnknown') : undefined}>
+        {DASH}
+      </Chip>
+    )
   }
 
   return (
@@ -76,10 +89,10 @@ function PrearmChip({ prearm, onClick }: { prearm?: PrearmStripState; onClick: (
       onClick={onClick}
       title={t('strip.statusView')}
       className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-bold tabular-nums transition-colors duration-200 ease-out hover:brightness-95 motion-reduce:transition-none ${
-        prearm.ready ? 'bg-nvx-successSoft text-nvx-successText' : 'bg-nvx-warningSoft text-nvx-warningText'
+        prearm.status === 'ready' ? 'bg-nvx-successSoft text-nvx-successText' : 'bg-nvx-warningSoft text-nvx-warningText'
       }`}
     >
-      {prearm.ready ? t('strip.prearmReady') : t('strip.prearmNotReady', { count: prearm.count })}
+      {prearm.status === 'ready' ? t('strip.prearmReady') : t('strip.prearmNotReady', { count: prearm.count })}
     </button>
   )
 }

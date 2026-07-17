@@ -26,6 +26,7 @@
     "ariaLabel": "テレメトリーステータス",
     "prearmReady": "準備完了",
     "prearmNotReady": "準備未完了 +{{count}}",
+    "prearmUnknown": "PreArm レポート待ち",
     "statusView": "ステータスメッセージを表示",
     "linkLoss": "損失 {{pct}}%"
   },

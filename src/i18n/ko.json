@@ -26,6 +26,7 @@
     "ariaLabel": "텔레메트리 상태",
     "prearmReady": "준비됨",
     "prearmNotReady": "준비 안 됨 +{{count}}",
+    "prearmUnknown": "PreArm 보고 대기 중",
     "statusView": "상태 메시지 보기",
     "linkLoss": "손실 {{pct}}%"
   },

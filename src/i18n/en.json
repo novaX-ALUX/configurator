@@ -26,6 +26,7 @@
     "ariaLabel": "Telemetry status",
     "prearmReady": "Ready",
     "prearmNotReady": "Not Ready +{{count}}",
+    "prearmUnknown": "Waiting for PreArm report",
     "statusView": "View status messages",
     "linkLoss": "{{pct}}% loss"
   },

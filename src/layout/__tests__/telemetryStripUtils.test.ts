@@ -30,12 +30,12 @@ describe('deriveStatusStrip', () => {
     const strip = deriveStatusStrip({ heartbeat: heartbeat(true, 5) }, statustext, null)
     expect(strip.armed).toBe(true)
     expect(strip.modeLabel).toBe('LOITER')
-    expect(strip.prearm).toEqual({ ready: true, count: 0 })
+    expect(strip.prearm).toEqual({ status: 'ready', count: 0 })
   })
 
-  it('disarmed with no PreArm STATUSTEXT ever seen: reads Ready', () => {
+  it('disarmed with no PreArm STATUSTEXT ever seen: reads unknown, not Ready (issue #19 — absence of PreArm messages is not evidence of readiness)', () => {
     const strip = deriveStatusStrip({ heartbeat: heartbeat(false) }, [], null)
-    expect(strip.prearm).toEqual({ ready: true, count: 0 })
+    expect(strip.prearm).toEqual({ status: 'unknown', count: 0 })
   })
 
   it('disarmed with distinct PreArm failures: counts distinct message text, ignoring repeats and non-PreArm lines', () => {
@@ -47,7 +47,15 @@ describe('deriveStatusStrip', () => {
       { severity: 4, text: 'prearm: case-insensitive prefix match', ts: 4 },
     ]
     const strip = deriveStatusStrip({ heartbeat: heartbeat(false) }, statustext, null)
-    expect(strip.prearm).toEqual({ ready: false, count: 3 })
+    expect(strip.prearm).toEqual({ status: 'notReady', count: 3 })
+  })
+
+  it('re-disarming after a successful arm, with no new PreArm failure logged, reads unknown again — not a stale Ready (issue #19: a session-wide Ready must not survive on silence alone)', () => {
+    const armed = deriveStatusStrip({ heartbeat: heartbeat(true, 5) }, [], null)
+    expect(armed.prearm).toEqual({ status: 'ready', count: 0 })
+
+    const disarmedAgain = deriveStatusStrip({ heartbeat: heartbeat(false, 5) }, [], null)
+    expect(disarmedAgain.prearm).toEqual({ status: 'unknown', count: 0 })
   })
 
   it('no heartbeat yet: arm/mode/prearm are all unknown even if PreArm STATUSTEXT already arrived', () => {

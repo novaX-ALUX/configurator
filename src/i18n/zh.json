@@ -26,6 +26,7 @@
     "ariaLabel": "遥测状态",
     "prearmReady": "就绪",
     "prearmNotReady": "未就绪 +{{count}}",
+    "prearmUnknown": "等待 PreArm 报告",
     "statusView": "查看状态消息",
     "linkLoss": "丢包 {{pct}}%"
   },

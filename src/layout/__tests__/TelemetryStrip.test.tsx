@@ -73,6 +73,36 @@ describe('TelemetryStrip', () => {
     expect(screen.getByText('Ready')).toBeInTheDocument()
   })
 
+  it('disarmed with heartbeat but no PreArm STATUSTEXT yet: renders the indeterminate em-dash chip, never a fabricated Ready (issue #19)', () => {
+    useConnectionStore.setState({
+      phase: 'connected',
+      session: fakeSession({ heartbeat: { armed: false, customMode: 0, baseMode: 0, systemStatus: 4, ts: 0 } }),
+      statustext: [],
+      linkStats: null,
+    })
+    render(<TelemetryStrip />)
+    expect(screen.getByText('DISARMED')).toBeInTheDocument()
+    expect(screen.queryByText('Ready')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ready/ })).not.toBeInTheDocument()
+    // prearm joins the still-unknown battery voltage / gps fix / link loss dashes — 4 total.
+    expect(screen.getAllByText('—')).toHaveLength(4)
+  })
+
+  it('first PreArm failure arrives after a dash window: chip flips straight to "Not Ready +1" (issue #19 — the flip-to-accurate behavior stays correct)', () => {
+    useConnectionStore.setState({
+      phase: 'connected',
+      session: fakeSession({ heartbeat: { armed: false, customMode: 0, baseMode: 0, systemStatus: 4, ts: 0 } }),
+      statustext: [],
+      linkStats: null,
+    })
+    const { rerender } = render(<TelemetryStrip />)
+    expect(screen.queryByText('Not Ready +1')).not.toBeInTheDocument()
+
+    useConnectionStore.setState({ statustext: [entry({ text: 'PreArm: Compass not calibrated' })] })
+    rerender(<TelemetryStrip />)
+    expect(screen.getByText('Not Ready +1')).toBeInTheDocument()
+  })
+
   it('disarmed with two distinct PreArm failures: shows "Not Ready +2" and clicking it navigates to the debug page', () => {
     useConnectionStore.setState({
       phase: 'connected',
