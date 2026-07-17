@@ -10,6 +10,8 @@ export type PageId =
   | 'calibration'
   | 'motors'
   | 'console'
+  /** Not a NAV_PAGES tab — reached from the sidebar's footer button (issue #39, M1 Decision 3 licenses disclosure). */
+  | 'licenses'
 
 export interface NavPage {
   id: PageId

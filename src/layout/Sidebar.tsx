@@ -70,6 +70,12 @@ const NAV_ICONS: Record<PageId, ReactNode> = {
       <path d="M7 9.25l3.25 2.75L7 14.75M12.5 15h4.5" />
     </svg>
   ),
+  licenses: (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 3.75h8l3 3v13.5h-11z" />
+      <path d="M14.5 3.75v3h3M9 12h6M9 15.5h6" />
+    </svg>
+  ),
 }
 
 export function Sidebar() {
@@ -127,6 +133,18 @@ export function Sidebar() {
           </svg>
         </span>
         <span className="text-[10px] font-semibold leading-[1.15]">{t('guide.openButton')}</span>
+      </button>
+      <button
+        type="button"
+        title={t('licenses.navLabel')}
+        aria-current={activePage === 'licenses' ? 'page' : undefined}
+        onClick={() => setActivePage('licenses')}
+        className={`flex w-[58px] flex-none flex-col items-center justify-center gap-1 rounded-[11px] px-1 py-1.5 text-center transition-colors ${
+          activePage === 'licenses' ? 'bg-nvx-primarySoft text-nvx-primary' : 'text-nvx-faint hover:bg-nvx-field hover:text-nvx-subtle'
+        }`}
+      >
+        <span aria-hidden="true">{NAV_ICONS.licenses}</span>
+        <span className="text-[10px] font-semibold leading-[1.15]">{t('licenses.navLabel')}</span>
       </button>
     </nav>
   )

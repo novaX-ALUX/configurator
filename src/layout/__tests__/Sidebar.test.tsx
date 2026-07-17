@@ -43,6 +43,14 @@ describe('Sidebar', () => {
     reset()
   })
 
+  it('the Licenses footer button navigates to the licenses page', () => {
+    reset()
+    render(<Sidebar />)
+    fireEvent.click(screen.getByRole('button', { name: 'Licenses' }))
+    expect(useNavigationStore.getState().activePage).toBe('licenses')
+    reset()
+  })
+
   it('the dashed-border Setup Guide button toggles the shared guide store', () => {
     render(<Sidebar />)
     expect(useGuideStore.getState().open).toBe(false)

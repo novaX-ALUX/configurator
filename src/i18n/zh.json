@@ -667,5 +667,29 @@
         "desc": "遥控信号丢失 · 低电量 · 地面站丢失"
       }
     }
+  },
+  "licenses": {
+    "navLabel": "许可证",
+    "title": "许可证与第三方声明",
+    "intro": "novaX Configurator 包含开源软件。本页列出随应用一同分发的第三方软件包、它们的许可证，以及获取其源代码的方式。",
+    "app": {
+      "title": "本应用",
+      "body": "novaX Configurator — © 2026 novaX-ALUX。应用自身的代码为 novaX-ALUX 专有；随附的第三方软件包各自保留其许可证，列于下方。项目托管于：",
+      "sourceLink": "GitHub 上的 novaX-ALUX/configurator"
+    },
+    "mavlink": {
+      "versionLabel": "版本",
+      "licenseLabel": "许可证",
+      "usageNote": "以未修改的形式打包，仅用作 MAVLink 消息定义元数据 — 未改动该软件包的任何源代码。",
+      "licenseTextLink": "阅读 LGPL-3.0 许可证全文",
+      "obtainTitle": "如何获取源代码",
+      "obtainBody": "所打包的确切版本的完整、未修改源代码可从以下任一渠道获取：",
+      "obtainNpm": "npm 软件包页面（版本 {{version}}）",
+      "obtainGithub": "GitHub 上的源代码仓库"
+    },
+    "others": {
+      "title": "其他打包的软件包",
+      "body": "以下开源软件包也随应用一同分发，均基于 MIT 许可证使用："
+    }
   }
 }

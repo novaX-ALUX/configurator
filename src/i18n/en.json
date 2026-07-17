@@ -667,5 +667,29 @@
         "desc": "RC loss · low battery · GCS loss"
       }
     }
+  },
+  "licenses": {
+    "navLabel": "Licenses",
+    "title": "Licenses & third-party notices",
+    "intro": "novaX Configurator ships with open-source software. This page lists the bundled third-party packages, their licenses, and how to obtain their source code.",
+    "app": {
+      "title": "This application",
+      "body": "novaX Configurator — © 2026 novaX-ALUX. The application's own code is proprietary to novaX-ALUX; bundled third-party packages keep their own licenses, listed below. The project is hosted at",
+      "sourceLink": "novaX-ALUX/configurator on GitHub"
+    },
+    "mavlink": {
+      "versionLabel": "Version",
+      "licenseLabel": "License",
+      "usageNote": "Bundled unmodified and used only as MAVLink message-definition metadata — no source code of the package was changed.",
+      "licenseTextLink": "Read the full LGPL-3.0 license text",
+      "obtainTitle": "How to obtain the source code",
+      "obtainBody": "The complete, unmodified source code of the exact bundled version is available from either of the following:",
+      "obtainNpm": "npm package page (version {{version}})",
+      "obtainGithub": "Source repository on GitHub"
+    },
+    "others": {
+      "title": "Other bundled packages",
+      "body": "The following open-source packages are also bundled with the application, each used under the MIT license:"
+    }
   }
 }

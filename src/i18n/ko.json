@@ -667,5 +667,29 @@
         "desc": "RC 신호 끊김 · 배터리 부족 · GCS 연결 끊김"
       }
     }
+  },
+  "licenses": {
+    "navLabel": "라이선스",
+    "title": "라이선스 및 서드파티 고지",
+    "intro": "novaX Configurator에는 오픈소스 소프트웨어가 포함되어 있습니다. 이 페이지는 함께 배포되는 서드파티 패키지와 그 라이선스, 소스 코드를 얻는 방법을 안내합니다.",
+    "app": {
+      "title": "이 애플리케이션",
+      "body": "novaX Configurator — © 2026 novaX-ALUX. 애플리케이션 자체 코드는 novaX-ALUX의 독점(proprietary) 소프트웨어이며, 함께 배포되는 서드파티 패키지는 각자의 라이선스를 따릅니다(아래 목록 참조). 프로젝트 저장소:",
+      "sourceLink": "GitHub의 novaX-ALUX/configurator"
+    },
+    "mavlink": {
+      "versionLabel": "버전",
+      "licenseLabel": "라이선스",
+      "usageNote": "수정 없이 그대로 번들되며, MAVLink 메시지 정의 메타데이터로만 사용됩니다 — 패키지의 소스 코드는 변경되지 않았습니다.",
+      "licenseTextLink": "LGPL-3.0 라이선스 전문 보기",
+      "obtainTitle": "소스 코드를 얻는 방법",
+      "obtainBody": "번들된 정확한 버전의 완전한 원본 소스 코드는 다음 중 어느 곳에서든 받을 수 있습니다:",
+      "obtainNpm": "npm 패키지 페이지 (버전 {{version}})",
+      "obtainGithub": "GitHub 소스 저장소"
+    },
+    "others": {
+      "title": "기타 번들 패키지",
+      "body": "다음 오픈소스 패키지들도 애플리케이션과 함께 배포되며, 모두 MIT 라이선스로 사용됩니다:"
+    }
   }
 }

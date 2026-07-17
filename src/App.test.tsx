@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import App from './App'
+import { useNavigationStore } from './store/navigation'
 
 describe('App shell', () => {
   it('renders the sidebar nav items and the top bar connection placeholder', () => {
@@ -27,5 +28,12 @@ describe('App shell', () => {
     expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
     expect(screen.getByLabelText('Baud rate')).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Any device' })).toBeInTheDocument()
+  })
+
+  it('reaches the licenses page from the sidebar without a vehicle connected (issue #39)', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Licenses' }))
+    expect(screen.getByRole('heading', { name: 'Licenses & third-party notices' })).toBeInTheDocument()
+    useNavigationStore.setState({ activePage: 'firmware' })
   })
 })

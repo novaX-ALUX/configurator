@@ -14,6 +14,7 @@ import { SetupPage } from './features/setup/SetupPage'
 import { TuningPage } from './features/tuning/TuningPage'
 import { CalibrationPage } from './features/calibration/CalibrationPage'
 import { MotorTestPage } from './features/motors/MotorTestPage'
+import { LicensesPage } from './features/licenses/LicensesPage'
 import { useMotorTestStore } from './features/motors/motorTestStore'
 import { SetupGuideDrawer } from './features/guide/SetupGuideDrawer'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
@@ -119,6 +120,8 @@ function App() {
           <CalibrationPage />
         ) : activePage === 'motors' ? (
           <MotorTestPage />
+        ) : activePage === 'licenses' ? (
+          <LicensesPage />
         ) : (
           page && <PagePlaceholder titleKey={page.labelKey} />
         )}

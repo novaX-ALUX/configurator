@@ -667,5 +667,29 @@
         "desc": "RC ロスト · バッテリー低下 · GCS ロスト"
       }
     }
+  },
+  "licenses": {
+    "navLabel": "ライセンス",
+    "title": "ライセンスとサードパーティ表記",
+    "intro": "novaX Configurator にはオープンソースソフトウェアが含まれています。このページでは、同梱しているサードパーティパッケージとそのライセンス、ソースコードの入手方法を掲載しています。",
+    "app": {
+      "title": "本アプリケーション",
+      "body": "novaX Configurator — © 2026 novaX-ALUX。アプリケーション自体のコードは novaX-ALUX のプロプライエタリです。同梱するサードパーティパッケージはそれぞれのライセンスに従います（下記参照）。プロジェクトの公開場所：",
+      "sourceLink": "GitHub の novaX-ALUX/configurator"
+    },
+    "mavlink": {
+      "versionLabel": "バージョン",
+      "licenseLabel": "ライセンス",
+      "usageNote": "無改変のまま同梱し、MAVLink メッセージ定義のメタデータとしてのみ使用しています — パッケージのソースコードは一切変更していません。",
+      "licenseTextLink": "LGPL-3.0 ライセンス全文を読む",
+      "obtainTitle": "ソースコードの入手方法",
+      "obtainBody": "同梱している正確なバージョンの完全かつ無改変のソースコードは、以下のいずれからでも入手できます：",
+      "obtainNpm": "npm パッケージページ（バージョン {{version}}）",
+      "obtainGithub": "GitHub のソースリポジトリ"
+    },
+    "others": {
+      "title": "その他の同梱パッケージ",
+      "body": "以下のオープンソースパッケージもアプリケーションに同梱されており、いずれも MIT ライセンスで使用しています："
+    }
   }
 }
