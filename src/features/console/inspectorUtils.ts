@@ -1,13 +1,14 @@
 /**
- * Pure, React-free helpers backing the Console page (issue #25 Ticket 2,
- * carrying forward issue #24 Ticket 1's Messages-table formatting/sort) —
- * value formatting, sort order, and Status-stream severity grouping, split
- * out from the components so they're unit-testable without React (colocated
- * derivation-split convention, `paramUtils.ts`/`seriesCatalog.ts`
- * precedent).
+ * Pure, React-free helpers backing the Console page (issue #26 Ticket 3,
+ * carrying forward issue #24/#25's Messages-table formatting/sort) — value
+ * formatting, sort order, Status-stream severity grouping, and clipboard
+ * export (PRD §9), split out from the components so they're unit-testable
+ * without React (colocated derivation-split convention,
+ * `paramUtils.ts`/`seriesCatalog.ts` precedent).
  */
-import type { DecodedFieldValue } from '../../core/mavlink/decode'
-import type { MessageAggregate } from '../../core/mavlink/inspector'
+import type { DecodedFieldValue, DecodedMessage } from '../../core/mavlink/decode'
+import { hzFromWindow, type MessageAggregate } from '../../core/mavlink/inspector'
+import { formatTime } from '../../utils/time'
 
 function formatScalar(value: number | bigint): string {
   return typeof value === 'bigint' ? value.toString() : String(value)
@@ -73,4 +74,55 @@ export const MAV_SEVERITY_NAMES: Record<number, string> = {
   5: 'NOTICE',
   6: 'INFO',
   7: 'DEBUG',
+}
+
+/**
+ * "Copy table" (PRD §9) — tab-separated, header row `Type\tHz\tCount\tLast
+ * seen` then one row per aggregate, in the given order (the caller passes
+ * `sortAggregatesByName`'s output, so this matches the visible table order
+ * at click time, live or frozen). `Hz` uses the same `hzFromWindow`
+ * derivation and `.toFixed(1)` the on-screen column uses; `Last seen` uses
+ * the same `formatTime` util `StatusStream` also imports. No trailing
+ * newline (unlike `formatFieldsText`, which explicitly wants one) — this is
+ * a bare header + rows, matching the fenced example in the PRD.
+ */
+export function formatMessagesTableTSV(rows: readonly MessageAggregate[], now: number): string {
+  const lines = rows.map((row) => {
+    const hz = hzFromWindow(row.recentTimestamps, now)
+    return `${row.name}\t${hz.toFixed(1)}\t${row.count}\t${formatTime(row.lastSeen)}`
+  })
+  return ['Type\tHz\tCount\tLast seen', ...lines].join('\n')
+}
+
+/**
+ * "Copy fields" (PRD §9) — first line `{name} (msgid {msgid})`, then one
+ * `{field_name}: {formatted_value}` line per field in the same order the
+ * table expansion renders them (`Object.entries` insertion order), using the
+ * exact same `formatFieldValue` rules as the on-screen rendering. Trailing
+ * newline after the last field, per the PRD's fenced example.
+ */
+export function formatFieldsText(msg: DecodedMessage): string {
+  const lines = [`${msg.name} (msgid ${msg.msgid})`]
+  for (const [field, value] of Object.entries(msg.fields)) {
+    lines.push(`${field}: ${formatFieldValue(value)}`)
+  }
+  return lines.join('\n') + '\n'
+}
+
+/**
+ * Wraps `navigator.clipboard.writeText` (PRD §9) so a denied/unavailable
+ * Clipboard API (e.g. an insecure context, or a browser that never grants
+ * the permission) never throws into the render tree — it resolves `false`
+ * instead, letting the caller show a disabled/error affordance. This is a
+ * nice-to-have export, not a safety-relevant path, so "fail silently and let
+ * the user retry" is an acceptable posture.
+ */
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (!navigator.clipboard?.writeText) return false
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
 }
