@@ -10,7 +10,8 @@
  * *before* `start()` exists to enforce anything: the Start button disables —
  * and explains itself — while the heartbeat is missing or armed, rather than
  * letting a click bounce off `RcCalStartBlockedError`. The throw is still
- * caught and surfaced (`error`) for the race where arming lands between the
+ * caught and surfaced (`blocked`, carrying the typed reason so the card can
+ * render reason-specific copy) for the race where arming lands between the
  * last render and the click.
  */
 import { useEffect, useRef, useState } from 'react'
@@ -24,8 +25,8 @@ export interface RcCalState {
   snapshot: RcCalSnapshot
   /** Latest heartbeat's armed flag; `undefined` until one has been seen this session. */
   armed: boolean | undefined
-  /** `start()` rejection copy (the disarmed-gate race), cleared on the next start/cancel. */
-  error: string | null
+  /** Why the last `start()` bounced (the entry-gate race), cleared on the next start/cancel. */
+  blocked: 'no-heartbeat' | 'armed' | null
   /** Set once the link drops mid-`sampling`; never clears on its own — same latch idiom as the accel/compass hooks. */
   interrupted: boolean
   start: () => void
@@ -38,7 +39,7 @@ export function useRcCalibration(session: MavSession | null, phase: ConnectionPh
 
   const [snapshot, setSnapshot] = useState<RcCalSnapshot>(IDLE_SNAPSHOT)
   const [armed, setArmed] = useState<boolean | undefined>(undefined)
-  const [error, setError] = useState<string | null>(null)
+  const [blocked, setBlocked] = useState<'no-heartbeat' | 'armed' | null>(null)
   const [interrupted, setInterrupted] = useState(false)
 
   useEffect(() => {
@@ -76,15 +77,17 @@ export function useRcCalibration(session: MavSession | null, phase: ConnectionPh
   function start(): void {
     const cal = calRef.current
     if (!cal) return
-    setError(null)
+    setBlocked(null)
     setInterrupted(false)
     try {
       cal.start()
     } catch (err) {
       // The card disables Start unless the latest heartbeat is disarmed, so
       // this only fires on the arm-vs-click race the module doc describes.
-      if (err instanceof RcCalStartBlockedError) setError(err.reason)
-      else setError(err instanceof Error ? err.message : String(err))
+      // `start()` throws nothing else by construction — anything different
+      // is a programming error and should stay loud.
+      if (!(err instanceof RcCalStartBlockedError)) throw err
+      setBlocked(err.reason)
     }
   }
 
@@ -93,7 +96,7 @@ export function useRcCalibration(session: MavSession | null, phase: ConnectionPh
   }
 
   function cancel(): void {
-    setError(null)
+    setBlocked(null)
     setInterrupted(false)
     calRef.current?.cancel()
     // A cancel with no live instance (post-disconnect banner dismissal) still
@@ -101,5 +104,5 @@ export function useRcCalibration(session: MavSession | null, phase: ConnectionPh
     if (!calRef.current) setSnapshot(IDLE_SNAPSHOT)
   }
 
-  return { snapshot, armed, error, interrupted, start, finish, cancel }
+  return { snapshot, armed, blocked, interrupted, start, finish, cancel }
 }

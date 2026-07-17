@@ -38,7 +38,7 @@ function fmt(us: number | undefined): string {
  */
 export function RcCalCard({ rc, connected, paramStore }: RcCalCardProps) {
   const { t } = useTranslation()
-  const { snapshot, armed, error, interrupted, start, finish, cancel } = rc
+  const { snapshot, armed, blocked, interrupted, start, finish, cancel } = rc
   const pending = useRcCalStagedStore((s) => s.pending)
   const stage = useRcCalStagedStore((s) => s.stage)
 
@@ -320,7 +320,11 @@ export function RcCalCard({ rc, connected, paramStore }: RcCalCardProps) {
               </span>
             )}
           </div>
-          {error && <p className="mt-2 text-[11.5px] font-semibold text-nvx-danger">{t('calibration.rc.startBlocked')}</p>}
+          {blocked && (
+            <p className="mt-2 text-[11.5px] font-semibold text-nvx-danger">
+              {blocked === 'armed' ? t('calibration.rc.startBlockedArmed') : t('calibration.rc.startBlockedNoHeartbeat')}
+            </p>
+          )}
         </>
       )}
     </section>
