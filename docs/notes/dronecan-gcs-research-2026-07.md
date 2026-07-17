@@ -334,3 +334,20 @@ already relies on for every other message (per Decision 1).
    node ID on the bus; not investigated here (would need to check `AP_DroneCAN`'s DNA/dynamic-node-allocation
    conflict handling, referenced only in passing via the `OPTION` bits `0:ClearDNADatabase,1:IgnoreDNANodeConflicts`
    at `AP_DroneCAN.cpp:128-133`).
+
+---
+
+## Addendum 2026-07-18: the in-house ESC's DSDL surface (open question 1 — answered)
+
+The in-house ESC firmware repo (`novaX-ALUX/f280049c_foc`, `src/comms/dronecan_ids.h`, read 2026-07-18) settles
+what the ESC node speaks: a **fully standard DroneCAN v0 surface** — `uavcan.equipment.esc.RawCommand` (DTID 1030)
+and `esc.Status` (1034), `NodeStatus` (341), `dynamic_node_id.Allocation` (1), plus services
+`GetNodeInfo` (1), `param.GetSet` (11), and `file.BeginFirmwareUpdate` (40) with a `file.Read` (48) *client*
+(260-byte response reassembly, `MODE_SOFTWARE_UPDATE`). The stack is hand-rolled (no libcanard — C28x
+`CHAR_BIT==16` breaks its DSDL packing), golden-frame-validated against pydronecan, and shares its wire contract
+with the legacy `esc_drv8300` firmware.
+
+Consequences for this note: §4's motor-test transparency and §2's discovery/param findings apply to the in-house
+ESCs without a custom-DSDL contingency, and §3's GCS-as-file-server firmware-update mechanism has both ends
+already implemented. The remaining open questions above are the operational ones (update timing, backpressure,
+filter edges, file-server node-ID collision).
