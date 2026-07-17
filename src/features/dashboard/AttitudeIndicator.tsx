@@ -55,7 +55,17 @@ export function AttitudeIndicator({ attitude, offline = false }: AttitudeIndicat
               <path d="M217 64l-10.4 6M23 64l10.4 6" />
             </g>
             <path d="M120 26l-6-11h12z" fill="#FFFFFF" />
-            <g transform={`rotate(${rollDeg} 120 120)`}>
+            {/* Issue #18: a CSS `transform` *property* here, not the SVG `transform`
+                *attribute* (`transform="rotate(...)"`) this used to carry. The attribute
+                form sits on the geometry/layout side of the rendering pipeline rather than
+                the compositor's, and nested inside this bezel's clip (`overflow-hidden
+                rounded-full`) + multi-layer inset `box-shadow` + a transformed sibling
+                layer (the pitch/roll gradient div above), that combination reproducibly
+                hung the tab's renderer under real hardware load (main thread/React
+                untouched — `Page.captureScreenshot` and synthetic input just never landed
+                a frame). Confirmed by isolating this exact element live and swapping it to
+                a `style` transform, which resolved the hang with an identical rotation. */}
+            <g style={{ transform: `rotate(${rollDeg}deg)`, transformOrigin: '120px 120px' }}>
               <path d="M120 28l-7 12h14z" fill="#F6A821" />
             </g>
           </svg>

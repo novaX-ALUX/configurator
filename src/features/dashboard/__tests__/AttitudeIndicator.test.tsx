@@ -20,4 +20,15 @@ describe('AttitudeIndicator', () => {
     render(<AttitudeIndicator attitude={{ rollDeg: 0, pitchDeg: 0, yawDeg: -90, ts: 0 }} />)
     expect(screen.getByText('270°')).toBeInTheDocument()
   })
+
+  it('rotates the bank-angle triangle with a CSS transform, never the SVG transform attribute (issue #18)', () => {
+    // jsdom can't reproduce the browser-compositor hang this guards against
+    // (see the `<g>`'s own comment in AttitudeIndicator.tsx for the
+    // mechanism) — this only verifies the structural fix stays in place.
+    const { container } = render(<AttitudeIndicator attitude={{ rollDeg: 12.34, pitchDeg: 0, yawDeg: 0, ts: 0 }} />)
+    const triangleGroup = container.querySelector('path[d="M120 28l-7 12h14z"]')?.parentElement
+    expect(triangleGroup).not.toBeNull()
+    expect(triangleGroup).not.toHaveAttribute('transform')
+    expect(triangleGroup).toHaveStyle({ transform: 'rotate(12.34deg)', transformOrigin: '120px 120px' })
+  })
 })
