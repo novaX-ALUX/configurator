@@ -456,7 +456,7 @@
   },
   "calibration": {
     "notConnectedTitle": "校准需要先连接飞控",
-    "notConnectedBody": "加速度计和罗盘校准需要与飞控传感器实时通信。",
+    "notConnectedBody": "加速度计、罗盘和遥控器校准都需要与飞控实时通信。",
     "connectCta": "连接飞控",
     "title": "传感器校准",
     "titleNote": "结果仅供审查 — 绝不会静默写入",
@@ -653,7 +653,7 @@
       },
       "calibrate": {
         "title": "校准传感器",
-        "descTodo": "先完成加速度计六面校准，再校准罗盘",
+        "descTodo": "先完成加速度计六面校准，再校准罗盘与遥控器",
         "descAccelOnly": "加速度计已完成 · 罗盘待完成",
         "descDone": "加速度计已完成 · 罗盘已完成"
       },

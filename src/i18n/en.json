@@ -456,7 +456,7 @@
   },
   "calibration": {
     "notConnectedTitle": "Calibration needs a connected board",
-    "notConnectedBody": "Accelerometer and compass calibration run live against the flight controller's sensors.",
+    "notConnectedBody": "Accelerometer, compass, and RC calibration all run live against the flight controller.",
     "connectCta": "Connect flight controller",
     "title": "Sensor Calibration",
     "titleNote": "Results are shown for review — never written silently",
@@ -653,7 +653,7 @@
       },
       "calibrate": {
         "title": "Calibrate sensors",
-        "descTodo": "Accelerometer 6-face, then compass",
+        "descTodo": "Accelerometer 6-face, compass, then RC calibration",
         "descAccelOnly": "Accel done · compass pending",
         "descDone": "Accel done · compass done"
       },
