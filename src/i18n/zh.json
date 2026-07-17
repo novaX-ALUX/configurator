@@ -278,10 +278,12 @@
         }
       }
     },
-    "pendingBadge": "{{count}} 项待处理 — 尚未写入",
-    "revert": "还原",
     "discardedOnDisconnect": "{{count}} 项未保存的设置修改已被丢弃 — 设置修改不会在会话间保留。",
     "errorNonNegative": "必须为零或正数"
+  },
+  "staged": {
+    "pendingBadge": "{{count}} 项待处理 — 尚未写入",
+    "revert": "还原"
   },
   "firmware": {
     "title": "固件",

@@ -278,10 +278,12 @@
         }
       }
     },
-    "pendingBadge": "{{count}} 件保留中 — まだ書き込まれていません",
-    "revert": "元に戻す",
     "discardedOnDisconnect": "{{count}} 件の未保存の設定変更が破棄されました — 設定変更はセッション間で保持されません。",
     "errorNonNegative": "0以上である必要があります"
+  },
+  "staged": {
+    "pendingBadge": "{{count}} 件保留中 — まだ書き込まれていません",
+    "revert": "元に戻す"
   },
   "firmware": {
     "title": "ファームウェア",

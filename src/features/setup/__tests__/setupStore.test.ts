@@ -143,6 +143,24 @@ describe('useSetupStore', () => {
     })
   })
 
+  describe('atomicity (issue #33 review finding)', () => {
+    it('stage updates pending and touched flags in ONE state update — no intermediate notification', () => {
+      const snapshots: Array<{ pendingSize: number; fsTouched: boolean }> = []
+      const unsub = useSetupStore.subscribe((s) => snapshots.push({ pendingSize: s.pending.size, fsTouched: s.fsTouched }))
+      useSetupStore.getState().stage('FS_THR_ENABLE', 1, 'Always RTL')
+      unsub()
+      expect(snapshots).toEqual([{ pendingSize: 1, fsTouched: true }])
+    })
+
+    it('stageFrame updates both params and frameEscTouched in ONE state update', () => {
+      const snapshots: Array<{ pendingSize: number; frameEscTouched: boolean }> = []
+      const unsub = useSetupStore.subscribe((s) => snapshots.push({ pendingSize: s.pending.size, frameEscTouched: s.frameEscTouched }))
+      useSetupStore.getState().stageFrame(1, 1, 'Quad X')
+      unsub()
+      expect(snapshots).toEqual([{ pendingSize: 2, frameEscTouched: true }])
+    })
+  })
+
   describe('revertAll', () => {
     it('clears every pending edit and write status', () => {
       useSetupStore.getState().stage('BATT_CAPACITY', 5200, '5200 mAh')

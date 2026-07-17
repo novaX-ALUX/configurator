@@ -7,14 +7,14 @@ import { FrameSelector } from './FrameSelector'
 import { EscProtocol } from './EscProtocol'
 import { BatteryMonitor } from './BatteryMonitor'
 import { Failsafes } from './Failsafes'
-import { SetupDirtyBar } from './SetupDirtyBar'
+import { StagedReviewBar } from '../staged/StagedReviewBar'
 import { useSetupStore } from './setupStore'
 
 type LoadState = { kind: 'idle' } | { kind: 'loading'; got: number; total: number | undefined } | { kind: 'error'; message: string } | { kind: 'loaded' }
 
 /**
  * Setup page (Task 7.2): frame/ESC/battery/failsafe fields staged against
- * `setupStore` and written together via the sticky `SetupDirtyBar`. Shares
+ * `setupStore` and written together via the sticky `StagedReviewBar`. Shares
  * the connected app's single `ParamStore` with `features/params` — if that
  * page (or a prior visit to this one) already ran `fetchAll()`, values are
  * already cached and this page skips straight to the form; otherwise it
@@ -199,7 +199,7 @@ export function SetupPage() {
         />
 
         {pending.size > 0 && (
-          <SetupDirtyBar
+          <StagedReviewBar
             pending={pending}
             writeStatus={writeStatus}
             writing={writing}

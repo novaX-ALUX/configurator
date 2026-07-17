@@ -278,10 +278,12 @@
         }
       }
     },
-    "pendingBadge": "{{count}} pending — nothing written yet",
-    "revert": "Revert",
     "discardedOnDisconnect": "{{count}} unsaved setup change(s) were discarded — they don't persist across sessions.",
     "errorNonNegative": "Must be zero or greater"
+  },
+  "staged": {
+    "pendingBadge": "{{count}} pending — nothing written yet",
+    "revert": "Revert"
   },
   "firmware": {
     "title": "Firmware",

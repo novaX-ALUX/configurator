@@ -14,10 +14,11 @@
  * which MAV_PARAM_TYPEs are integers.
  *
  * `DiffRowStatus`/`writeErrorStatus`/`fetchErrorMessage`/`withoutKey` (Task
- * 7.2) also live here, not just in `ParamsPage`: `features/setup`'s
- * `setupStore`/`SetupPage`/`SetupDirtyBar` stage-and-write against the same
- * `ParamStore` with the exact same five write outcomes and the exact same
- * `fetchAll()` failure modes, so this is the one place both features import
+ * 7.2) also live here, not just in `ParamsPage`: `features/staged`'s
+ * `createStagedSlice`/`StagedReviewBar` (the shared staged-write machinery
+ * Setup composes, issue #33) stage-and-write against the same `ParamStore`
+ * with the exact same five write outcomes and the exact same `fetchAll()`
+ * failure modes, so this is the one place every staged-write surface imports
  * that mapping from, rather than each carrying its own copy that could
  * silently drift apart.
  */
@@ -35,7 +36,7 @@ import {
 } from '../../core/mavlink/params'
 import type { ParamMetaEntry } from '../../core/paramMetadata'
 
-/** Every outcome a staged `ParamStore.set()` can settle to, shared by `features/params`' `DiffDrawer` and `features/setup`'s `SetupDirtyBar`. */
+/** Every outcome a staged `ParamStore.set()` can settle to, shared by `features/params`' `DiffDrawer` and `features/staged`'s `StagedReviewBar`. */
 export type DiffRowStatus =
   | { kind: 'writing' }
   | { kind: 'ok' }

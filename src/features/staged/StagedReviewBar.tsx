@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { diffStatusMessage, type DiffRowStatus } from '../params/paramUtils'
-import type { PendingChange } from './setupStore'
+import type { StagedChange } from './stagedStore'
 
-interface SetupDirtyBarProps {
-  pending: Map<string, PendingChange>
+interface StagedReviewBarProps {
+  pending: Map<string, StagedChange>
   writeStatus: Map<string, DiffRowStatus>
   writing: boolean
   onWrite: () => void
@@ -18,12 +18,14 @@ function toneOf(status: DiffRowStatus | undefined): Tone {
 }
 
 /**
- * Sticky pending bar: the design mock's bottom bar (chips + Write/Revert),
- * not a separate review dialog like `features/params`' `DiffDrawer` — Setup
- * has no modal step between staging and writing, this bar *is* the review
- * surface. Only rendered by `SetupPage` while `pending.size > 0`.
+ * Sticky review bar (issue #33, extracted from `features/setup`'s
+ * `SetupDirtyBar`): chips + Write/Revert over a `createStagedSlice` store,
+ * not a separate review dialog like `features/params`' `DiffDrawer` — pages
+ * using this bar have no modal step between staging and writing, the bar's
+ * chips + per-param statuses *are* the review surface. Callers render it
+ * only while `pending.size > 0`.
  */
-export function SetupDirtyBar({ pending, writeStatus, writing, onWrite, onRevert }: SetupDirtyBarProps) {
+export function StagedReviewBar({ pending, writeStatus, writing, onWrite, onRevert }: StagedReviewBarProps) {
   const { t } = useTranslation()
   // Computed once per param, not re-looked-up separately for the chip tone,
   // the "any failures?" check, and the failure message below.
@@ -34,7 +36,7 @@ export function SetupDirtyBar({ pending, writeStatus, writing, onWrite, onRevert
     <div className="sticky bottom-3 flex flex-col gap-2 rounded-xl border border-nvx-warningBorder bg-nvx-warningSoft px-4 py-3 shadow-popover">
       <div className="flex flex-wrap items-center gap-2.5">
         <span className="h-2 w-2 flex-none rounded-full bg-nvx-warning" />
-        <span className="flex-none text-[12.5px] font-extrabold text-nvx-warningText">{t('setup.pendingBadge', { count: rows.length })}</span>
+        <span className="flex-none text-[12.5px] font-extrabold text-nvx-warningText">{t('staged.pendingBadge', { count: rows.length })}</span>
         <div className="flex min-w-0 flex-wrap gap-1.5">
           {rows.map(({ param, change, tone }) => (
             <span
@@ -66,7 +68,7 @@ export function SetupDirtyBar({ pending, writeStatus, writing, onWrite, onRevert
           onClick={onRevert}
           className="flex-none rounded-[9px] px-3 py-2 text-[12.5px] font-semibold text-nvx-warningText hover:bg-nvx-warningBorder/30 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {t('setup.revert')}
+          {t('staged.revert')}
         </button>
       </div>
       {failed.length > 0 && (

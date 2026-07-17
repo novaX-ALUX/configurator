@@ -278,10 +278,12 @@
         }
       }
     },
-    "pendingBadge": "{{count}}건 대기 중 — 아직 기록되지 않음",
-    "revert": "되돌리기",
     "discardedOnDisconnect": "{{count}}건의 저장되지 않은 설정 변경이 취소되었습니다 — 설정 변경은 세션 간에 유지되지 않습니다.",
     "errorNonNegative": "0 이상이어야 합니다"
+  },
+  "staged": {
+    "pendingBadge": "{{count}}건 대기 중 — 아직 기록되지 않음",
+    "revert": "되돌리기"
   },
   "firmware": {
     "title": "펌웨어",
