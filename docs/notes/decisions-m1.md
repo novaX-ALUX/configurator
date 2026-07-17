@@ -1,7 +1,7 @@
 # Task 0.4: M1 Decision-Lock Record (Hard Gate)
 
 Date: 2026-07-02
-Status: LOCKED (except the LGPL item, which is PENDING-HUMAN)
+Status: LOCKED (all items; Decision 3 closed as LOCKED(a) by human sign-off 2026-07-17)
 
 **This document is a hard constraint on all interfaces in Phase 1 and beyond. Subsequent tasks (1.1/1.2 manifest
 contract, 2.2 frame layer, 3.3 firmware engine, ...) must be consistent with this document; if an interface conflicts
@@ -95,7 +95,7 @@ interface itself, rather than opening a new import point outside of `defs.ts`.
 
 ---
 
-## Decision 3: LGPL license status — PENDING HUMAN SIGN-OFF
+## Decision 3: LGPL license status — LOCKED(a), human sign-off 2026-07-17
 
 **Decision**: `mavlink-mappings`'s `package.json` declares `"license": "LGPL"`. During the M1 development phase,
 it **may be used** (this does not block development). But before any **public release** (GitHub Pages going live,
@@ -119,7 +119,11 @@ states that "the go/no-go call belongs to Task 0.4 and the human, not to the spi
 - If fallback (b) is taken, the adapter file path from Decisions 1/2 remains unchanged — only the internal
   implementation of `defs.ts` is swapped out, which is exactly the purpose of Decision 2's isolation design.
 
-**Status**: **PENDING-HUMAN** (owner = human, not something the spike/controller can decide on its own)
+**Status**: **LOCKED(a)** — human signed off 2026-07-17 on accepting the LGPL. Obligation from option (a): the public
+site must carry a licenses page listing `mavlink-mappings`, its license terms, and how to obtain its source (tracked
+as a GitHub issue at sign-off time). The spike's mitigating factors stand: metadata-only usage, package source
+unmodified. Sign-off was retroactive — GitHub Pages had already been public for several releases when the decision
+was closed.
 
 **How to overturn**: "Overturning" does not apply here — this is an open item that must be explicitly closed by a
 human, not a technical decision that can be automatically superseded by a later spike. See (a)/(b) above for how
