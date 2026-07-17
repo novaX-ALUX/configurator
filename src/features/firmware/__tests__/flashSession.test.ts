@@ -7,6 +7,7 @@ import type { ParsedHex } from '../../../core/firmware/intelhex'
 import {
   createDfuFlashSession,
   createFlashSession,
+  POWER_LOSS_RECONNECT_WINDOW_MS,
   realFlashSessionEffects,
   type DfuSessionEffects,
   type DfuSessionState,
@@ -117,10 +118,10 @@ class FakePx4Flasher implements Px4FlasherLike {
   }
 }
 
-function baseEffects(overrides: Partial<FlashSessionEffects> = {}): { effects: FlashSessionEffects; flasher: FakePx4Flasher; transport: MockTransport; calls: { fetch: number; reboot: number; openBootloader: number; createFlasher: number } } {
+function baseEffects(overrides: Partial<FlashSessionEffects> = {}): { effects: FlashSessionEffects; flasher: FakePx4Flasher; transport: MockTransport; calls: { fetch: number; reboot: number; openBootloader: number; createFlasher: number; watchReconnect: number } } {
   const flasher = new FakePx4Flasher()
   const bootloaderTransport = new MockTransport()
-  const calls = { fetch: 0, reboot: 0, openBootloader: 0, createFlasher: 0 }
+  const calls = { fetch: 0, reboot: 0, openBootloader: 0, createFlasher: 0, watchReconnect: 0 }
   const liveTransport = new MockTransport()
 
   const effects: FlashSessionEffects = {
@@ -139,6 +140,12 @@ function baseEffects(overrides: Partial<FlashSessionEffects> = {}): { effects: F
     createFlasher: () => {
       calls.createFlasher++
       return flasher
+    },
+    // Default: nothing re-enumerates within the window (a plain cable pull) —
+    // tests for the power-loss signature (issue #47) override this.
+    watchForPortReconnect: async () => {
+      calls.watchReconnect++
+      return false
     },
     now: () => 0,
     ...overrides,
@@ -503,6 +510,128 @@ describe('createFlashSession (normal update, Px4Flasher)', () => {
 
     expect(store.getState().failedStep).toBe('identifying')
     expect(store.getState().disconnected).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Power-loss signature (issue #47, from #28's Part B diagnosis): a disconnect
+// during an active erase/write followed by a prompt port re-enumeration means
+// the board browned out and reset into its bootloader (a half-erased app
+// can't boot) — the page should suggest a direct USB port, not "reconnect
+// the cable". Detection is classification-only: the reconnect watch is a
+// passive observation effect, and no flash/reconnect behavior changes.
+// ---------------------------------------------------------------------------
+
+describe('createFlashSession — power-loss signature (issue #47)', () => {
+  it('flags powerLossSuspected on a mid-programming disconnect followed by prompt re-enumeration, passing the documented window', async () => {
+    let watchWindow: number | null = null
+    const { effects, flasher } = baseEffects({
+      watchForPortReconnect: async (windowMs) => {
+        watchWindow = windowMs
+        return true
+      },
+    })
+    flasher.flashError = new Error('Serial port closed')
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+
+    expect(store.getState().failedStep).toBe('programming')
+    expect(store.getState().disconnected).toBe(true)
+    await waitFor(store, (s) => s.powerLossSuspected)
+    expect(watchWindow).toBe(POWER_LOSS_RECONNECT_WINDOW_MS)
+  })
+
+  it('flags a mid-erase disconnect (no progress ever seen) the same way — #28 died at ~16s into CHIP_ERASE', async () => {
+    const { effects, flasher } = baseEffects({ watchForPortReconnect: async () => true })
+    flasher.progressSteps = [] // flash() throws before any onProgress — classified as 'erasing'
+    flasher.flashError = new Error('Serial port closed')
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+
+    expect(store.getState().failedStep).toBe('erasing')
+    await waitFor(store, (s) => s.powerLossSuspected)
+  })
+
+  it('keeps today\'s copy when nothing re-enumerates within the window (a plain cable pull): disconnected but not powerLossSuspected', async () => {
+    const { effects, flasher, calls } = baseEffects() // default watch resolves false
+    flasher.flashError = new Error('Serial port closed')
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+    await new Promise((r) => setTimeout(r, 20)) // give a (wrong) upgrade every chance to land
+
+    expect(calls.watchReconnect).toBe(1) // the watch ran — and answered "nothing came back"
+    expect(store.getState().disconnected).toBe(true)
+    expect(store.getState().powerLossSuspected).toBe(false)
+  })
+
+  it('never starts the watch for a disconnect outside erasing/programming (identify-time drop keeps today\'s copy)', async () => {
+    const { effects, flasher, calls } = baseEffects()
+    flasher.identify = async () => {
+      throw new Error('Serial port closed')
+    }
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(store.getState().failedStep).toBe('identifying')
+    expect(store.getState().disconnected).toBe(true)
+    expect(calls.watchReconnect).toBe(0)
+    expect(store.getState().powerLossSuspected).toBe(false)
+  })
+
+  it('never starts the watch for a non-disconnect failure at erase/write (e.g. CRC verify)', async () => {
+    const { effects, flasher, calls } = baseEffects()
+    flasher.flashError = new Error('CRC verify failed — flash mismatch')
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(calls.watchReconnect).toBe(0)
+    expect(store.getState().powerLossSuspected).toBe(false)
+  })
+
+  it('retry() clears the flag, and a stale watch resolving after retry() started a new attempt cannot resurrect it', async () => {
+    let watchCalls = 0
+    let resolveFirstWatch!: (v: boolean) => void
+    const { effects, flasher } = baseEffects({
+      watchForPortReconnect: () => {
+        watchCalls++
+        if (watchCalls === 1) return new Promise((resolve) => (resolveFirstWatch = resolve))
+        return Promise.resolve(false)
+      },
+    })
+    flasher.flashError = new Error('Serial port closed')
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+    expect(store.getState().powerLossSuspected).toBe(false) // watch still pending
+
+    flasher.flashError = null // the retry succeeds
+    store.getState().retry()
+    await waitFor(store, (s) => s.step === 'done')
+
+    resolveFirstWatch(true) // the abandoned attempt's watch answers only now
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(store.getState().step).toBe('done')
+    expect(store.getState().powerLossSuspected).toBe(false) // stale resolution never touched state
   })
 })
 

@@ -459,7 +459,7 @@ export function FirmwarePage() {
                   <span className="text-[12.5px] font-semibold leading-relaxed text-nvx-dangerHover">
                     {t('firmware.failedAt', { step: session.failedStep ? t(NORMAL_STEP_ORDER.find((s) => s.step === session.failedStep)?.labelKey ?? '') : '', message: session.error })}
                     <br />
-                    {session.disconnected ? t('firmware.disconnectedHint') : t('firmware.safeRetryHint')}
+                    {session.powerLossSuspected ? t('firmware.powerLossHint') : session.disconnected ? t('firmware.disconnectedHint') : t('firmware.safeRetryHint')}
                   </span>
                   <button
                     type="button"

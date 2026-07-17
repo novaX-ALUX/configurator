@@ -437,6 +437,7 @@
     "failedAt": "在“{{step}}”步骤失败:{{message}}",
     "safeRetryHint": "飞控仍处于 bootloader 状态 — 可以安全重试。",
     "disconnectedHint": "连接已断开，请重新插拔 USB 线后重试。",
+    "powerLossHint": "飞控似乎在刷写途中断电并复位 — 很可能是 USB 口供电不足（USB 集线器上很常见）。请把飞控直接插到电脑本体的 USB 口（机箱后置接口最佳），然后重试。",
     "retry": "重试刷写",
     "doneMessage": "刷写并校验完成 — 飞控已重启，参数保持不变。",
     "doneClose": "完成",

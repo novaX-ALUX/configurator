@@ -141,8 +141,27 @@ export interface FlashSessionEffects {
   openBootloaderTransport: (oldTransport: Transport | null) => Promise<Transport>
   /** Fresh `Px4Flasher` per transport generation — never reused across a reconnect (task 3.3/router.ts's architectural fact). */
   createFlasher: (transport: Transport) => Px4FlasherLike
+  /**
+   * Passive watch for the power-loss signature (issue #47): resolves `true`
+   * if an already-authorized serial port re-enumerates within `windowMs`,
+   * `false` otherwise. Production listens for `navigator.serial`'s `connect`
+   * event — which only fires for ports this site already has permission for
+   * — with no `getPorts()` polling and no opening of candidates: observation
+   * only, never transport probing.
+   */
+  watchForPortReconnect: (windowMs: number) => Promise<boolean>
   now: () => number
 }
+
+/**
+ * How long after a mid-erase/write disconnect a port re-enumeration still
+ * counts as the power-loss signature (issue #47). Issue #28's hardware
+ * evidence puts the bootloader back on the bus within ~1s of the brown-out;
+ * 3s adds margin for slower hubs/OSes while staying far below how fast a
+ * human could physically re-plug a cable — so a genuine cable pull cannot
+ * masquerade as a power loss.
+ */
+export const POWER_LOSS_RECONNECT_WINDOW_MS = 3000
 
 class FlashStepError extends Error {
   constructor(
@@ -176,6 +195,19 @@ export interface FlashSessionState {
   error: string | null
   /** True only when a `failed` state was caused by the connection dropping mid-flash — the page uses this to show reconnect guidance instead of a generic error, and `retry()` knows to redo the `connecting` step rather than reuse a dead transport. */
   disconnected: boolean
+  /**
+   * True when a `disconnected` failure during erasing/programming was
+   * followed by a prompt port re-enumeration — issue #28's brown-out
+   * signature (the board lost power under sustained erase current; its
+   * half-erased app can't boot, so whatever promptly reappeared is its
+   * bootloader). The page shows power/direct-USB-port guidance instead of
+   * the generic "reconnect the cable" copy. A heuristic, set asynchronously
+   * up to `POWER_LOSS_RECONNECT_WINDOW_MS` after `failed` lands; a miss
+   * (e.g. Chrome treating the bootloader as a brand-new device — see
+   * reconnect.ts's USB-identity caveat) just leaves the generic copy, the
+   * safe direction.
+   */
+  powerLossSuspected: boolean
   /** True for an attempt started via `prepareDirect()` (issue #29: board already in its bootloader) — the page uses this to skip rendering the Reboot/Reconnect steps, which never run for this path, and to show accurate confirm-dialog copy (no reboot happens). */
   directEntry: boolean
   log: FlashLogEntry[]
@@ -383,6 +415,19 @@ export function createFlashSession(effects: FlashSessionEffects) {
         const message = err instanceof Error ? err.message : String(err)
         set({ step: 'failed', failedStep: step, error: message, disconnected })
         log(`Failed: ${message}`)
+        // Power-loss signature (issue #47): a disconnect during an active
+        // erase/write, with the port promptly back on the bus, means the
+        // board browned out and reset into its bootloader — upgrade the
+        // failed state in place so the page can swap in the direct-USB-port
+        // guidance. Other disconnect shapes (identify-time drops, no
+        // re-enumeration) never reach this watch and keep today's copy.
+        if (disconnected && (step === 'erasing' || step === 'programming')) {
+          void effects.watchForPortReconnect(POWER_LOSS_RECONNECT_WINDOW_MS).then((reappeared) => {
+            if (!reappeared || !isCurrent() || get().step !== 'failed') return
+            set({ powerLossSuspected: true })
+            log('The board re-enumerated right after the disconnect — it likely lost power mid-flash (USB supply issue).')
+          })
+        }
       }
     }
 
@@ -394,6 +439,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
       failedStep: null,
       error: null,
       disconnected: false,
+      powerLossSuspected: false,
       directEntry: false,
       log: [],
 
@@ -412,6 +458,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
           failedStep: null,
           error: null,
           disconnected: false,
+          powerLossSuspected: false,
           directEntry: false,
           log: [],
         })
@@ -433,6 +480,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
           failedStep: null,
           error: null,
           disconnected: false,
+          powerLossSuspected: false,
           directEntry: true,
           log: [],
         })
@@ -451,12 +499,12 @@ export function createFlashSession(effects: FlashSessionEffects) {
         directEntry = false
         rebootedTransportRef = null
         closeBootloaderTransport()
-        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, directEntry: false })
+        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, powerLossSuspected: false, directEntry: false })
       },
 
       retry() {
         if (get().step !== 'failed') return
-        set({ failedStep: null, error: null, disconnected: false })
+        set({ failedStep: null, error: null, disconnected: false, powerLossSuspected: false })
         void run() // resumes using whatever apjRef/rebootSent/bootloaderTransportRef survived the failure (see classifyPx4Failure's disconnected handling) — never re-sends the reboot-to-bootloader command once rebootSent is true
       },
 
@@ -467,7 +515,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
         directEntry = false
         rebootedTransportRef = null
         closeBootloaderTransport()
-        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, directEntry: false, log: [] })
+        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, powerLossSuspected: false, directEntry: false, log: [] })
       },
     }
   })
@@ -631,6 +679,29 @@ async function openBootloaderTransport(oldTransport: Transport | null): Promise<
 }
 
 /**
+ * Real `watchForPortReconnect` (issue #47's power-loss heuristic): passively
+ * listens for `navigator.serial`'s `connect` event, which only fires for
+ * ports this site is already authorized for — no `getPorts()` polling, no
+ * opening of candidates, so it cannot interfere with any concurrent
+ * transport work. Chrome may treat the re-enumerated bootloader as a
+ * brand-new device and fire nothing (reconnect.ts's USB-identity caveat) —
+ * then this resolves `false` and the generic disconnect copy stays, the
+ * safe direction for a heuristic.
+ */
+function watchForPortReconnect(windowMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const finish = (result: boolean): void => {
+      navigator.serial.removeEventListener('connect', onConnect)
+      clearTimeout(timer)
+      resolve(result)
+    }
+    const onConnect = (): void => finish(true)
+    const timer = setTimeout(() => finish(false), windowMs)
+    navigator.serial.addEventListener('connect', onConnect)
+  })
+}
+
+/**
  * Direct-bootloader entry (issue #29): opens a fresh `Transport` for a board
  * that is ALREADY sitting in its bootloader, via
  * `navigator.serial.requestPort()` — unlike `openBootloaderTransport()`
@@ -674,6 +745,7 @@ export function realFlashSessionEffects(fetchFn: typeof fetch = fetch): FlashSes
     rebootToBootloader: sendRebootToBootloader,
     openBootloaderTransport,
     createFlasher: (transport) => new Px4Flasher(transport),
+    watchForPortReconnect,
     now: () => Date.now(),
   }
 }

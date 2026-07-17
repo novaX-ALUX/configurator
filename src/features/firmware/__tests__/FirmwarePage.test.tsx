@@ -160,6 +160,31 @@ describe('FirmwarePage — Cancel affordance on the in-progress view', () => {
   })
 })
 
+describe('FirmwarePage — failed-state recovery guidance (issue #47)', () => {
+  it('shows the power/direct-USB-port guidance when the power-loss signature matched, instead of the generic reconnect copy', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'connected' })
+    useFlashSession.setState({ step: 'failed', failedStep: 'programming', error: 'Serial port closed', disconnected: true, powerLossSuspected: true, target: runningTarget() })
+
+    render(<FirmwarePage />)
+
+    // The hint shares its <span> with the failedAt line, so match on substrings of the element's full text.
+    expect(screen.getByText(/directly into a USB port/)).toBeInTheDocument()
+    expect(screen.queryByText(/Reconnect the USB cable, then retry/)).not.toBeInTheDocument()
+  })
+
+  it('keeps the generic reconnect copy for a disconnect without the signature', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'connected' })
+    useFlashSession.setState({ step: 'failed', failedStep: 'programming', error: 'Serial port closed', disconnected: true, powerLossSuspected: false, target: runningTarget() })
+
+    render(<FirmwarePage />)
+
+    expect(screen.getByText(/Reconnect the USB cable, then retry/)).toBeInTheDocument()
+    expect(screen.queryByText(/directly into a USB port/)).not.toBeInTheDocument()
+  })
+})
+
 describe('FirmwarePage — mid-flash navigation guard', () => {
   it('registers no guard while the session is idle', async () => {
     mockManifestFetch()

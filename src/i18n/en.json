@@ -437,6 +437,7 @@
     "failedAt": "Failed at \"{{step}}\": {{message}}",
     "safeRetryHint": "The board is still in its bootloader — retry is safe.",
     "disconnectedHint": "Connection lost. Reconnect the USB cable, then retry.",
+    "powerLossHint": "The board appears to have lost power and reset mid-flash — the USB port likely couldn't supply enough current (common with USB hubs). Plug the board directly into a USB port on the computer — a rear port is best — then retry.",
     "retry": "Retry flash",
     "doneMessage": "Flashed and verified — board rebooted, parameters intact.",
     "doneClose": "Done",
