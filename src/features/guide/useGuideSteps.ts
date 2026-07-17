@@ -44,6 +44,7 @@ export function useGuideSteps(): GuideStep[] {
   const fsTouched = useSetupStore((s) => s.fsTouched)
   const accelDone = useCalibrationProgress((s) => s.accelDone)
   const compassApplied = useCalibrationProgress((s) => s.compassApplied)
+  const rcCalApplied = useCalibrationProgress((s) => s.rcCalApplied)
   const motorsTested = useMotorTestStore((s) => s.motorsTested)
   const initialTuneStaged = useTuningStore((s) => s.initialTuneStaged)
 
@@ -65,6 +66,7 @@ export function useGuideSteps(): GuideStep[] {
     frameEscTouched,
     accelDone,
     compassApplied,
+    rcCalApplied,
     motorsTested,
     fsTouched,
     initialTuneStaged,

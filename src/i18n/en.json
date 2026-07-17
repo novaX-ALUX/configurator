@@ -676,8 +676,9 @@
       "calibrate": {
         "title": "Calibrate sensors",
         "descTodo": "Accelerometer 6-face, compass, then RC calibration",
-        "descAccelOnly": "Accel done · compass pending",
-        "descDone": "Accel done · compass done"
+        "descAccelOnly": "Accel done · compass and RC pending",
+        "descRcPending": "Accel and compass done · RC calibration pending",
+        "descDone": "Accel, compass and RC calibration done"
       },
       "motorTest": {
         "title": "Test motor order & direction",

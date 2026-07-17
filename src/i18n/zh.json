@@ -676,8 +676,9 @@
       "calibrate": {
         "title": "校准传感器",
         "descTodo": "先完成加速度计六面校准，再校准罗盘与遥控器",
-        "descAccelOnly": "加速度计已完成 · 罗盘待完成",
-        "descDone": "加速度计已完成 · 罗盘已完成"
+        "descAccelOnly": "加速度计已完成 · 罗盘与遥控器待完成",
+        "descRcPending": "加速度计与罗盘已完成 · 遥控器校准待完成",
+        "descDone": "加速度计、罗盘与遥控器校准均已完成"
       },
       "motorTest": {
         "title": "测试电机顺序与转向",

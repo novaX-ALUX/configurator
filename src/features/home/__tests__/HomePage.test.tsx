@@ -37,7 +37,7 @@ describe('HomePage: guide steps first-class (same derivation as the drawer)', ()
   it('reflects the exact same store flags the drawer derives from', () => {
     useConnectionStore.setState({ phase: 'connected' })
     useSetupStore.setState({ frameEscTouched: true, fsTouched: false })
-    useCalibrationProgress.setState({ accelDone: true, compassApplied: true })
+    useCalibrationProgress.setState({ accelDone: true, compassApplied: true, rcCalApplied: true })
     useMotorTestStore.setState({ motorsTested: false })
 
     render(<HomePage />)

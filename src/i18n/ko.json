@@ -676,8 +676,9 @@
       "calibrate": {
         "title": "센서 캘리브레이션",
         "descTodo": "가속도계 6자세 캘리브레이션 후 컴퍼스, RC 순으로 진행",
-        "descAccelOnly": "가속도계 완료 · 컴퍼스 대기 중",
-        "descDone": "가속도계 완료 · 컴퍼스 완료"
+        "descAccelOnly": "가속도계 완료 · 컴퍼스와 RC 대기 중",
+        "descRcPending": "가속도계·컴퍼스 완료 · RC 캘리브레이션 대기 중",
+        "descDone": "가속도계·컴퍼스·RC 캘리브레이션 모두 완료"
       },
       "motorTest": {
         "title": "모터 순서 및 회전 방향 테스트",

@@ -11,22 +11,28 @@ import { create } from 'zustand'
  *
  * Mirrors `features/setup/setupStore.ts`'s own `frameEscTouched`/`fsTouched`:
  * plain monotonic booleans, set once and never cleared -- a link drop or
- * leaving the Calibration page doesn't erase the fact that accel/compass
+ * leaving the Calibration page doesn't erase the fact that accel/compass/RC
  * were already done earlier this session. `markAccelDone`/`markCompassApplied`
  * are called from the two calibration hooks the instant their own status
- * reaches `'done'`/`'applied'`; nothing here ever reads or writes a
+ * reaches `'done'`/`'applied'`; `markRcCalApplied` (issue #46) is called by
+ * `rcCalStagedStore`'s `writeAll` once an RC-cal Apply has verified every
+ * staged RC param on the board. Nothing here ever reads or writes a
  * parameter itself.
  */
 export interface CalibrationProgressState {
   accelDone: boolean
   compassApplied: boolean
+  rcCalApplied: boolean
   markAccelDone: () => void
   markCompassApplied: () => void
+  markRcCalApplied: () => void
 }
 
 export const useCalibrationProgress = create<CalibrationProgressState>((set) => ({
   accelDone: false,
   compassApplied: false,
+  rcCalApplied: false,
   markAccelDone: () => set({ accelDone: true }),
   markCompassApplied: () => set({ compassApplied: true }),
+  markRcCalApplied: () => set({ rcCalApplied: true }),
 }))

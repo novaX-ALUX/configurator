@@ -8,7 +8,7 @@ import type { PageId } from '../../store/navigation'
  * labels (frame/ESC) via `t()`, and passes everything in here as one flat
  * `GuideStepInputs`. Every `done` flag below is a plain read of state some
  * other feature already owns (`setupStore`'s `frameEscTouched`/`fsTouched`,
- * `useCalibrationProgress`'s `accelDone`/`compassApplied`,
+ * `useCalibrationProgress`'s `accelDone`/`compassApplied`/`rcCalApplied`,
  * `motorTestStore`'s `motorsTested`, `useConnectionStore`'s `phase`,
  * `tuningStore`'s `initialTuneStaged`) -- nothing here ever calls a setter,
  * stages a param, or sends a command, which is the whole point of a
@@ -24,7 +24,7 @@ import type { PageId } from '../../store/navigation'
  *
  * **Known limitation: 5 of 6 `done` flags are session-scoped, not
  * board-derived.** `frameEscTouched`/`fsTouched` (Task 7.2), `accelDone`/
- * `compassApplied` (`calibrationProgress.ts`), and `motorsTested`
+ * `compassApplied`/`rcCalApplied` (`calibrationProgress.ts`), and `motorsTested`
  * (`motorTestStore.ts`) are all plain booleans latched by *this session's*
  * UI actions and never reset on disconnect/reconnect -- inherited from Task
  * 7.2's own precedent (that module's doc explicitly chose this over a
@@ -56,6 +56,8 @@ export interface GuideStepInputs {
   accelDone: boolean
   /** `useCalibrationProgress.compassApplied`. */
   compassApplied: boolean
+  /** `useCalibrationProgress.rcCalApplied`. */
+  rcCalApplied: boolean
   /** `motorTestStore.motorsTested`. */
   motorsTested: boolean
   /** `setupStore.fsTouched`. */
@@ -100,12 +102,17 @@ export function buildGuideSteps(inputs: GuideStepInputs): GuideStep[] {
       n: 3,
       titleKey: 'guide.steps.calibrate.title',
       page: 'calibration',
-      done: inputs.accelDone && inputs.compassApplied,
+      done: inputs.accelDone && inputs.compassApplied && inputs.rcCalApplied,
+      // Lifecycle copy follows the same accel -> compass -> RC order the
+      // step's todo text promises (issue #46); off-order completions (e.g.
+      // RC done first) collapse into the earliest still-pending state.
       descKey: !inputs.accelDone
         ? 'guide.steps.calibrate.descTodo'
-        : inputs.compassApplied
-          ? 'guide.steps.calibrate.descDone'
-          : 'guide.steps.calibrate.descAccelOnly',
+        : !inputs.compassApplied
+          ? 'guide.steps.calibrate.descAccelOnly'
+          : inputs.rcCalApplied
+            ? 'guide.steps.calibrate.descDone'
+            : 'guide.steps.calibrate.descRcPending',
       descOptions: {},
     },
     {

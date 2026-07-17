@@ -109,7 +109,7 @@ describe('SetupGuideDrawer: step derivation + progress', () => {
   it('derives each step from its own store flag, independent of the others', () => {
     useConnectionStore.setState({ phase: 'connected' })
     useSetupStore.setState({ frameEscTouched: true, fsTouched: false })
-    useCalibrationProgress.setState({ accelDone: true, compassApplied: true })
+    useCalibrationProgress.setState({ accelDone: true, compassApplied: true, rcCalApplied: true })
     useMotorTestStore.setState({ motorsTested: false })
 
     act(() => useGuideStore.getState().openGuide())
@@ -121,18 +121,26 @@ describe('SetupGuideDrawer: step derivation + progress', () => {
     expect(screen.getAllByText('To do')).toHaveLength(3)
   })
 
-  it('step 3 needs BOTH accelDone and compassApplied — accel alone is not enough', () => {
+  it('step 3 needs accelDone, compassApplied AND rcCalApplied — accel alone is not enough', () => {
     useCalibrationProgress.setState({ accelDone: true, compassApplied: false })
     act(() => useGuideStore.getState().openGuide())
     render(<SetupGuideDrawer />)
-    expect(screen.getByText('Accel done · compass pending')).toBeInTheDocument()
+    expect(screen.getByText('Accel done · compass and RC pending')).toBeInTheDocument()
+    expect(screen.getByText('0 / 6')).toBeInTheDocument() // step 3 not counted as done
+  })
+
+  it('step 3 stays pending after accel + compass until the RC-cal write latches (issue #46)', () => {
+    useCalibrationProgress.setState({ accelDone: true, compassApplied: true, rcCalApplied: false })
+    act(() => useGuideStore.getState().openGuide())
+    render(<SetupGuideDrawer />)
+    expect(screen.getByText('Accel and compass done · RC calibration pending')).toBeInTheDocument()
     expect(screen.getByText('0 / 6')).toBeInTheDocument() // step 3 not counted as done
   })
 
   it('all 6 done reaches 6 / 6 with no special terminal/celebration state — just every row green', () => {
     useConnectionStore.setState({ phase: 'connected' })
     useSetupStore.setState({ frameEscTouched: true, fsTouched: true })
-    useCalibrationProgress.setState({ accelDone: true, compassApplied: true })
+    useCalibrationProgress.setState({ accelDone: true, compassApplied: true, rcCalApplied: true })
     useMotorTestStore.setState({ motorsTested: true })
     useTuningStore.setState({ initialTuneStaged: true })
     act(() => useGuideStore.getState().openGuide())

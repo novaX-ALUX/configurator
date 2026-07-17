@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '../../../i18n'
 import { CalibrationPage } from '../CalibrationPage'
 import { useConnectionStore } from '../../../store/connection'
+import { useCalibrationProgress } from '../calibrationProgress'
 import { useRcCalStagedStore } from '../rcCalStagedStore'
 import { MockTransport } from '../../../core/transport/mock'
 import { defs } from '../../../core/mavlink/defs'
@@ -142,6 +143,7 @@ async function sampleSticks(transport: MockTransport): Promise<void> {
 
 const initialConnectionState = useConnectionStore.getState()
 const initialRcStagedState = useRcCalStagedStore.getState()
+const initialCalProgressState = useCalibrationProgress.getState()
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -150,6 +152,7 @@ beforeEach(() => {
 afterEach(() => {
   useConnectionStore.setState(initialConnectionState, true)
   useRcCalStagedStore.setState(initialRcStagedState, true)
+  useCalibrationProgress.setState(initialCalProgressState, true)
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -241,6 +244,8 @@ describe('RC calibration: wizard flow', () => {
     await tick()
 
     expect(decodeParamSets(transport.sent)).toHaveLength(0)
+    // Staging alone must not latch the guide's step-3 RC flag (issue #46).
+    expect(useCalibrationProgress.getState().rcCalApplied).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
 
     // Sequential set() with readback: answer each PARAM_SET's echo in turn.
@@ -265,6 +270,41 @@ describe('RC calibration: wizard flow', () => {
     // All confirmed: the bar's transient 'ok' chips clear after their display window.
     await tick(2500)
     expect(useRcCalStagedStore.getState().pending.size).toBe(0)
+    // The verified write latches the Setup Guide's session-scoped RC flag -- see calibrationProgress.ts's own doc.
+    expect(useCalibrationProgress.getState().rcCalApplied).toBe(true)
+  })
+
+  it('a partially-failed Apply does NOT latch rcCalApplied; the retry that verifies everything does (issue #46)', async () => {
+    const { transport } = await connectSession()
+    render(<CalibrationPage />)
+    await startRcCal(transport)
+    await sampleSticks(transport)
+    fireEvent.click(screen.getByRole('button', { name: 'Finish — capture centers' }))
+    await tick()
+    fireEvent.click(screen.getByRole('button', { name: 'Stage 2 moved channels for review' }))
+    await tick()
+
+    // 5 of 6 confirmed by readback; the last echoes a clamped value -> 'mismatch'.
+    fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+    for (let i = 0; i < 6; i++) {
+      await tick()
+      const sets = decodeParamSets(transport.sent)
+      const last = sets[sets.length - 1]
+      transport.feed(paramValueFrame(last.name, i < 5 ? last.value : last.value + 50))
+      await tick()
+    }
+    await tick(2500) // succeeded params clear; the mismatched one stays pending
+    expect(useRcCalStagedStore.getState().pending.size).toBe(1)
+    expect(useCalibrationProgress.getState().rcCalApplied).toBe(false)
+
+    // Retry the failed param; once every status is a verified 'ok', the latch flips.
+    transport.sent.length = 0
+    fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+    await tick()
+    const [retried] = decodeParamSets(transport.sent)
+    transport.feed(paramValueFrame(retried.name, retried.value))
+    await tick()
+    expect(useCalibrationProgress.getState().rcCalApplied).toBe(true)
   })
 
   it('stages a reverse toggle as RCn_REVERSED without writing', async () => {

@@ -10,6 +10,7 @@ function inputs(overrides: Partial<GuideStepInputs> = {}): GuideStepInputs {
     frameEscTouched: false,
     accelDone: false,
     compassApplied: false,
+    rcCalApplied: false,
     motorsTested: false,
     fsTouched: false,
     initialTuneStaged: false,
@@ -69,16 +70,19 @@ describe('buildGuideSteps', () => {
   })
 
   describe('step 3 — calibrate sensors', () => {
-    it('done only when BOTH accelDone AND compassApplied', () => {
-      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: false }))[2].done).toBe(false)
-      expect(buildGuideSteps(inputs({ accelDone: false, compassApplied: true }))[2].done).toBe(false)
-      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: true }))[2].done).toBe(true)
+    it('done only when accelDone AND compassApplied AND rcCalApplied (issue #46)', () => {
+      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: false, rcCalApplied: false }))[2].done).toBe(false)
+      expect(buildGuideSteps(inputs({ accelDone: false, compassApplied: true, rcCalApplied: false }))[2].done).toBe(false)
+      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: true, rcCalApplied: false }))[2].done).toBe(false)
+      expect(buildGuideSteps(inputs({ accelDone: false, compassApplied: false, rcCalApplied: true }))[2].done).toBe(false)
+      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: true, rcCalApplied: true }))[2].done).toBe(true)
     })
 
-    it('description has 3 distinct states: neither done, accel-only, both done', () => {
+    it('description has 4 distinct states: todo, accel-only, RC pending, all done', () => {
       expect(buildGuideSteps(inputs({ accelDone: false, compassApplied: false }))[2].descKey).toBe('guide.steps.calibrate.descTodo')
       expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: false }))[2].descKey).toBe('guide.steps.calibrate.descAccelOnly')
-      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: true }))[2].descKey).toBe('guide.steps.calibrate.descDone')
+      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: true, rcCalApplied: false }))[2].descKey).toBe('guide.steps.calibrate.descRcPending')
+      expect(buildGuideSteps(inputs({ accelDone: true, compassApplied: true, rcCalApplied: true }))[2].descKey).toBe('guide.steps.calibrate.descDone')
     })
 
     it('routes to the calibration page', () => {
