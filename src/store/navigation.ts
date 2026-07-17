@@ -6,6 +6,7 @@ export type PageId =
   | 'dashboard'
   | 'charts'
   | 'setup'
+  | 'tuning'
   | 'calibration'
   | 'motors'
   | 'console'
@@ -23,6 +24,7 @@ export const NAV_PAGES: NavPage[] = [
   { id: 'dashboard', labelKey: 'nav.dashboard', enabled: true },
   { id: 'charts', labelKey: 'nav.charts', enabled: true },
   { id: 'setup', labelKey: 'nav.setup', enabled: true },
+  { id: 'tuning', labelKey: 'nav.tuning', enabled: true },
   { id: 'calibration', labelKey: 'nav.calibration', enabled: true },
   { id: 'motors', labelKey: 'nav.motors', enabled: true },
   { id: 'console', labelKey: 'nav.console', enabled: true },

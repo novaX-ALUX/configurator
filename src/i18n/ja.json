@@ -6,6 +6,7 @@
     "dashboard": "ダッシュボード",
     "charts": "チャート",
     "setup": "設定",
+    "tuning": "チューニング",
     "calibration": "キャリブレーション",
     "motors": "モーター",
     "console": "コンソール"
@@ -284,6 +285,48 @@
   "staged": {
     "pendingBadge": "{{count}} 件保留中 — まだ書き込まれていません",
     "revert": "元に戻す"
+  },
+
+  "tuning": {
+    "notConnectedTitle": "チューニングにはボードの接続が必要です",
+    "notConnectedBody": "PID ゲインとフィルター設定はフライトコントローラーから読み込み、書き戻します。",
+    "subtitleNote": "確認して書き込むまで何も書き込まれません",
+    "subtitleBody": "拡張チューニング:スライダーを離すとそのパラメータが下のバーのキューに追加されます。",
+    "noRange": "同梱メタデータに範囲の記載がありません — パラメータページで編集してください。",
+    "discardedOnDisconnect": "未保存のチューニング変更 {{count}} 件を破棄しました — セッションをまたいで保持されません。",
+    "rate": {
+      "title": "RATE"
+    },
+    "stabilize": {
+      "title": "STABILIZE"
+    },
+    "filters": {
+      "title": "FILTERS"
+    },
+    "axis": {
+      "roll": "ロール",
+      "pitch": "ピッチ",
+      "yaw": "ヨー"
+    },
+    "calc": {
+      "title": "初期チューニング計算機",
+      "sourceNote": "ArduPilot 公式の計算式(Mission Planner Initial Parameter Setup)",
+      "subtitle": "プロペラ径・セル数・バッテリー種別から安全な初期値を計算します。ステージング前に提案を確認してください — ここでは何も書き込まれません。",
+      "prop": "プロペラ径(インチ)",
+      "cells": "バッテリーセル数(S)",
+      "chemistry": "バッテリー種別",
+      "chemLipo": "LiPo",
+      "chemLipoHV": "LiPo HV",
+      "chemLiIon": "Li-ion",
+      "calculate": "計算",
+      "invalidInput": "プロペラ径は 0 より大きく、セル数は 1 以上の整数にしてください。",
+      "colInclude": "含める",
+      "colParam": "パラメータ",
+      "colCurrent": "現在値",
+      "colSuggested": "推奨値",
+      "stagedHint": "チェックを外した行はステージングされません",
+      "stageSelected": "選択した {{count}} 件をステージング"
+    }
   },
   "firmware": {
     "title": "ファームウェア",

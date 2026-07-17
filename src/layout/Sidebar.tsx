@@ -40,6 +40,14 @@ const NAV_ICONS: Record<PageId, ReactNode> = {
       <circle cx="8" cy="16.5" r="2" fill="#FFFFFF" />
     </svg>
   ),
+  tuning: (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M7 4.5v15M12 4.5v15M17 4.5v15" />
+      <circle cx="7" cy="14.5" r="2" fill="#FFFFFF" />
+      <circle cx="12" cy="8.5" r="2" fill="#FFFFFF" />
+      <circle cx="17" cy="12" r="2" fill="#FFFFFF" />
+    </svg>
+  ),
   calibration: (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <circle cx="12" cy="12" r="7" />

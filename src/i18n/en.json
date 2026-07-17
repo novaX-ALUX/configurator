@@ -6,6 +6,7 @@
     "dashboard": "Dashboard",
     "charts": "Charts",
     "setup": "Setup",
+    "tuning": "Tuning",
     "calibration": "Calibration",
     "motors": "Motors",
     "console": "Console"
@@ -284,6 +285,48 @@
   "staged": {
     "pendingBadge": "{{count}} pending — nothing written yet",
     "revert": "Revert"
+  },
+
+  "tuning": {
+    "notConnectedTitle": "Tuning needs a connected board",
+    "notConnectedBody": "PID gains and filter settings are read from — and written to — the flight controller.",
+    "subtitleNote": "Nothing is written until you review & write",
+    "subtitleBody": "Extended Tuning: each slider stages its parameter on release. Changes queue in the bar below.",
+    "noRange": "No documented range in the bundled metadata — edit this parameter from the Parameters page.",
+    "discardedOnDisconnect": "{{count}} unsaved tuning change(s) were discarded — they don't persist across sessions.",
+    "rate": {
+      "title": "RATE"
+    },
+    "stabilize": {
+      "title": "STABILIZE"
+    },
+    "filters": {
+      "title": "FILTERS"
+    },
+    "axis": {
+      "roll": "Roll",
+      "pitch": "Pitch",
+      "yaw": "Yaw"
+    },
+    "calc": {
+      "title": "INITIAL TUNE CALCULATOR",
+      "sourceNote": "ArduPilot official formulas (Mission Planner Initial Parameter Setup)",
+      "subtitle": "A safe starting tune from prop size, cell count and battery chemistry. Review the suggestions before staging — nothing is written here.",
+      "prop": "Prop diameter (in)",
+      "cells": "Battery cells (S)",
+      "chemistry": "Battery chemistry",
+      "chemLipo": "LiPo",
+      "chemLipoHV": "LiPo HV",
+      "chemLiIon": "Li-ion",
+      "calculate": "Calculate",
+      "invalidInput": "Prop diameter must be greater than 0 and cell count a whole number of 1 or more.",
+      "colInclude": "Include",
+      "colParam": "Parameter",
+      "colCurrent": "Current",
+      "colSuggested": "Suggested",
+      "stagedHint": "Unchecked rows are not staged",
+      "stageSelected": "Stage {{count}} selected"
+    }
   },
   "firmware": {
     "title": "Firmware",

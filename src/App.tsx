@@ -11,6 +11,7 @@ import { FirmwarePage } from './features/firmware/FirmwarePage'
 import { DashboardPage } from './features/dashboard/DashboardPage'
 import { ChartsPage } from './features/charts/ChartsPage'
 import { SetupPage } from './features/setup/SetupPage'
+import { TuningPage } from './features/tuning/TuningPage'
 import { CalibrationPage } from './features/calibration/CalibrationPage'
 import { MotorTestPage } from './features/motors/MotorTestPage'
 import { useMotorTestStore } from './features/motors/motorTestStore'
@@ -112,6 +113,8 @@ function App() {
           <ChartsPage />
         ) : activePage === 'setup' ? (
           <SetupPage />
+        ) : activePage === 'tuning' ? (
+          <TuningPage />
         ) : activePage === 'calibration' ? (
           <CalibrationPage />
         ) : activePage === 'motors' ? (

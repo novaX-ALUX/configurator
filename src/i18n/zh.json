@@ -6,6 +6,7 @@
     "dashboard": "仪表盘",
     "charts": "图表",
     "setup": "设置",
+    "tuning": "调参",
     "calibration": "校准",
     "motors": "电机",
     "console": "控制台"
@@ -284,6 +285,48 @@
   "staged": {
     "pendingBadge": "{{count}} 项待处理 — 尚未写入",
     "revert": "还原"
+  },
+
+  "tuning": {
+    "notConnectedTitle": "调参需要连接飞控",
+    "notConnectedBody": "PID 增益与滤波器设置都从飞控读取,也写回飞控。",
+    "subtitleNote": "在你审阅并写入之前,不会写入任何内容",
+    "subtitleBody": "扩展调参:松开滑杆时该参数进入暂存队列,汇总在下方操作栏中。",
+    "noRange": "内置元数据中没有该参数的建议范围 — 请在参数页中编辑。",
+    "discardedOnDisconnect": "已丢弃 {{count}} 项未保存的调参修改 — 修改不会跨会话保留。",
+    "rate": {
+      "title": "角速度环 RATE"
+    },
+    "stabilize": {
+      "title": "自稳环 STABILIZE"
+    },
+    "filters": {
+      "title": "滤波器 FILTERS"
+    },
+    "axis": {
+      "roll": "横滚",
+      "pitch": "俯仰",
+      "yaw": "偏航"
+    },
+    "calc": {
+      "title": "初始调参计算器",
+      "sourceNote": "ArduPilot 官方公式(Mission Planner 初始参数设置)",
+      "subtitle": "根据桨径、电池节数和电池类型给出安全的起始参数。暂存前请先审阅建议 — 此处不会写入任何内容。",
+      "prop": "桨径(英寸)",
+      "cells": "电池节数(S)",
+      "chemistry": "电池类型",
+      "chemLipo": "锂聚合物 LiPo",
+      "chemLipoHV": "高压锂聚合物 LiPo HV",
+      "chemLiIon": "锂离子 Li-ion",
+      "calculate": "计算",
+      "invalidInput": "桨径必须大于 0,电池节数必须是不小于 1 的整数。",
+      "colInclude": "包含",
+      "colParam": "参数",
+      "colCurrent": "当前值",
+      "colSuggested": "建议值",
+      "stagedHint": "未勾选的行不会进入暂存",
+      "stageSelected": "暂存所选 {{count}} 项"
+    }
   },
   "firmware": {
     "title": "固件",

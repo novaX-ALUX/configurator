@@ -6,6 +6,7 @@
     "dashboard": "대시보드",
     "charts": "차트",
     "setup": "설정",
+    "tuning": "튜닝",
     "calibration": "캘리브레이션",
     "motors": "모터",
     "console": "콘솔"
@@ -284,6 +285,48 @@
   "staged": {
     "pendingBadge": "{{count}}건 대기 중 — 아직 기록되지 않음",
     "revert": "되돌리기"
+  },
+
+  "tuning": {
+    "notConnectedTitle": "튜닝을 하려면 보드 연결이 필요합니다",
+    "notConnectedBody": "PID 게인과 필터 설정은 비행 컨트롤러에서 읽어오고, 다시 기록됩니다.",
+    "subtitleNote": "검토 후 쓰기 전까지는 아무것도 기록되지 않습니다",
+    "subtitleBody": "확장 튜닝: 슬라이더를 놓으면 해당 파라미터가 대기열에 추가되고, 아래 바에 모입니다.",
+    "noRange": "번들 메타데이터에 문서화된 범위가 없습니다 — 파라미터 페이지에서 편집하세요.",
+    "discardedOnDisconnect": "저장하지 않은 튜닝 변경 {{count}}건이 취소되었습니다 — 세션 간에 유지되지 않습니다.",
+    "rate": {
+      "title": "RATE"
+    },
+    "stabilize": {
+      "title": "STABILIZE"
+    },
+    "filters": {
+      "title": "FILTERS"
+    },
+    "axis": {
+      "roll": "롤",
+      "pitch": "피치",
+      "yaw": "요"
+    },
+    "calc": {
+      "title": "초기 튜닝 계산기",
+      "sourceNote": "ArduPilot 공식 수식 (Mission Planner Initial Parameter Setup)",
+      "subtitle": "프로펠러 크기, 셀 수, 배터리 종류로 안전한 시작 튜닝 값을 계산합니다. 스테이징 전에 제안을 검토하세요 — 여기서는 아무것도 기록되지 않습니다.",
+      "prop": "프로펠러 직경 (인치)",
+      "cells": "배터리 셀 수 (S)",
+      "chemistry": "배터리 종류",
+      "chemLipo": "LiPo",
+      "chemLipoHV": "LiPo HV",
+      "chemLiIon": "Li-ion",
+      "calculate": "계산",
+      "invalidInput": "프로펠러 직경은 0보다 커야 하고, 셀 수는 1 이상의 정수여야 합니다.",
+      "colInclude": "포함",
+      "colParam": "파라미터",
+      "colCurrent": "현재 값",
+      "colSuggested": "제안 값",
+      "stagedHint": "체크 해제된 행은 스테이징되지 않습니다",
+      "stageSelected": "선택한 {{count}}건 스테이징"
+    }
   },
   "firmware": {
     "title": "펌웨어",
