@@ -186,6 +186,20 @@ export interface FetchProgressState {
   got: number
   /** `param_count` reported by the stream, once known; `undefined` before the first `PARAM_VALUE` arrives. */
   total: number | undefined
+  /**
+   * True once a `fetchAll()` has resolved successfully at least once on this
+   * store — the only honest signal that `all` reflects the *full* parameter
+   * table, as opposed to a partial cache built from passively-received
+   * `PARAM_VALUE`s (an ArduPilot unsolicited broadcast of a changed param, a
+   * `set()` echo, or gap-fill from a still-running fetch) that never
+   * completed a `fetchAll()`. Sticky for the store's lifetime: a later
+   * `fetchAll()` failure does not flip this back to `false`, since the cache
+   * built by the earlier successful pull is still there (see module doc on
+   * `set()`'s no-cross-call-correlation: individual entries keep getting
+   * refreshed by any `PARAM_VALUE`, complete-table status just isn't
+   * re-earned by a failed re-fetch attempt).
+   */
+  completed: boolean
 }
 
 /**
@@ -367,7 +381,7 @@ export class ParamStore {
   /** Names with a `set()` currently in flight — guards against a second concurrent `set()` for the same name (see `ParamWriteBusyError`). */
   private readonly activeSetNames = new Set<string>()
   /** Backing store for the public `fetchProgress` getter — see `FetchProgressState`. */
-  private fetchProgressState: FetchProgressState = { active: false, got: 0, total: undefined }
+  private fetchProgressState: FetchProgressState = { active: false, got: 0, total: undefined, completed: false }
   private readonly fetchProgressListeners = new Set<(s: FetchProgressState) => void>()
 
   constructor(
@@ -436,7 +450,7 @@ export class ParamStore {
     if (signal?.aborted) throw toAbortError()
 
     this.fetchActive = true
-    this.setFetchProgress({ active: true, got: 0, total: undefined })
+    this.setFetchProgress({ ...this.fetchProgressState, active: true, got: 0, total: undefined })
     const received = new Map<number, Param>()
     let expectedCount: number | undefined
     let driftError: ParamCountDriftError | undefined
@@ -457,7 +471,7 @@ export class ParamStore {
       // a lying "(N, N)" (looks complete) moments before fetchAll rejects.
       if (!driftError) {
         onProgress?.(received.size, expectedCount)
-        this.setFetchProgress({ active: true, got: received.size, total: expectedCount })
+        this.setFetchProgress({ ...this.fetchProgressState, active: true, got: received.size, total: expectedCount })
       }
       this.notifyFetchArrival?.()
     }
@@ -513,6 +527,11 @@ export class ParamStore {
       if (stillMissing.length > 0) {
         throw new ParamFetchError(stillMissing)
       }
+      // Every index 0..count-1 is in `received`: this is a genuinely complete
+      // table, the only condition that earns `completed: true` (see
+      // FetchProgressState doc) — set before `finally` so a consumer reading
+      // `fetchProgress` right after this call resolves sees it.
+      this.setFetchProgress({ ...this.fetchProgressState, completed: true })
     } finally {
       this.fetchActive = false
       this.notifyFetchArrival = undefined

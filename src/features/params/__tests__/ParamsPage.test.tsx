@@ -54,14 +54,27 @@ async function makeConnectedParamStore(opts?: ConstructorParameters<typeof Param
   return { transport, paramStore }
 }
 
-/** Feeds one PARAM_VALUE per entry (index = array position, count = entries.length) and lets fetchAll's arrival handling settle. */
-async function feedAll(transport: MockTransport, entries: Array<{ name: string; value: number; type?: number }>): Promise<void> {
+/**
+ * Runs a real, successfully-completed `fetchAll()` seeded with these entries
+ * (index = array position, count = entries.length) — not just frames
+ * injected straight into the transport with no `fetchAll()` ever called.
+ * Those are meaningfully different states (issue #20): only a completed
+ * `fetchAll()` sets `paramStore.fetchProgress.completed`, which is what
+ * `ParamsPage` now gates "already loaded" on, since an ArduPilot unsolicited
+ * broadcast can populate `all` with entries no `fetchAll()` ever fetched.
+ */
+async function feedAll(paramStore: ParamStore, transport: MockTransport, entries: Array<{ name: string; value: number; type?: number }>): Promise<void> {
+  const fetchPromise = paramStore.fetchAll()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
   entries.forEach((e, index) => {
     transport.feed(paramValueFrame({ name: e.name, value: e.value, type: e.type, count: entries.length, index }))
   })
   await act(async () => {
     await vi.advanceTimersByTimeAsync(0)
   })
+  await fetchPromise
 }
 
 async function tick(ms = 0): Promise<void> {
@@ -222,15 +235,50 @@ describe('ParamsPage', () => {
 
     it('skips straight to the table if the ParamStore was already fetched in a prior mount', async () => {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, [{ name: 'ALREADY_FETCHED', value: 1 }])
+      // A real, completed fetchAll() — not just a frame or two landing in the
+      // cache (issue #20: a passively-populated cache must NOT read as
+      // "already fetched", see the bug-repro test below).
+      const priorFetch = paramStore.fetchAll()
+      await tick()
+      transport.feed(paramValueFrame({ name: 'ALREADY_FETCHED', value: 1, count: 1, index: 0 }))
+      await tick()
+      await priorFetch
       useConnectionStore.setState({ phase: 'connected', paramStore: null })
-      // Simulate: fetchAll already ran once (paramStore.all is populated) before this mount.
+      // Simulate: fetchAll already ran once (paramStore.fetchProgress.completed) before this mount.
       useConnectionStore.setState({ paramStore })
 
       render(<ParamsPage />)
       expect(screen.queryByRole('button', { name: 'Load parameters' })).not.toBeInTheDocument()
       expandAllGroups() // each group starts collapsed (issue #14) — expand to see the loaded row
       expect(screen.getByText('ALREADY_FETCHED')).toBeInTheDocument()
+    })
+
+    it('bug repro (issue #20): a single unsolicited PARAM_VALUE with no fetchAll ever run must not masquerade as a completed table — opening the page starts the real pull instead', async () => {
+      const { transport, paramStore } = await makeConnectedParamStore()
+      // ArduPilot re-broadcasts a changed param unprompted (no
+      // PARAM_REQUEST_LIST/READ ever sent) — the exact "STAT_RUNTIME, 1 of 1,
+      // no fetchAll ever ran" cache state from the issue.
+      transport.feed(paramValueFrame({ name: 'STAT_RUNTIME', value: 6693, count: 1, index: 0 }))
+      await tick()
+      expect(paramStore.fetchProgress.completed).toBe(false)
+
+      useConnectionStore.setState({ phase: 'connected', paramStore })
+      render(<ParamsPage />)
+      await tick()
+
+      // Must never render the lying "1 of 1 shown" table for a fetch that never ran.
+      expect(screen.queryByText(/of .* shown/)).not.toBeInTheDocument()
+      expect(screen.getByText('Requesting parameter list…')).toBeInTheDocument()
+      expect(transport.sent.length).toBeGreaterThan(0) // the pull actually started
+
+      // The real pull completes once the FC actually answers PARAM_REQUEST_LIST.
+      transport.feed(paramValueFrame({ name: 'STAT_RUNTIME', value: 6693, count: 2, index: 0 }))
+      transport.feed(paramValueFrame({ name: 'OTHER_PARAM', value: 1, count: 2, index: 1 }))
+      await tick()
+
+      expect(screen.queryByText(/Fetching parameters|Requesting parameter list/)).not.toBeInTheDocument()
+      expandAllGroups()
+      expect(screen.getByText('2 of 2 shown')).toBeInTheDocument()
     })
 
     it('bug repro (issue #8): mounting mid a fetchAll() started elsewhere shows real pull progress, not a "1 of 1 shown" table masquerading as complete', async () => {
@@ -285,7 +333,7 @@ describe('ParamsPage', () => {
   describe('parameter metadata (issue #13)', () => {
     async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>, fwVersion?: string) {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, entries)
+      await feedAll(paramStore, transport, entries)
       useConnectionStore.setState({ phase: 'connected', paramStore, identity: fwVersion ? { fwVersion } : null })
       render(<ParamsPage />)
       expandAllGroups() // each group starts collapsed (issue #14) — expand to see the loaded rows
@@ -362,7 +410,7 @@ describe('ParamsPage', () => {
 
     async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>, fwVersion = '4.6.3') {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, entries)
+      await feedAll(paramStore, transport, entries)
       useConnectionStore.setState({ phase: 'connected', paramStore, identity: { fwVersion } })
       render(<ParamsPage />)
       expandAllGroups()
@@ -434,7 +482,7 @@ describe('ParamsPage', () => {
   describe('search / collapsible group sections (issue #14)', () => {
     async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>) {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, entries)
+      await feedAll(paramStore, transport, entries)
       // paramStore.all is already populated (the frames above were fed before
       // this ever mounted) — the page detects that at mount and starts
       // straight in the 'loaded' table view, no "Load parameters" click needed.
@@ -540,7 +588,7 @@ describe('ParamsPage', () => {
   describe('staging and the diff drawer', () => {
     async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>) {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, entries)
+      await feedAll(paramStore, transport, entries)
       // paramStore.all is already populated (the frames above were fed before
       // this ever mounted) — the page detects that at mount and starts
       // straight in the 'loaded' table view, no "Load parameters" click needed.
@@ -725,7 +773,7 @@ describe('ParamsPage', () => {
   describe('unsaved-changes guard and disconnect', () => {
     it('registers a navigation guard while edits are pending, and clears it once they are gone', async () => {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, [{ name: 'THR_MIN', value: 0 }])
+      await feedAll(paramStore, transport, [{ name: 'THR_MIN', value: 0 }])
       useConnectionStore.setState({ phase: 'connected', paramStore })
       render(<ParamsPage />)
       expandAllGroups()
@@ -748,7 +796,7 @@ describe('ParamsPage', () => {
 
     it('disconnecting with pending edits clears them and shows a discard warning', async () => {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, [{ name: 'THR_MIN', value: 0 }])
+      await feedAll(paramStore, transport, [{ name: 'THR_MIN', value: 0 }])
       useConnectionStore.setState({ phase: 'connected', paramStore })
       render(<ParamsPage />)
       expandAllGroups()
@@ -770,7 +818,7 @@ describe('ParamsPage', () => {
   describe('.param file export/import (issue #16)', () => {
     async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }>) {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, entries)
+      await feedAll(paramStore, transport, entries)
       useConnectionStore.setState({ phase: 'connected', paramStore, identity: { boardName: 'AF-H7_nano', fwVersion: '4.6.3' } })
       render(<ParamsPage />)
       expandAllGroups()

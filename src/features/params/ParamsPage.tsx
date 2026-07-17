@@ -17,7 +17,7 @@ type LoadState = { kind: 'idle' } | { kind: 'error'; message: string } | { kind:
  * connected) — a plain "nothing in flight" value, never mutated in place, so
  * sharing this one reference across call sites is safe.
  */
-const NO_FETCH_PROGRESS: FetchProgressState = { active: false, got: 0, total: undefined }
+const NO_FETCH_PROGRESS: FetchProgressState = { active: false, got: 0, total: undefined, completed: false }
 
 /** How long a successful write's 'ok' row stays visible in the drawer before it clears (spec: per-row status includes 'ok', not an immediate vanish). */
 const WRITE_OK_DISPLAY_MS = 2000
@@ -64,7 +64,15 @@ export function ParamsPage() {
   // owned by the connection store). The change-detection effect below only
   // fires on a *later* paramStore identity change, so the initial mount has
   // to make this same "already fetched?" call itself.
-  const [load, setLoad] = useState<LoadState>(() => (paramStore && paramStore.all.size > 0 ? { kind: 'loaded' } : { kind: 'idle' }))
+  //
+  // Gated on `fetchProgress.completed`, not `paramStore.all.size > 0` (issue
+  // #20): ArduPilot re-broadcasts a changed param unprompted, so `all` can be
+  // non-empty from a passive `PARAM_VALUE` with no `fetchAll()` ever having
+  // run — `all.size > 0` would read that as "already fetched" and never pull
+  // the rest of the table (stuck at "1 of 1 shown", no progress UI, no retry
+  // on remount, exactly the reported bug). The auto-start effect below
+  // handles that non-empty-but-incomplete case.
+  const [load, setLoad] = useState<LoadState>(() => (paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' }))
   // Live fetchAll() progress, store-wide — not just from a fetch *this page*
   // triggered. A prior mount, another page (Setup shares the same
   // ParamStore), or a post-write confirm re-fetch (magCal) can all leave a
@@ -136,7 +144,7 @@ export function ParamsPage() {
     const discardedCount = prevParamStoreRef.current && pending.size > 0 ? pending.size : null
     prevParamStoreRef.current = paramStore
     setDiscardedNotice(paramStore ? null : discardedCount)
-    setLoad(paramStore && paramStore.all.size > 0 ? { kind: 'loaded' } : { kind: 'idle' })
+    setLoad(paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' })
     setFetchProgress(paramStore?.fetchProgress ?? NO_FETCH_PROGRESS)
     setPending(new Map())
     setWriteStatus(new Map())
@@ -221,6 +229,38 @@ export function ParamsPage() {
   useEffect(() => {
     if (!paramStore) return
     return paramStore.onFetchProgress(setFetchProgress)
+  }, [paramStore])
+
+  // A pull can complete while this page never called handleLoad() itself —
+  // another page shares the same ParamStore (e.g. Setup, or this page mounted
+  // mid a pull started elsewhere, issue #8) — so `load` can't rely solely on
+  // handleLoad's own `setLoad({kind:'loaded'})` to notice a completed fetch.
+  // This keeps `load` in sync with the store-wide signal the moment it flips,
+  // regardless of who triggered it. Idempotent when this page's own
+  // handleLoad already set 'loaded' itself, and harmless while a *new* fetch
+  // is active (the fetchProgress.active render gate takes priority above).
+  useEffect(() => {
+    if (fetchProgress.completed) setLoad({ kind: 'loaded' })
+  }, [fetchProgress.completed])
+
+  // Issue #20: opening this page onto a non-empty-but-incomplete cache (an
+  // unsolicited PARAM_VALUE landed with no fetchAll() ever run — see the
+  // `load` initializer's comment above) must start the real pull rather than
+  // leaving the page stuck on a partial table with no progress UI and no way
+  // to retry short of a full reload. Runs once per `paramStore` identity
+  // (mount, or a fresh connect() generation) — deliberately not re-triggered
+  // by every render, so a *failed* auto-started pull surfaces the existing
+  // error+Retry UI (handleLoad's catch) rather than auto-retrying in a loop.
+  // Reads `paramStore.fetchProgress`/`.all` directly (the live store state)
+  // rather than this component's own `fetchProgress` state, since this effect
+  // and the subscription effect above both run on the same mount and must
+  // not race each other.
+  useEffect(() => {
+    if (!paramStore) return
+    if (paramStore.fetchProgress.completed || paramStore.fetchProgress.active) return
+    if (paramStore.all.size === 0) return // nothing cached yet — the idle state's own "Load parameters" CTA covers this
+    void handleLoad()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramStore])
 
   // Unsaved-changes guard: Sidebar consults `guardNavigation` before switching

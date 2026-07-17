@@ -38,7 +38,14 @@ export function SetupPage() {
   const writeAll = useSetupStore((s) => s.writeAll)
   const clearForDisconnect = useSetupStore((s) => s.clearForDisconnect)
 
-  const [load, setLoad] = useState<LoadState>(() => (paramStore && paramStore.all.size > 0 ? { kind: 'loaded' } : { kind: 'idle' }))
+  // Gated on `fetchProgress.completed`, not `paramStore.all.size > 0` (issue
+  // #20): ArduPilot re-broadcasts a changed param unprompted, so `all` can be
+  // non-empty from a passive `PARAM_VALUE` with no `fetchAll()` ever having
+  // run — `all.size > 0` would render this form's fields as real board
+  // values (Frame/ESC/battery/failsafes) from a table that was never
+  // actually pulled. Falling back to the 'idle' "Load parameters" CTA below
+  // for that case, same as a never-fetched store, is the honest behavior.
+  const [load, setLoad] = useState<LoadState>(() => (paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' }))
   const [version, setVersion] = useState(0) // bumped on ParamStore.onChange to re-derive effective values from the live cache
   const [discardedNotice, setDiscardedNotice] = useState<number | null>(null)
 
@@ -52,7 +59,7 @@ export function SetupPage() {
     const discardedCount = prevParamStoreRef.current && pending.size > 0 ? pending.size : null
     prevParamStoreRef.current = paramStore
     setDiscardedNotice(paramStore ? null : discardedCount)
-    setLoad(paramStore && paramStore.all.size > 0 ? { kind: 'loaded' } : { kind: 'idle' })
+    setLoad(paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' })
     clearForDisconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramStore])

@@ -44,13 +44,25 @@ function decodeSent(bytes: Uint8Array): { msgid: number; fields: Record<string, 
   return { msgid: frame.msgid, fields: decodePayload(defs, frame).fields }
 }
 
-async function feedAll(transport: MockTransport, entries: Array<{ name: string; value: number; type?: number }>): Promise<void> {
+/**
+ * Runs a real, successfully-completed `fetchAll()` seeded with these entries
+ * before the page ever mounts — not just frames injected with no
+ * `fetchAll()` ever called. Only a completed `fetchAll()` sets
+ * `paramStore.fetchProgress.completed`, which is what `ParamsPage` gates
+ * "already loaded" on (issue #20).
+ */
+async function feedAll(paramStore: ParamStore, transport: MockTransport, entries: Array<{ name: string; value: number; type?: number }>): Promise<void> {
+  const fetchPromise = paramStore.fetchAll()
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0)
+  })
   entries.forEach((e, index) => {
     transport.feed(paramValueFrame({ name: e.name, value: e.value, type: e.type, count: entries.length, index }))
   })
   await act(async () => {
     await vi.advanceTimersByTimeAsync(0)
   })
+  await fetchPromise
 }
 
 async function tick(ms = 0): Promise<void> {
@@ -91,7 +103,7 @@ describe('ParamsPage: reboot-required banner + rebootFlightController (issue #17
       RC_OPTIONS: { displayName: 'RC options', description: 'x', rebootRequired: true },
     })
     const { transport, paramStore, session } = await makeConnected()
-    await feedAll(transport, [{ name: 'RC_OPTIONS', value: 0 }])
+    await feedAll(paramStore, transport, [{ name: 'RC_OPTIONS', value: 0 }])
     useConnectionStore.setState({ phase: 'connected', paramStore, session, identity: { fwVersion: '4.6.3' } })
     render(<ParamsPage />)
     for (const button of screen.getAllByRole('button')) {
@@ -117,7 +129,7 @@ describe('ParamsPage: reboot-required banner + rebootFlightController (issue #17
       THR_MIN: { displayName: 'Throttle min', description: 'x' },
     })
     const { transport, paramStore, session } = await makeConnected()
-    await feedAll(transport, [{ name: 'THR_MIN', value: 0 }])
+    await feedAll(paramStore, transport, [{ name: 'THR_MIN', value: 0 }])
     useConnectionStore.setState({ phase: 'connected', paramStore, session, identity: { fwVersion: '4.6.3' } })
     render(<ParamsPage />)
     for (const button of screen.getAllByRole('button')) {
@@ -144,7 +156,7 @@ describe('ParamsPage: reboot-required banner + rebootFlightController (issue #17
     // target comes from whatever the Session resolved, proving the command
     // isn't hand-addressed by feature code (ADR-0002 rule 3).
     const { transport, paramStore, session } = await makeConnected()
-    await feedAll(transport, [{ name: 'RC_OPTIONS', value: 0 }])
+    await feedAll(paramStore, transport, [{ name: 'RC_OPTIONS', value: 0 }])
     useConnectionStore.setState({ phase: 'connected', paramStore, session, identity: { fwVersion: '4.6.3' } })
     render(<ParamsPage />)
     for (const button of screen.getAllByRole('button')) {
@@ -184,7 +196,7 @@ describe('ParamsPage: reboot-required banner + rebootFlightController (issue #17
       RC_OPTIONS: { displayName: 'RC options', description: 'x', rebootRequired: true },
     })
     const { transport, paramStore, session } = await makeConnected()
-    await feedAll(transport, [{ name: 'RC_OPTIONS', value: 0 }])
+    await feedAll(paramStore, transport, [{ name: 'RC_OPTIONS', value: 0 }])
     useConnectionStore.setState({ phase: 'connected', paramStore, session, identity: { fwVersion: '4.6.3' } })
     render(<ParamsPage />)
     for (const button of screen.getAllByRole('button')) {
@@ -214,7 +226,7 @@ describe('ParamsPage: reboot-required banner + rebootFlightController (issue #17
       RC_OPTIONS: { displayName: 'RC options', description: 'x', rebootRequired: true },
     })
     const { transport, paramStore, session } = await makeConnected()
-    await feedAll(transport, [{ name: 'RC_OPTIONS', value: 0 }])
+    await feedAll(paramStore, transport, [{ name: 'RC_OPTIONS', value: 0 }])
     useConnectionStore.setState({ phase: 'connected', paramStore, session, identity: { fwVersion: '4.6.3' } })
     render(<ParamsPage />)
     for (const button of screen.getAllByRole('button')) {
@@ -246,7 +258,7 @@ describe('ParamsPage: reboot-required banner + rebootFlightController (issue #17
       RC_OPTIONS: { displayName: 'RC options', description: 'x', rebootRequired: true },
     })
     const { transport, paramStore, session } = await makeConnected()
-    await feedAll(transport, [{ name: 'RC_OPTIONS', value: 0 }])
+    await feedAll(paramStore, transport, [{ name: 'RC_OPTIONS', value: 0 }])
     useConnectionStore.setState({ phase: 'connected', paramStore, session, identity: { fwVersion: '4.6.3' } })
     render(<ParamsPage />)
     for (const button of screen.getAllByRole('button')) {

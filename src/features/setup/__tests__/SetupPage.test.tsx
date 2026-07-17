@@ -80,9 +80,27 @@ async function tick(ms = 0): Promise<void> {
   })
 }
 
+/**
+ * Runs a real, successfully-completed `fetchAll()` seeded with these entries
+ * *before* the page ever mounts — the "already fetched in a prior mount"
+ * state. Distinct from `feedAll` (which just injects frames into a fetch the
+ * test/page already started elsewhere): only a completed `fetchAll()` sets
+ * `paramStore.fetchProgress.completed`, which is what `SetupPage` now gates
+ * "already loaded" on (issue #20 — an ArduPilot unsolicited broadcast can
+ * populate `all` with entries no `fetchAll()` ever fetched, and rendering
+ * the setup form from that would show the board's actual FRAME/ESC/battery
+ * values as blank/default-looking instead of honestly asking to load first).
+ */
+async function primeCompletedFetch(paramStore: ParamStore, transport: MockTransport, entries: Array<{ name: string; value: number; type?: number }>): Promise<void> {
+  const fetchPromise = paramStore.fetchAll()
+  await tick()
+  await feedAll(transport, entries)
+  await fetchPromise
+}
+
 async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }> = DEFAULT_SETUP_PARAMS) {
   const { transport, paramStore } = await makeConnectedParamStore()
-  await feedAll(transport, entries)
+  await primeCompletedFetch(paramStore, transport, entries)
   useConnectionStore.setState({ phase: 'connected', paramStore })
   render(<SetupPage />)
   return { transport, paramStore }
@@ -129,11 +147,27 @@ describe('SetupPage', () => {
 
     it('skips straight to the form if the ParamStore was already fetched in a prior mount', async () => {
       const { transport, paramStore } = await makeConnectedParamStore()
-      await feedAll(transport, DEFAULT_SETUP_PARAMS)
+      await primeCompletedFetch(paramStore, transport, DEFAULT_SETUP_PARAMS)
       useConnectionStore.setState({ phase: 'connected', paramStore })
       render(<SetupPage />)
       expect(screen.queryByRole('button', { name: 'Load parameters' })).not.toBeInTheDocument()
       expect(screen.getByText('FRAME')).toBeInTheDocument()
+    })
+
+    it('bug repro (issue #20): a single unsolicited PARAM_VALUE with no fetchAll ever run must not render the form with stale/empty board values', async () => {
+      const { transport, paramStore } = await makeConnectedParamStore()
+      // ArduPilot re-broadcasts a changed param unprompted — no fetchAll() ever ran.
+      transport.feed(paramValueFrame({ name: 'BATT_CAPACITY', value: 5200, type: MAV_PARAM_TYPE_INT32, count: 1, index: 0 }))
+      await tick()
+      expect(paramStore.fetchProgress.completed).toBe(false)
+
+      useConnectionStore.setState({ phase: 'connected', paramStore })
+      render(<SetupPage />)
+
+      // Honest gate: offers the "Load parameters" CTA rather than the form
+      // with FRAME/ESC/other-battery-fields silently missing.
+      expect(screen.getByRole('button', { name: 'Load parameters' })).toBeInTheDocument()
+      expect(screen.queryByText('FRAME')).not.toBeInTheDocument()
     })
   })
 

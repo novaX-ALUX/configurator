@@ -267,27 +267,27 @@ describe('ParamStore', () => {
   })
 
   describe('fetchProgress / onFetchProgress', () => {
-    it('starts inactive, got 0, total undefined, before any fetch has ever run', () => {
+    it('starts inactive, got 0, total undefined, not completed, before any fetch has ever run', () => {
       const store = new ParamStore(router, target)
-      expect(store.fetchProgress).toEqual({ active: false, got: 0, total: undefined })
+      expect(store.fetchProgress).toEqual({ active: false, got: 0, total: undefined, completed: false })
     })
 
     it('reflects an active fetch — readable by a consumer that never called fetchAll() itself', async () => {
       const store = new ParamStore(router, target)
       void store.fetchAll() // no onProgress passed — a second "observer" reads fetchProgress instead
       await vi.advanceTimersByTimeAsync(0)
-      expect(store.fetchProgress).toEqual({ active: true, got: 0, total: undefined })
+      expect(store.fetchProgress).toEqual({ active: true, got: 0, total: undefined, completed: false })
 
       transport.feed(paramValueFrame({ name: 'P0', value: 0, type: MAV_PARAM_TYPE_REAL32, count: 2, index: 0 }))
       await vi.advanceTimersByTimeAsync(0)
-      expect(store.fetchProgress).toEqual({ active: true, got: 1, total: 2 })
+      expect(store.fetchProgress).toEqual({ active: true, got: 1, total: 2, completed: false })
 
       transport.feed(paramValueFrame({ name: 'P1', value: 0, type: MAV_PARAM_TYPE_REAL32, count: 2, index: 1 }))
       await vi.advanceTimersByTimeAsync(0)
-      expect(store.fetchProgress).toEqual({ active: false, got: 2, total: 2 })
+      expect(store.fetchProgress).toEqual({ active: false, got: 2, total: 2, completed: true })
     })
 
-    it('goes inactive once fetchAll resolves, retaining the final got/total (not reset to 0/undefined)', async () => {
+    it('goes inactive once fetchAll resolves, retaining the final got/total (not reset to 0/undefined), and marks completed', async () => {
       const store = new ParamStore(router, target)
       const promise = store.fetchAll()
       await vi.advanceTimersByTimeAsync(0)
@@ -295,7 +295,7 @@ describe('ParamStore', () => {
       await vi.advanceTimersByTimeAsync(0)
       await promise
 
-      expect(store.fetchProgress).toEqual({ active: false, got: 1, total: 1 })
+      expect(store.fetchProgress).toEqual({ active: false, got: 1, total: 1, completed: true })
     })
 
     it('goes inactive (frozen count, no fake completion) when fetchAll rejects, e.g. ParamFetchNoResponseError', async () => {
@@ -308,7 +308,7 @@ describe('ParamStore', () => {
       await vi.advanceTimersByTimeAsync(20)
 
       await rejection
-      expect(store.fetchProgress).toEqual({ active: false, got: 0, total: undefined })
+      expect(store.fetchProgress).toEqual({ active: false, got: 0, total: undefined, completed: false })
     })
 
     it('notifies onFetchProgress subscribers on start, each arrival, and completion', async () => {
@@ -318,14 +318,14 @@ describe('ParamStore', () => {
 
       const promise = store.fetchAll()
       await vi.advanceTimersByTimeAsync(0)
-      expect(onFetchProgress).toHaveBeenCalledWith({ active: true, got: 0, total: undefined })
+      expect(onFetchProgress).toHaveBeenCalledWith({ active: true, got: 0, total: undefined, completed: false })
 
       transport.feed(paramValueFrame({ name: 'P0', value: 0, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 0 }))
       await vi.advanceTimersByTimeAsync(0)
       await promise
 
-      expect(onFetchProgress).toHaveBeenCalledWith({ active: true, got: 1, total: 1 })
-      expect(onFetchProgress).toHaveBeenCalledWith({ active: false, got: 1, total: 1 })
+      expect(onFetchProgress).toHaveBeenCalledWith({ active: true, got: 1, total: 1, completed: false })
+      expect(onFetchProgress).toHaveBeenCalledWith({ active: false, got: 1, total: 1, completed: true })
     })
 
     it('onFetchProgress returns an unsubscribe function', async () => {
@@ -348,7 +348,7 @@ describe('ParamStore', () => {
 
       transport.feed(paramValueFrame({ name: 'P0', value: 0, type: MAV_PARAM_TYPE_REAL32, count: 2, index: 0 }))
       await vi.advanceTimersByTimeAsync(0)
-      expect(store.fetchProgress).toEqual({ active: true, got: 1, total: 2 })
+      expect(store.fetchProgress).toEqual({ active: true, got: 1, total: 2, completed: false })
 
       // Same coincidence as the onProgress drift test above: received.size becomes 2 here,
       // matching the stale expectedCount of 2 — fetchProgress must not report (2, 2) as if
@@ -357,10 +357,38 @@ describe('ParamStore', () => {
       // at the last *honest* (1, 2) snapshot, never the lying (2, 2).
       transport.feed(paramValueFrame({ name: 'P1', value: 1, type: MAV_PARAM_TYPE_REAL32, count: 5, index: 1 }))
       await vi.advanceTimersByTimeAsync(0)
-      expect(store.fetchProgress).toEqual({ active: false, got: 1, total: 2 })
+      expect(store.fetchProgress).toEqual({ active: false, got: 1, total: 2, completed: false })
 
       await rejection
-      expect(store.fetchProgress).toEqual({ active: false, got: 1, total: 2 })
+      expect(store.fetchProgress).toEqual({ active: false, got: 1, total: 2, completed: false })
+    })
+
+    it('issue #20: a passively-received PARAM_VALUE with no fetchAll ever run leaves completed false, even though `all` is non-empty', async () => {
+      const store = new ParamStore(router, target)
+      // ArduPilot re-broadcasting a changed param unprompted — no PARAM_REQUEST_LIST/READ sent.
+      transport.feed(paramValueFrame({ name: 'STAT_RUNTIME', value: 6693, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 0 }))
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(store.all.size).toBe(1)
+      expect(store.fetchProgress).toEqual({ active: false, got: 0, total: undefined, completed: false })
+    })
+
+    it('issue #20: completed stays true after a later fetchAll() fails, since the earlier full pull is still in the cache', async () => {
+      const store = new ParamStore(router, target, { fetchSilenceMs: 20 })
+      const promise = store.fetchAll()
+      await vi.advanceTimersByTimeAsync(0)
+      transport.feed(paramValueFrame({ name: 'P0', value: 0, type: MAV_PARAM_TYPE_REAL32, count: 1, index: 0 }))
+      await vi.advanceTimersByTimeAsync(0)
+      await promise
+      expect(store.fetchProgress.completed).toBe(true)
+
+      const secondPromise = store.fetchAll()
+      const rejection = expect(secondPromise).rejects.toBeInstanceOf(ParamFetchNoResponseError)
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(20) // silence window, nothing fed for the second attempt
+      await rejection
+
+      expect(store.fetchProgress.completed).toBe(true)
     })
   })
 
