@@ -1,8 +1,13 @@
 {
   "nav": {
     "ariaLabel": "メインナビゲーション",
+    "groups": {
+      "configure": "構成",
+      "monitor": "監視",
+      "maintain": "保守"
+    },
     "firmware": "ファームウェア",
-    "parameters": "パラメータ",
+    "parameters": "全パラメータ",
     "dashboard": "ダッシュボード",
     "charts": "チャート",
     "setup": "設定",

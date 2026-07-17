@@ -175,9 +175,9 @@ describe('TuningPage', () => {
   })
 
   describe('navigation', () => {
-    it('has a nav entry directly after Setup', () => {
-      const ids = NAV_PAGES.map((p) => p.id)
-      expect(ids.indexOf('tuning')).toBe(ids.indexOf('setup') + 1)
+    it('has a nav entry closing the Configure group (guide-journey order, ADR-0004)', () => {
+      const configureIds = NAV_PAGES.filter((p) => p.group === 'configure').map((p) => p.id)
+      expect(configureIds[configureIds.length - 1]).toBe('tuning')
     })
   })
 

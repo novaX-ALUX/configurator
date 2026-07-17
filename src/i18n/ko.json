@@ -1,8 +1,13 @@
 {
   "nav": {
     "ariaLabel": "기본 내비게이션",
+    "groups": {
+      "configure": "구성",
+      "monitor": "모니터링",
+      "maintain": "유지보수"
+    },
     "firmware": "펌웨어",
-    "parameters": "파라미터",
+    "parameters": "전체 파라미터",
     "dashboard": "대시보드",
     "charts": "차트",
     "setup": "설정",

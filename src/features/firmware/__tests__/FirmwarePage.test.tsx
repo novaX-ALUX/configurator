@@ -3,14 +3,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../../i18n'
 import { FirmwarePage } from '../FirmwarePage'
 import { useConnectionStore } from '../../../store/connection'
+import { useNavigationStore } from '../../../store/navigation'
 import { useFlashSession } from '../flashSession'
 import fixtureManifest from '../../../core/firmware/__tests__/fixtures/manifest.json'
 
 const initialConnectionState = useConnectionStore.getState()
+const initialNavigationState = useNavigationStore.getState()
 const initialFlashSessionState = useFlashSession.getState()
 
 afterEach(() => {
   useConnectionStore.setState(initialConnectionState, true)
+  useNavigationStore.setState(initialNavigationState, true)
   useFlashSession.setState(initialFlashSessionState, true)
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
@@ -21,6 +24,15 @@ function mockManifestFetch(body: unknown = fixtureManifest, ok = true): void {
     'fetch',
     vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 500 })),
   )
+}
+
+function runningTarget() {
+  return {
+    boardName: 'AF-F4_nano',
+    version: '0.2.0',
+    apjBoardId: 6203,
+    source: { kind: 'local' as const, fileName: 'x.apj', apj: { boardId: 6203, image: new Uint8Array(), imageSize: 0 } },
+  }
 }
 
 describe('FirmwarePage — online list (Tab 1)', () => {
@@ -117,15 +129,6 @@ describe('FirmwarePage — online list (Tab 1)', () => {
 })
 
 describe('FirmwarePage — Cancel affordance on the in-progress view', () => {
-  function runningTarget() {
-    return {
-      boardName: 'AF-F4_nano',
-      version: '0.2.0',
-      apjBoardId: 6203,
-      source: { kind: 'local' as const, fileName: 'x.apj', apj: { boardId: 6203, image: new Uint8Array(), imageSize: 0 } },
-    }
-  }
-
   it('renders an enabled Cancel button while "connecting" (a safely-cancellable step), and clicking it returns the session to idle', async () => {
     mockManifestFetch()
     useConnectionStore.setState({ phase: 'connected' })
@@ -154,6 +157,37 @@ describe('FirmwarePage — Cancel affordance on the in-progress view', () => {
 
     fireEvent.click(cancelButton) // no-op: disabled, and even if it fired, cancel() itself is a no-op for 'programming'
     expect(useFlashSession.getState().step).toBe('programming')
+  })
+})
+
+describe('FirmwarePage — mid-flash navigation guard', () => {
+  it('registers no guard while the session is idle', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'connected' })
+
+    render(<FirmwarePage />)
+
+    expect(useNavigationStore.getState().guardNavigation).toBeNull()
+  })
+
+  it('registers a confirm guard while a flash is in flight, so leaving the page is intercepted', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'connected' })
+    useFlashSession.setState({ step: 'programming', progress: { done: 512, total: 1024 }, target: runningTarget() })
+
+    render(<FirmwarePage />)
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    expect(useNavigationStore.getState().guardNavigation).not.toBeNull()
+    useNavigationStore.getState().setActivePage('parameters')
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(useNavigationStore.getState().activePage).toBe('firmware') // unchanged
+
+    // The guard clears once the session leaves the in-flight steps.
+    act(() => {
+      useFlashSession.setState({ step: 'done' })
+    })
+    expect(useNavigationStore.getState().guardNavigation).toBeNull()
   })
 })
 

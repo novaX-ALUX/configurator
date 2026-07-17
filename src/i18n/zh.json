@@ -1,8 +1,13 @@
 {
   "nav": {
     "ariaLabel": "主导航",
+    "groups": {
+      "configure": "配置",
+      "monitor": "监控",
+      "maintain": "维护"
+    },
     "firmware": "固件",
-    "parameters": "参数",
+    "parameters": "全部参数",
     "dashboard": "仪表盘",
     "charts": "图表",
     "setup": "设置",

@@ -1,8 +1,13 @@
 {
   "nav": {
     "ariaLabel": "Primary navigation",
+    "groups": {
+      "configure": "Configure",
+      "monitor": "Monitor",
+      "maintain": "Maintain"
+    },
     "firmware": "Firmware",
-    "parameters": "Parameters",
+    "parameters": "Full Parameters",
     "dashboard": "Dashboard",
     "charts": "Charts",
     "setup": "Setup",

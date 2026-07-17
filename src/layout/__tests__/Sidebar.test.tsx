@@ -20,8 +20,32 @@ describe('Sidebar', () => {
   it('navigates directly when no guard is registered', () => {
     reset()
     render(<Sidebar />)
-    fireEvent.click(screen.getByRole('button', { name: 'Parameters' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Full Parameters' }))
     expect(useNavigationStore.getState().activePage).toBe('parameters')
+    reset()
+  })
+
+  it('renders the three Nav Group labels with pages in ADR-0004 order', () => {
+    reset()
+    render(<Sidebar />)
+    expect(screen.getByText('Configure')).toBeInTheDocument()
+    expect(screen.getByText('Monitor')).toBeInTheDocument()
+    expect(screen.getByText('Maintain')).toBeInTheDocument()
+    // Page buttons appear top-to-bottom in group order (guide + licenses footer trail the groups).
+    const names = screen.getAllByRole('button').map((b) => b.textContent)
+    expect(names).toEqual([
+      'Setup',
+      'Calibration',
+      'Motors',
+      'Tuning',
+      'Dashboard',
+      'Charts',
+      'Full Parameters',
+      'Firmware',
+      'Console',
+      'Setup Guide',
+      'Licenses',
+    ])
     reset()
   })
 

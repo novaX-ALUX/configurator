@@ -9,7 +9,7 @@ describe('App shell', () => {
 
     // M1 pages are present and clickable.
     expect(screen.getByRole('button', { name: 'Firmware' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Parameters' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Full Parameters' })).toBeInTheDocument()
 
     // Dashboard shipped in M2 (Task 6.2) and is now clickable too.
     expect(screen.getByRole('button', { name: 'Dashboard' })).toBeEnabled()

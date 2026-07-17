@@ -1,10 +1,32 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { useNavigationStore } from '../navigation'
+import { NAV_GROUPS, NAV_PAGES, useNavigationStore } from '../navigation'
 
 const initialState = useNavigationStore.getState()
 
 afterEach(() => {
   useNavigationStore.setState(initialState, true)
+})
+
+describe('nav group structure (ADR-0004)', () => {
+  it('defines the three Nav Groups in order: Configure, Monitor, Maintain', () => {
+    expect(NAV_GROUPS.map((g) => g.id)).toEqual(['configure', 'monitor', 'maintain'])
+  })
+
+  it('nav pages carry exact group membership and order per ADR-0004', () => {
+    // Configure in guide-journey order; Maintain in frequency order, with the
+    // raw table (relabeled "Full Parameters") first as the Escape Hatch.
+    expect(NAV_PAGES.map((p) => [p.id, p.group])).toEqual([
+      ['setup', 'configure'],
+      ['calibration', 'configure'],
+      ['motors', 'configure'],
+      ['tuning', 'configure'],
+      ['dashboard', 'monitor'],
+      ['charts', 'monitor'],
+      ['parameters', 'maintain'],
+      ['firmware', 'maintain'],
+      ['console', 'maintain'],
+    ])
+  })
 })
 
 describe('navigation store', () => {

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NAV_PAGES, type PageId, useNavigationStore } from '../store/navigation'
+import { NAV_GROUPS, NAV_PAGES, type NavPage, type PageId, useNavigationStore } from '../store/navigation'
 import { useGuideStore } from '../features/guide/guideStore'
 
 /**
@@ -88,36 +88,53 @@ export function Sidebar() {
   const guideOpen = useGuideStore((s) => s.open)
   const toggleGuide = useGuideStore((s) => s.toggleGuide)
 
+  // Pages without a group render above the groups (the slot Home takes in IA T2).
+  const ungrouped = NAV_PAGES.filter((page) => !page.group)
+
+  function renderPageButton(page: NavPage): ReactNode {
+    const label = t(page.labelKey)
+    const isActive = activePage === page.id
+
+    return (
+      <button
+        key={page.id}
+        type="button"
+        disabled={!page.enabled}
+        aria-current={isActive ? 'page' : undefined}
+        title={label}
+        onClick={() => setActivePage(page.id)}
+        className={`flex w-[58px] flex-none flex-col items-center justify-center gap-1 rounded-[11px] px-1 py-1.5 text-center transition-colors ${
+          !page.enabled
+            ? 'cursor-not-allowed text-nvx-disabled'
+            : isActive
+              ? 'bg-nvx-primarySoft text-nvx-primary'
+              : 'text-nvx-subtle hover:bg-nvx-field'
+        }`}
+      >
+        <span aria-hidden="true">{NAV_ICONS[page.id]}</span>
+        <span className="text-[10px] font-semibold leading-[1.15]">{label}</span>
+      </button>
+    )
+  }
+
   return (
     <nav
       aria-label={t('nav.ariaLabel')}
       className="col-start-1 row-start-4 flex flex-col items-center gap-1 border-r border-nvx-border bg-nvx-surface py-3"
     >
-      {NAV_PAGES.map((page) => {
-        const label = t(page.labelKey)
-        const isActive = activePage === page.id
-
-        return (
-          <button
-            key={page.id}
-            type="button"
-            disabled={!page.enabled}
-            aria-current={isActive ? 'page' : undefined}
-            title={label}
-            onClick={() => setActivePage(page.id)}
-            className={`flex w-[58px] flex-none flex-col items-center justify-center gap-1 rounded-[11px] px-1 py-1.5 text-center transition-colors ${
-              !page.enabled
-                ? 'cursor-not-allowed text-nvx-disabled'
-                : isActive
-                  ? 'bg-nvx-primarySoft text-nvx-primary'
-                  : 'text-nvx-subtle hover:bg-nvx-field'
+      {ungrouped.map(renderPageButton)}
+      {NAV_GROUPS.map((group, groupIndex) => (
+        <div key={group.id} className="flex flex-col items-center gap-1">
+          <div
+            className={`w-[58px] pb-0.5 text-center text-[8.5px] font-bold uppercase tracking-[.09em] text-nvx-faint ${
+              groupIndex > 0 || ungrouped.length > 0 ? 'mt-1.5 border-t border-nvx-border pt-2' : ''
             }`}
           >
-            <span aria-hidden="true">{NAV_ICONS[page.id]}</span>
-            <span className="text-[10px] font-semibold leading-[1.15]">{label}</span>
-          </button>
-        )
-      })}
+            {t(group.labelKey)}
+          </div>
+          {NAV_PAGES.filter((page) => page.group === group.id).map(renderPageButton)}
+        </div>
+      ))}
       <button
         type="button"
         title={t('guide.openButton')}
