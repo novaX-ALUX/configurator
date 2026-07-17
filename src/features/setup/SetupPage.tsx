@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
+import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata, type ParamMetaEntry } from '../../core/paramMetadata'
 import { fetchErrorMessage } from '../params/paramUtils'
+import { useTelemetry } from '../dashboard/useTelemetry'
 import { BATT_CAPACITY_FIELD, BATT_FS_LOW_FIELD, BATT_LOW_VOLT_FIELD, BATT_MONITOR_FIELD, ESC_PROTOCOL_FIELD, FRAME_FIELD, FS_GCS_FIELD, FS_THROTTLE_FIELD } from './paramEnums'
+import { activeFlightModeSlot, FLTMODE_CH_PARAM } from './flightModes'
 import { FrameSelector } from './FrameSelector'
 import { EscProtocol } from './EscProtocol'
 import { BatteryMonitor } from './BatteryMonitor'
 import { Failsafes } from './Failsafes'
+import { FlightModes } from './FlightModes'
 import { StagedReviewBar } from '../staged/StagedReviewBar'
 import { useSetupStore } from './setupStore'
 
@@ -28,6 +32,8 @@ export function SetupPage() {
   const baud = useConnectionStore((s) => s.baud)
   const connect = useConnectionStore((s) => s.connect)
   const paramStore = useConnectionStore((s) => s.paramStore)
+  const session = useConnectionStore((s) => s.session)
+  const identity = useConnectionStore((s) => s.identity)
 
   const pending = useSetupStore((s) => s.pending)
   const writeStatus = useSetupStore((s) => s.writeStatus)
@@ -48,7 +54,9 @@ export function SetupPage() {
   const [load, setLoad] = useState<LoadState>(() => (paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' }))
   const [version, setVersion] = useState(0) // bumped on ParamStore.onChange to re-derive effective values from the live cache
   const [discardedNotice, setDiscardedNotice] = useState<number | null>(null)
+  const [meta, setMeta] = useState<LoadedParamMetadata | null>(null)
 
+  const telemetry = useTelemetry(session)
   const prevParamStoreRef = useRef(paramStore)
 
   // A fresh ParamStore (new connect() generation) or its disappearance
@@ -60,6 +68,7 @@ export function SetupPage() {
     prevParamStoreRef.current = paramStore
     setDiscardedNotice(paramStore ? null : discardedCount)
     setLoad(paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' })
+    setMeta(null)
     clearForDisconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramStore])
@@ -69,10 +78,38 @@ export function SetupPage() {
     return paramStore.onChange(() => setVersion((v) => v + 1))
   }, [paramStore])
 
+  // Same-origin lazy metadata fetch after connect — TuningPage's pattern:
+  // additive documentation, a failure never blocks the page (the flight-mode
+  // dropdowns then degrade to read-only raw values).
+  useEffect(() => {
+    if (!paramStore) return
+    let cancelled = false
+    loadParamMetadata(identity?.fwVersion)
+      .then((result) => {
+        if (!cancelled) setMeta(result)
+      })
+      .catch(() => {
+        if (!cancelled) setMeta(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [paramStore, identity?.fwVersion])
+
+  function metaOf(param: string): ParamMetaEntry | undefined {
+    return meta ? lookupParamMeta(meta.table, param) : undefined
+  }
+
   function valueOf(param: string): number | undefined {
     void version
     return pending.get(param)?.value ?? paramStore?.get(param)?.value
   }
+
+  // The live highlight follows the FLTMODE_CH the board actually has (the
+  // ParamStore cache, never the staged overlay) — the firmware switches on
+  // what's written, and a pending-but-unapplied channel change must not move
+  // the highlight before Apply.
+  const activeSlot = activeFlightModeSlot(paramStore?.get(FLTMODE_CH_PARAM)?.value, telemetry?.rc?.channels)
 
   async function handleLoad(): Promise<void> {
     if (!paramStore) return
@@ -197,6 +234,7 @@ export function SetupPage() {
           gcsValue={valueOf(FS_GCS_FIELD.param)}
           onGcsChange={(v, label) => stage(FS_GCS_FIELD.param, v, label)}
         />
+        <FlightModes valueOf={valueOf} metaOf={metaOf} onStage={stage} activeSlot={activeSlot} />
 
         {pending.size > 0 && (
           <StagedReviewBar

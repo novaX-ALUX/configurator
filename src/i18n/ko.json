@@ -279,6 +279,21 @@
         }
       }
     },
+    "flightModes": {
+      "sectionTitle": "비행 모드",
+      "sectionSubtitle": "조종기 스위치 위치별로 선택되는 모드",
+      "slot": "모드 {{n}}",
+      "activeBadge": "현재 스위치 위치",
+      "simpleHeader": "Simple",
+      "superSimpleHeader": "Super Simple",
+      "simpleFor": "슬롯 {{n}} Simple 모드",
+      "superSimpleFor": "슬롯 {{n}} Super Simple 모드",
+      "maskSlots": "슬롯 {{slots}}",
+      "maskNone": "없음",
+      "channelTitle": "모드 스위치 채널",
+      "channelHint": "위의 하이라이트는 이 채널의 RC 입력을 따라 움직입니다.",
+      "noEnum": "번들 메타데이터에 모드 목록이 없습니다 — 이 파라미터는 파라미터 페이지에서 수정하세요."
+    },
     "discardedOnDisconnect": "{{count}}건의 저장되지 않은 설정 변경이 취소되었습니다 — 설정 변경은 세션 간에 유지되지 않습니다.",
     "errorNonNegative": "0 이상이어야 합니다"
   },

@@ -279,6 +279,21 @@
         }
       }
     },
+    "flightModes": {
+      "sectionTitle": "飞行模式",
+      "sectionSubtitle": "遥控器开关各档位对应的模式",
+      "slot": "模式 {{n}}",
+      "activeBadge": "当前档位",
+      "simpleHeader": "Simple",
+      "superSimpleHeader": "Super Simple",
+      "simpleFor": "档位 {{n}} 的 Simple 模式",
+      "superSimpleFor": "档位 {{n}} 的 Super Simple 模式",
+      "maskSlots": "档位 {{slots}}",
+      "maskNone": "无",
+      "channelTitle": "模式开关通道",
+      "channelHint": "上方的高亮跟随该通道的遥控输入。",
+      "noEnum": "内置元数据中没有模式列表 — 请在参数页面编辑该参数。"
+    },
     "discardedOnDisconnect": "{{count}} 项未保存的设置修改已被丢弃 — 设置修改不会在会话间保留。",
     "errorNonNegative": "必须为零或正数"
   },

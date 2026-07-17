@@ -279,6 +279,21 @@
         }
       }
     },
+    "flightModes": {
+      "sectionTitle": "フライトモード",
+      "sectionSubtitle": "送信機スイッチの各ポジションが選ぶモード",
+      "slot": "モード {{n}}",
+      "activeBadge": "スイッチ位置",
+      "simpleHeader": "Simple",
+      "superSimpleHeader": "Super Simple",
+      "simpleFor": "スロット {{n}} の Simple モード",
+      "superSimpleFor": "スロット {{n}} の Super Simple モード",
+      "maskSlots": "スロット {{slots}}",
+      "maskNone": "なし",
+      "channelTitle": "モードスイッチチャンネル",
+      "channelHint": "上のハイライトはこのチャンネルの RC 入力に追従します。",
+      "noEnum": "同梱メタデータにモード一覧がありません — このパラメータはパラメータページから編集してください。"
+    },
     "discardedOnDisconnect": "{{count}} 件の未保存の設定変更が破棄されました — 設定変更はセッション間で保持されません。",
     "errorNonNegative": "0以上である必要があります"
   },

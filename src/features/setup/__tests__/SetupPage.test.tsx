@@ -11,8 +11,12 @@ import { encodePayload } from '../../../core/mavlink/encode'
 import { decodePayload } from '../../../core/mavlink/decode'
 import { MavRouter } from '../../../core/mavlink/router'
 import { ParamStore } from '../../../core/mavlink/params'
+import { Telemetry } from '../../../core/mavlink/telemetry'
+import type { MavSession } from '../../../core/mavlink/session'
+import type { ParamMetaFile } from '../../../core/paramMetadata'
 
 const PARAM_SET_MSGID = 23
+const RC_CHANNELS_MSGID = 65
 const MAV_PARAM_TYPE_REAL32 = 9
 const MAV_PARAM_TYPE_INT32 = 6
 
@@ -24,6 +28,7 @@ afterEach(() => {
   useSetupStore.setState(initialSetupState, true)
   vi.useRealTimers()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 /** Every param the Setup page reads/writes, at ArduPilot's own defaults (Task 7.1 metadata). */
@@ -37,7 +42,53 @@ const DEFAULT_SETUP_PARAMS = [
   { name: 'FS_THR_ENABLE', value: 1, type: MAV_PARAM_TYPE_INT32 },
   { name: 'BATT_FS_LOW_ACT', value: 2, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FS_GCS_ENABLE', value: 1, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'FLTMODE1', value: 0, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'FLTMODE2', value: 2, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'FLTMODE3', value: 5, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'FLTMODE4', value: 3, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'FLTMODE5', value: 6, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'FLTMODE6', value: 6, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'FLTMODE_CH', value: 5, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SIMPLE', value: 0, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SUPER_SIMPLE', value: 0, type: MAV_PARAM_TYPE_INT32 },
 ]
+
+/** Mode-name enum shared by all six slots — every name the UI shows must come from here (issue #37: no hardcoded mode names). AutoTune included on purpose: assigning it to a slot is allowed bench-side config (ADR-0002). */
+const FLTMODE_VALUES = [
+  { value: 0, label: 'Stabilize' },
+  { value: 1, label: 'Acro' },
+  { value: 2, label: 'AltHold' },
+  { value: 3, label: 'Auto' },
+  { value: 5, label: 'Loiter' },
+  { value: 6, label: 'RTL' },
+  { value: 15, label: 'AutoTune' },
+]
+
+/** Bundled-metadata stand-in served to `loadParamMetadata`'s same-origin fetch — one shared fixture for the whole file (the module caches per version). */
+const META_FIXTURE: ParamMetaFile = {
+  FLTMODE1: { displayName: 'Flight Mode 1', description: 'x', values: FLTMODE_VALUES },
+  FLTMODE2: { displayName: 'Flight Mode 2', description: 'x', values: FLTMODE_VALUES },
+  FLTMODE3: { displayName: 'Flight Mode 3', description: 'x', values: FLTMODE_VALUES },
+  FLTMODE4: { displayName: 'Flight Mode 4', description: 'x', values: FLTMODE_VALUES },
+  FLTMODE5: { displayName: 'Flight Mode 5', description: 'x', values: FLTMODE_VALUES },
+  FLTMODE6: { displayName: 'Flight Mode 6', description: 'x', values: FLTMODE_VALUES },
+  FLTMODE_CH: {
+    displayName: 'Flightmode channel',
+    description: 'x',
+    values: [
+      { value: 0, label: 'Disabled' },
+      { value: 5, label: 'Channel5' },
+      { value: 6, label: 'Channel6' },
+      { value: 7, label: 'Channel7' },
+    ],
+  },
+  SIMPLE: { displayName: 'Simple mode bitmask', description: 'x' },
+  SUPER_SIMPLE: { displayName: 'Super Simple Mode', description: 'x' },
+}
+
+function mockMetaFetch(body: ParamMetaFile): void {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })))
+}
 
 function paramValueFrame(opts: { name: string; value: number; type?: number; count: number; index: number }): Uint8Array {
   const payload = encodePayload(defs, 22, {
@@ -56,13 +107,27 @@ function decodeSent(bytes: Uint8Array): { msgid: number; fields: Record<string, 
   return { msgid: frame.msgid, fields: decodePayload(defs, frame).fields }
 }
 
-async function makeConnectedParamStore(opts?: ConstructorParameters<typeof ParamStore>[2]): Promise<{ transport: MockTransport; paramStore: ParamStore }> {
+async function makeConnectedParamStore(
+  opts?: ConstructorParameters<typeof ParamStore>[2],
+): Promise<{ transport: MockTransport; paramStore: ParamStore; session: MavSession }> {
   const transport = new MockTransport()
   const router = new MavRouter(transport, defs, {})
   await transport.open()
   router.start()
-  const paramStore = new ParamStore(router, { sysid: 1, compid: 1 }, opts)
-  return { transport, paramStore }
+  const target = { sysid: 1, compid: 1 }
+  const paramStore = new ParamStore(router, target, opts)
+  // A real Telemetry on the same router — the wire seam the flight-mode
+  // active-slot tests inject RC_CHANNELS frames through.
+  const session: MavSession = { router, target, paramStore, telemetry: new Telemetry(router, target) }
+  return { transport, paramStore, session }
+}
+
+/** RC_CHANNELS frame; `values` is 1-based channel → µs, unlisted channels are 0 ("channel not available"). */
+function rcFrame(values: Record<number, number>, seq = 0): Uint8Array {
+  const fields: Record<string, number> = { chancount: 16, rssi: 200 }
+  for (let i = 1; i <= 18; i++) fields[`chan${i}_raw`] = values[i] ?? 0
+  const payload = encodePayload(defs, RC_CHANNELS_MSGID, fields)
+  return encodeFrame(defs, { msgid: RC_CHANNELS_MSGID, payload }, seq, 1, 1)
 }
 
 async function feedAll(transport: MockTransport, entries: Array<{ name: string; value: number; type?: number }>): Promise<void> {
@@ -99,11 +164,13 @@ async function primeCompletedFetch(paramStore: ParamStore, transport: MockTransp
 }
 
 async function renderLoaded(entries: Array<{ name: string; value: number; type?: number }> = DEFAULT_SETUP_PARAMS) {
-  const { transport, paramStore } = await makeConnectedParamStore()
+  mockMetaFetch(META_FIXTURE)
+  const { transport, paramStore, session } = await makeConnectedParamStore()
   await primeCompletedFetch(paramStore, transport, entries)
-  useConnectionStore.setState({ phase: 'connected', paramStore })
+  useConnectionStore.setState({ phase: 'connected', paramStore, session, identity: { fwVersion: '4.6.3' } })
   render(<SetupPage />)
-  return { transport, paramStore }
+  await tick() // let the metadata fetch resolve
+  return { transport, paramStore, session }
 }
 
 describe('SetupPage', () => {
@@ -327,6 +394,122 @@ describe('SetupPage', () => {
 
       expect(screen.getByText('BATT_CAPACITY → 6000')).toBeInTheDocument()
       expect(screen.getByText(/Board reports 5500 \(requested 6000\)/)).toBeInTheDocument()
+    })
+  })
+
+  describe('flight modes (issue #37)', () => {
+    async function feedRc(transport: MockTransport, values: Record<number, number>, seq = 0): Promise<void> {
+      transport.feed(rcFrame(values, seq))
+      await tick(150) // past Telemetry's ~100ms subscriber throttle
+    }
+
+    /** Which slot row currently carries the live badge, or null. */
+    function activeSlotOf(): string | null {
+      const badge = screen.queryByText('switch is here')
+      return badge ? (badge.closest('[data-slot]')?.getAttribute('data-slot') ?? null) : null
+    }
+
+    it('renders every slot dropdown from the bundled metadata enum — AutoTune assignable — and initializes from board values', async () => {
+      await renderLoaded()
+      const select = screen.getByLabelText('FLTMODE1')
+      const labels = within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+      expect(labels).toEqual(FLTMODE_VALUES.map((v) => v.label)) // exactly the metadata enum, nothing hardcoded
+      expect(select).toHaveValue('0')
+      expect(screen.getByLabelText('FLTMODE3')).toHaveValue('5')
+    })
+
+    it('FLTMODE_CH renders from its metadata enum and initializes from the board value', async () => {
+      await renderLoaded()
+      const select = screen.getByLabelText('FLTMODE_CH')
+      expect(select).toHaveValue('5')
+      const labels = within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+      expect(labels).toEqual(['Disabled', 'Channel5', 'Channel6', 'Channel7'])
+    })
+
+    it('choosing a mode stages it with the metadata label and emits zero parameter-write frames (Review Gate)', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.change(screen.getByLabelText('FLTMODE3'), { target: { value: '15' } })
+
+      expect(screen.getByText('1 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('FLTMODE3 → 15')).toHaveAttribute('title', 'AutoTune') // chip tooltip carries the metadata label
+      expect(transport.sent.map(decodeSent).filter((f) => f.msgid === PARAM_SET_MSGID)).toHaveLength(0)
+    })
+
+    it('changing FLTMODE_CH stages through the same bar', async () => {
+      await renderLoaded()
+      fireEvent.change(screen.getByLabelText('FLTMODE_CH'), { target: { value: '6' } })
+      expect(screen.getByText('FLTMODE_CH → 6')).toHaveAttribute('title', 'Channel6')
+    })
+
+    it('Simple / Super Simple toggles stage the correct bitmask values (bit N = slot N+1)', async () => {
+      await renderLoaded()
+      fireEvent.click(screen.getByLabelText('Simple mode for slot 1'))
+      fireEvent.click(screen.getByLabelText('Simple mode for slot 3'))
+      expect(useSetupStore.getState().pending.get('SIMPLE')?.value).toBe(0b101)
+      expect(screen.getByText('SIMPLE → 5')).toHaveAttribute('title', 'slots 1, 3')
+
+      fireEvent.click(screen.getByLabelText('Simple mode for slot 1')) // uncheck builds on the staged mask
+      expect(useSetupStore.getState().pending.get('SIMPLE')?.value).toBe(0b100)
+
+      fireEvent.click(screen.getByLabelText('Super Simple mode for slot 6'))
+      expect(useSetupStore.getState().pending.get('SUPER_SIMPLE')?.value).toBe(0b100000)
+    })
+
+    it('Apply writes the staged SIMPLE bitmask to the wire', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.click(screen.getByLabelText('Simple mode for slot 1'))
+      fireEvent.click(screen.getByLabelText('Simple mode for slot 3'))
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+
+      const sets = transport.sent
+        .map(decodeSent)
+        .filter((f) => f.msgid === PARAM_SET_MSGID)
+        .map((f) => f.fields)
+      expect(sets).toHaveLength(1)
+      expect(sets[0].param_id).toBe('SIMPLE')
+      expect(sets[0].param_value).toBeCloseTo(5, 5)
+    })
+
+    it('wire seam: injected RC_CHANNELS frames move the active-slot highlight across every PWM threshold', async () => {
+      const { transport } = await renderLoaded()
+      expect(activeSlotOf()).toBeNull() // no RC data yet
+
+      const bands: Array<[pwm: number, slot: string]> = [
+        [1000, '1'],
+        [1230, '1'],
+        [1231, '2'],
+        [1360, '2'],
+        [1361, '3'],
+        [1490, '3'],
+        [1491, '4'],
+        [1620, '4'],
+        [1621, '5'],
+        [1749, '5'],
+        [1750, '6'],
+        [1900, '6'],
+      ]
+      let seq = 0
+      for (const [pwm, slot] of bands) {
+        await feedRc(transport, { 5: pwm }, seq++)
+        expect(activeSlotOf(), `pwm ${pwm}`).toBe(slot)
+      }
+
+      // Channel dropping out (0 = "not available") clears the highlight.
+      await feedRc(transport, {}, seq++)
+      expect(activeSlotOf()).toBeNull()
+    })
+
+    it('the highlight follows the FLTMODE_CH written on the board, never a staged-but-unapplied channel change', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.change(screen.getByLabelText('FLTMODE_CH'), { target: { value: '6' } })
+      // chan5 (board value) says slot 6; chan6 (staged, unwritten) would say slot 1.
+      await feedRc(transport, { 5: 1800, 6: 1000 })
+      expect(activeSlotOf()).toBe('6')
     })
   })
 

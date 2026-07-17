@@ -279,6 +279,21 @@
         }
       }
     },
+    "flightModes": {
+      "sectionTitle": "FLIGHT MODES",
+      "sectionSubtitle": "Which mode each transmitter switch position selects",
+      "slot": "Mode {{n}}",
+      "activeBadge": "switch is here",
+      "simpleHeader": "Simple",
+      "superSimpleHeader": "Super Simple",
+      "simpleFor": "Simple mode for slot {{n}}",
+      "superSimpleFor": "Super Simple mode for slot {{n}}",
+      "maskSlots": "slots {{slots}}",
+      "maskNone": "none",
+      "channelTitle": "Mode switch channel",
+      "channelHint": "The live highlight above follows this channel's RC input.",
+      "noEnum": "No mode list in the bundled metadata — edit this parameter from the Parameters page."
+    },
     "discardedOnDisconnect": "{{count}} unsaved setup change(s) were discarded — they don't persist across sessions.",
     "errorNonNegative": "Must be zero or greater"
   },
