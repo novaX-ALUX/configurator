@@ -13,9 +13,11 @@ describe('nav group structure (ADR-0004)', () => {
   })
 
   it('nav pages carry exact group membership and order per ADR-0004', () => {
-    // Configure in guide-journey order; Maintain in frequency order, with the
-    // raw table (relabeled "Full Parameters") first as the Escape Hatch.
+    // Home ungrouped on top (IA T2); Configure in guide-journey order;
+    // Maintain in frequency order, with the raw table (relabeled "Full
+    // Parameters") first as the Escape Hatch.
     expect(NAV_PAGES.map((p) => [p.id, p.group])).toEqual([
+      ['home', undefined],
       ['setup', 'configure'],
       ['calibration', 'configure'],
       ['motors', 'configure'],

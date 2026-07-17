@@ -7,6 +7,13 @@ import { useGuideStore } from '../features/guide/guideStore'
  * Sidebar nav icons, ported from the left rail of docs/design/novaX-Configurator.dc.html.
  */
 const NAV_ICONS: Record<PageId, ReactNode> = {
+  home: (
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 10.5L12 4.25l7.5 6.25" />
+      <path d="M6.25 9.25v10h11.5v-10" />
+      <path d="M10 19.25v-5h4v5" />
+    </svg>
+  ),
   firmware: (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
       <rect x="7.25" y="7.25" width="9.5" height="9.5" rx="2" />

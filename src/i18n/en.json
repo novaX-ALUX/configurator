@@ -6,6 +6,7 @@
       "monitor": "Monitor",
       "maintain": "Maintain"
     },
+    "home": "Home",
     "firmware": "Firmware",
     "parameters": "Full Parameters",
     "dashboard": "Dashboard",
@@ -15,6 +16,21 @@
     "calibration": "Calibration",
     "motors": "Motors",
     "console": "Console"
+  },
+  "home": {
+    "title": "Home",
+    "subtitle": "First board? Follow the setup steps below. Coming back? Connect and continue. Board not responding? Jump straight to firmware rescue.",
+    "connect": {
+      "title": "Connect your board",
+      "body": "Plug the flight controller in over USB, then connect to read its parameters.",
+      "cta": "Connect",
+      "connected": "Board connected."
+    },
+    "rescue": {
+      "title": "Board not responding?",
+      "body": "A bricked or unresponsive board can be reflashed from the Firmware page — no connection required.",
+      "cta": "Open Firmware"
+    }
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",

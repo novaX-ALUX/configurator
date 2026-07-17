@@ -31,9 +31,11 @@ describe('Sidebar', () => {
     expect(screen.getByText('Configure')).toBeInTheDocument()
     expect(screen.getByText('Monitor')).toBeInTheDocument()
     expect(screen.getByText('Maintain')).toBeInTheDocument()
-    // Page buttons appear top-to-bottom in group order (guide + licenses footer trail the groups).
+    // Page buttons appear top-to-bottom in group order — Home ungrouped on
+    // top (IA T2), guide + licenses footer trailing the groups.
     const names = screen.getAllByRole('button').map((b) => b.textContent)
     expect(names).toEqual([
+      'Home',
       'Setup',
       'Calibration',
       'Motors',

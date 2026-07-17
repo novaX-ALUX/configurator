@@ -6,6 +6,7 @@
       "monitor": "监控",
       "maintain": "维护"
     },
+    "home": "首页",
     "firmware": "固件",
     "parameters": "全部参数",
     "dashboard": "仪表盘",
@@ -15,6 +16,21 @@
     "calibration": "校准",
     "motors": "电机",
     "console": "控制台"
+  },
+  "home": {
+    "title": "首页",
+    "subtitle": "第一次使用？按照下方的设置步骤操作。再次使用？连接后继续。飞控无响应？直接进入固件救援。",
+    "connect": {
+      "title": "连接飞控",
+      "body": "通过 USB 连接飞行控制器，然后点击连接读取参数。",
+      "cta": "连接",
+      "connected": "飞控已连接。"
+    },
+    "rescue": {
+      "title": "飞控无响应？",
+      "body": "变砖或无响应的飞控可以在固件页面重新刷写——无需连接。",
+      "cta": "打开固件页面"
+    }
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",

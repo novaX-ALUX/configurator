@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 
 export type PageId =
+  /** Ungrouped, above the Nav Groups (ADR-0004) — the landing page and journey splitter (IA T2, issue #44). */
+  | 'home'
   | 'firmware'
   | 'parameters'
   | 'dashboard'
@@ -42,6 +44,7 @@ export interface NavPage {
 
 /** ADR-0004 order: Configure in guide-journey order, Maintain in frequency order ("Full Parameters" first, as the Escape Hatch). */
 export const NAV_PAGES: NavPage[] = [
+  { id: 'home', labelKey: 'nav.home', enabled: true },
   { id: 'setup', labelKey: 'nav.setup', group: 'configure', enabled: true },
   { id: 'calibration', labelKey: 'nav.calibration', group: 'configure', enabled: true },
   { id: 'motors', labelKey: 'nav.motors', group: 'configure', enabled: true },

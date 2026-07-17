@@ -15,6 +15,7 @@ import { TuningPage } from './features/tuning/TuningPage'
 import { CalibrationPage } from './features/calibration/CalibrationPage'
 import { MotorTestPage } from './features/motors/MotorTestPage'
 import { LicensesPage } from './features/licenses/LicensesPage'
+import { HomePage } from './features/home/HomePage'
 import { useMotorTestStore } from './features/motors/motorTestStore'
 import { SetupGuideDrawer } from './features/guide/SetupGuideDrawer'
 import { NAV_PAGES, useNavigationStore } from './store/navigation'
@@ -102,7 +103,9 @@ function App() {
       <TelemetryStrip />
       <Sidebar />
       <main className="col-start-2 row-start-4 min-w-0 overflow-auto">
-        {activePage === 'console' ? (
+        {activePage === 'home' ? (
+          <HomePage />
+        ) : activePage === 'console' ? (
           <ConsolePage />
         ) : activePage === 'parameters' ? (
           <ParamsPage />

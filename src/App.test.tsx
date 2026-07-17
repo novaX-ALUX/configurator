@@ -30,6 +30,21 @@ describe('App shell', () => {
     expect(screen.getByRole('checkbox', { name: 'Any device' })).toBeInTheDocument()
   })
 
+  it('still lands on Firmware by default — Home does not take over arrival until IA T3', () => {
+    render(<App />)
+    expect(useNavigationStore.getState().activePage).toBe('firmware')
+    expect(screen.getByRole('button', { name: 'Home' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('reaches the Home page from the top of the sidebar with active-page marking (issue #44)', () => {
+    render(<App />)
+    const homeButton = screen.getByRole('button', { name: 'Home' })
+    fireEvent.click(homeButton)
+    expect(screen.getByRole('heading', { name: 'Home' })).toBeInTheDocument()
+    expect(homeButton).toHaveAttribute('aria-current', 'page')
+    useNavigationStore.setState({ activePage: 'firmware' })
+  })
+
   it('reaches the licenses page from the sidebar without a vehicle connected (issue #39)', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Licenses' }))
