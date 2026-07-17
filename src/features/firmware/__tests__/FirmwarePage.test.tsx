@@ -173,6 +173,7 @@ describe('FirmwarePage — mid-flash navigation guard', () => {
   it('registers a confirm guard while a flash is in flight, so leaving the page is intercepted', async () => {
     mockManifestFetch()
     useConnectionStore.setState({ phase: 'connected' })
+    useNavigationStore.setState({ activePage: 'firmware' }) // the user is ON the firmware page (no longer the default landing page since IA T3)
     useFlashSession.setState({ step: 'programming', progress: { done: 512, total: 1024 }, target: runningTarget() })
 
     render(<FirmwarePage />)

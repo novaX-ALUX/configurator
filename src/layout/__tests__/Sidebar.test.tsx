@@ -56,7 +56,7 @@ describe('Sidebar', () => {
     useNavigationStore.getState().setGuardNavigation(() => false)
     render(<Sidebar />)
     fireEvent.click(screen.getByRole('button', { name: 'Console' }))
-    expect(useNavigationStore.getState().activePage).toBe('firmware') // unchanged
+    expect(useNavigationStore.getState().activePage).toBe('home') // unchanged
     reset()
   })
 

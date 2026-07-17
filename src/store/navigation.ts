@@ -71,7 +71,7 @@ interface NavigationState {
 }
 
 export const useNavigationStore = create<NavigationState>((set, get) => ({
-  activePage: 'firmware',
+  activePage: 'home', // the landing page since IA T3 (issue #45); Firmware stays one click away via Home's rescue bypass
   guardNavigation: null,
   setActivePage: (page) => {
     const { activePage, guardNavigation } = get()

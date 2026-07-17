@@ -51,7 +51,7 @@ describe('navigation store', () => {
   it('setActivePage is blocked when the guard returns false', () => {
     useNavigationStore.getState().setGuardNavigation(() => false)
     useNavigationStore.getState().setActivePage('charts')
-    expect(useNavigationStore.getState().activePage).toBe('firmware') // unchanged
+    expect(useNavigationStore.getState().activePage).toBe('home') // unchanged
   })
 
   it('re-selecting the already-active page is a no-op and never consults the guard (no spurious confirm prompt)', () => {
@@ -60,15 +60,15 @@ describe('navigation store', () => {
       calls.push(next)
       return false
     })
-    useNavigationStore.getState().setActivePage('firmware') // already the active page
+    useNavigationStore.getState().setActivePage('home') // already the active page
     expect(calls).toEqual([])
-    expect(useNavigationStore.getState().activePage).toBe('firmware')
+    expect(useNavigationStore.getState().activePage).toBe('home')
   })
 
   it('the guard protects every caller of setActivePage, not just one call site', () => {
     useNavigationStore.getState().setGuardNavigation(() => false)
     const { setActivePage } = useNavigationStore.getState()
     setActivePage('console') // called directly, not through any UI wrapper
-    expect(useNavigationStore.getState().activePage).toBe('firmware')
+    expect(useNavigationStore.getState().activePage).toBe('home')
   })
 })
