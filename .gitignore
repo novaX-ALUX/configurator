@@ -22,6 +22,10 @@ yarn-error.log*
 # Test
 coverage
 
+# Session scratch space (ui-audit screenshots, handoff notes, spec drafts) --
+# never publish; the repo is public.
+.scratch/
+
 # Mirrored firmware (scripts/sync-firmware.sh output) -- build/deploy-time
 # content, not source. See docs/notes/decisions-m1.md decision 4.
 public/firmware/*
