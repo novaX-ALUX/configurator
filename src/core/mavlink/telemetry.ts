@@ -27,6 +27,10 @@
  *   (µs pass-through, no conversion), index 0 = `servo1_raw`.
  * - HEARTBEAT: `armed` derived from `base_mode & MAV_MODE_FLAG_SAFETY_ARMED`
  *   (bit 0x80); `custom_mode`/`base_mode`/`system_status` pass through.
+ * - RAW_IMU (issue #53): despite the message's "raw values without scaling"
+ *   spec wording, ArduPilot sends the first IMU scaled — acc in milli-g,
+ *   gyro in mrad/s (GCS_Common's send_raw_imu; Mission Planner relies on
+ *   the same convention) — converted here to m/s² and deg/s.
  *
  * The `voltage`/`current`/`batteryRemaining`/`hdop`/`rssi` sentinel-to-
  * `undefined` mappings above go slightly beyond the task brief's explicit
@@ -40,7 +44,7 @@
  * Every block's `ts` is this layer's own receive-time clock (`opts.now`,
  * default `Date.now`), not a device-relative field from the message —
  * SYS_STATUS carries no time field at all, so a uniform local-receive-time
- * convention across all six blocks (rather than "device time where
+ * convention across all seven blocks (rather than "device time where
  * available, local time otherwise") is what keeps `ts` comparable across
  * blocks.
  *
@@ -74,12 +78,17 @@ import { MAV_CMD_SET_MESSAGE_INTERVAL, MAVLINK_MSG_ID_REQUEST_DATA_STREAM } from
 import type { DecodedMessage } from './decode'
 import type { MavRouter, LinkState } from './router'
 
-/** The five streamable telemetry messages this layer requests/decodes (HEARTBEAT is always broadcast by the FC regardless of stream requests, so it isn't in this set — it's still decoded passively, see `applyHeartbeat`). */
-export type TelemetryMsg = 'ATTITUDE' | 'SYS_STATUS' | 'GPS_RAW_INT' | 'RC_CHANNELS' | 'SERVO_OUTPUT_RAW'
+/** The six streamable telemetry messages this layer requests/decodes (HEARTBEAT is always broadcast by the FC regardless of stream requests, so it isn't in this set — it's still decoded passively, see `applyHeartbeat`). */
+export type TelemetryMsg = 'ATTITUDE' | 'SYS_STATUS' | 'GPS_RAW_INT' | 'RC_CHANNELS' | 'SERVO_OUTPUT_RAW' | 'RAW_IMU'
 
-const TELEMETRY_MSGS: readonly TelemetryMsg[] = ['ATTITUDE', 'SYS_STATUS', 'GPS_RAW_INT', 'RC_CHANNELS', 'SERVO_OUTPUT_RAW']
+const TELEMETRY_MSGS: readonly TelemetryMsg[] = ['ATTITUDE', 'SYS_STATUS', 'GPS_RAW_INT', 'RC_CHANNELS', 'SERVO_OUTPUT_RAW', 'RAW_IMU']
 
 const RAD_TO_DEG = 180 / Math.PI
+const STANDARD_GRAVITY_MSS = 9.80665
+/** ArduPilot's RAW_IMU acc unit (milli-g) -> m/s². */
+const MILLI_G_TO_MSS = STANDARD_GRAVITY_MSS / 1000
+/** ArduPilot's RAW_IMU gyro unit (mrad/s) -> deg/s. */
+const MRAD_S_TO_DEG_S = RAD_TO_DEG / 1000
 const MAV_MODE_FLAG_SAFETY_ARMED = 0x80
 const UINT16_MAX = 0xffff
 const UINT8_MAX = 0xff
@@ -100,6 +109,7 @@ const DEFAULT_RATE_HZ = 10
  * table) that `REQUEST_DATA_STREAM`'s fallback path addresses by — see the
  * module doc for why this is a many-messages-per-group, not 1:1, mapping.
  */
+const MAV_DATA_STREAM_RAW_SENSORS = 1
 const MAV_DATA_STREAM_EXTENDED_STATUS = 2
 const MAV_DATA_STREAM_RC_CHANNELS = 3
 const MAV_DATA_STREAM_EXTRA1 = 10
@@ -110,6 +120,7 @@ const STREAM_GROUP_FOR_MSG: Record<TelemetryMsg, number> = {
   GPS_RAW_INT: MAV_DATA_STREAM_EXTENDED_STATUS,
   RC_CHANNELS: MAV_DATA_STREAM_RC_CHANNELS,
   SERVO_OUTPUT_RAW: MAV_DATA_STREAM_RC_CHANNELS,
+  RAW_IMU: MAV_DATA_STREAM_RAW_SENSORS,
 }
 
 export interface TelemetryState {
@@ -119,6 +130,7 @@ export interface TelemetryState {
   rc?: { channels: number[]; rssi?: number; ts: number }
   servo?: { outputs: number[]; ts: number }
   heartbeat?: { armed: boolean; customMode: number; baseMode: number; systemStatus: number; ts: number }
+  imu?: { accX: number; accY: number; accZ: number; gyroX: number; gyroY: number; gyroZ: number; ts: number }
 }
 
 export interface TelemetryOpts {
@@ -176,6 +188,7 @@ export class Telemetry {
       GPS_RAW_INT: requireMsgId('GPS_RAW_INT'),
       RC_CHANNELS: requireMsgId('RC_CHANNELS'),
       SERVO_OUTPUT_RAW: requireMsgId('SERVO_OUTPUT_RAW'),
+      RAW_IMU: requireMsgId('RAW_IMU'),
     }
     this.heartbeatMsgId = requireMsgId('HEARTBEAT')
 
@@ -188,7 +201,7 @@ export class Telemetry {
     this.unsubscribeLinkState = router.onLinkState((s) => this.handleLinkState(s))
   }
 
-  /** Requests the five telemetry messages at `msgRates[msg] ?? 10`Hz each (see module doc for the primary/fallback protocol). Resolves once every message has either been accepted or fallen back. */
+  /** Requests the six telemetry messages at `msgRates[msg] ?? 10`Hz each (see module doc for the primary/fallback protocol). Resolves once every message has either been accepted or fallen back. */
   async requestStreams(msgRates?: Partial<Record<TelemetryMsg, number>>): Promise<void> {
     const fallbackGroupsSent = new Set<number>()
     await Promise.all(
@@ -203,7 +216,7 @@ export class Telemetry {
     )
   }
 
-  /** Disables all five telemetry messages (`interval_us = -1`), falling back to `REQUEST_DATA_STREAM(start_stop=0)` per the same policy as `requestStreams`. Call before disconnecting. */
+  /** Disables all six telemetry messages (`interval_us = -1`), falling back to `REQUEST_DATA_STREAM(start_stop=0)` per the same policy as `requestStreams`. Call before disconnecting. */
   async stopStreams(): Promise<void> {
     const fallbackGroupsSent = new Set<number>()
     await Promise.all(
@@ -263,6 +276,9 @@ export class Telemetry {
         break
       case this.msgIds.SERVO_OUTPUT_RAW:
         this.applyServo(msg.fields)
+        break
+      case this.msgIds.RAW_IMU:
+        this.applyRawImu(msg.fields)
         break
       case this.heartbeatMsgId:
         this.applyHeartbeat(msg.fields)
@@ -331,6 +347,21 @@ export class Telemetry {
     const outputs: number[] = []
     for (let i = 1; i <= 16; i++) outputs.push(Number(fields[`servo${i}_raw`]))
     this.state = { ...this.state, servo: { outputs, ts: this.now() } }
+  }
+
+  private applyRawImu(fields: DecodedMessage['fields']): void {
+    this.state = {
+      ...this.state,
+      imu: {
+        accX: Number(fields.xacc) * MILLI_G_TO_MSS,
+        accY: Number(fields.yacc) * MILLI_G_TO_MSS,
+        accZ: Number(fields.zacc) * MILLI_G_TO_MSS,
+        gyroX: Number(fields.xgyro) * MRAD_S_TO_DEG_S,
+        gyroY: Number(fields.ygyro) * MRAD_S_TO_DEG_S,
+        gyroZ: Number(fields.zgyro) * MRAD_S_TO_DEG_S,
+        ts: this.now(),
+      },
+    }
   }
 
   private applyHeartbeat(fields: DecodedMessage['fields']): void {

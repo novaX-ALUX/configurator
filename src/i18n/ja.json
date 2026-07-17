@@ -491,6 +491,12 @@
       "label": "AHRS_ORIENTATION",
       "unknown": "不明"
     },
+    "sensors": {
+      "sectionTitle": "ライブセンサーチェック",
+      "accelLabel": "加速度 (m/s²)",
+      "gyroLabel": "ジャイロ (°/s)",
+      "hint": "静止時は加速度 Z が約 −9.8 m/s²、ジャイロが 0 付近になるはずです — キャリブレーション前にセンサーが生きていてノイズが正常か確認してください。"
+    },
     "accel": {
       "sectionTitle": "加速度センサー · 6 姿勢",
       "calibratedBadge": "キャリブレーション済み",

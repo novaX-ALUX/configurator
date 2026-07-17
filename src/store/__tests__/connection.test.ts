@@ -560,6 +560,7 @@ describe('connection store', () => {
       GPS_RAW_INT: 2,
       RC_CHANNELS: 5,
       SERVO_OUTPUT_RAW: 5,
+      RAW_IMU: 5,
     }
 
     it('requests telemetry streams once connected, with the documented per-message rates', async () => {

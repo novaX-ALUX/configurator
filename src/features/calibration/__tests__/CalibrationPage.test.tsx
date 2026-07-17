@@ -18,6 +18,7 @@ import type { MavSession } from '../../../core/mavlink/session'
 const COMMAND_LONG_MSGID = 76
 const COMMAND_ACK_MSGID = 77
 const PARAM_VALUE_MSGID = 22
+const RAW_IMU_MSGID = 27
 const MAG_CAL_PROGRESS_MSGID = 191
 const MAG_CAL_REPORT_MSGID = 192
 
@@ -47,6 +48,22 @@ function ackFrame(command: number, result: number): Uint8Array {
 /** Inbound FC->GCS COMMAND_LONG cmd=42429, matching AP_AccelCal's own send_accelcal_vehicle_position shape. */
 function accelPosFrame(param1: number): Uint8Array {
   return frame(COMMAND_LONG_MSGID, { target_system: 255, target_component: 0, command: MAV_CMD_ACCELCAL_VEHICLE_POS, confirmation: 0, param1 })
+}
+
+/** ArduPilot RAW_IMU convention: acc in milli-g, gyro in mrad/s (see telemetry.ts's module doc). */
+function rawImuFrame(acc: [number, number, number], gyro: [number, number, number]): Uint8Array {
+  return frame(RAW_IMU_MSGID, {
+    time_usec: 0n,
+    xacc: acc[0],
+    yacc: acc[1],
+    zacc: acc[2],
+    xgyro: gyro[0],
+    ygyro: gyro[1],
+    zgyro: gyro[2],
+    xmag: 0,
+    ymag: 0,
+    zmag: 0,
+  })
 }
 
 function paramValueFrame(name: string, value: number, type = MAV_PARAM_TYPE_REAL32): Uint8Array {
@@ -640,6 +657,33 @@ describe('CalibrationPage: compass', () => {
     expect(screen.getByText(/could not be verified — check the Parameters page/)).toBeInTheDocument()
     // Must NOT be stuck showing the disabled 'accepting' review buttons forever.
     expect(screen.queryByText('Write offsets to board')).not.toBeInTheDocument()
+  })
+})
+
+describe('CalibrationPage: live sensor readout (issue #53)', () => {
+  it('shows em-dash placeholders until RAW_IMU arrives, then live accel/gyro values from the Telemetry snapshot', async () => {
+    const { transport } = await connectSession()
+    render(<CalibrationPage />)
+
+    expect(screen.getByText('LIVE SENSOR CHECK')).toBeInTheDocument()
+    // Six axes (accel X/Y/Z + gyro X/Y/Z), all placeholders before any data.
+    expect(screen.getAllByText('—')).toHaveLength(6)
+
+    // At rest: accel Z reads -1 g, gyro X shows 1000 mrad/s of (implausibly large) movement.
+    transport.feed(rawImuFrame([50, -20, -1000], [1000, 0, 0]))
+    await tick()
+
+    expect(screen.getByText('-9.81')).toBeInTheDocument() // -1000 mG -> m/s²
+    expect(screen.getByText('0.49')).toBeInTheDocument() // 50 mG
+    expect(screen.getByText('57.3')).toBeInTheDocument() // 1000 mrad/s -> deg/s
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+  })
+
+  it('is absent from the not-connected empty state (existing placeholder behavior untouched)', () => {
+    useConnectionStore.setState({ phase: 'disconnected', session: null, paramStore: null })
+    render(<CalibrationPage />)
+    expect(screen.getByText('Calibration needs a connected board')).toBeInTheDocument()
+    expect(screen.queryByText('LIVE SENSOR CHECK')).not.toBeInTheDocument()
   })
 })
 

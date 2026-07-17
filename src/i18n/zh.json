@@ -491,6 +491,12 @@
       "label": "AHRS_ORIENTATION",
       "unknown": "未知"
     },
+    "sensors": {
+      "sectionTitle": "实时传感器检查",
+      "accelLabel": "加速度 (m/s²)",
+      "gyroLabel": "陀螺仪 (°/s)",
+      "hint": "静止时加速度 Z 应约为 −9.8 m/s²，陀螺仪应接近 0 — 校准前先确认传感器工作正常、噪声合理。"
+    },
     "accel": {
       "sectionTitle": "加速度计 · 6 个姿态",
       "calibratedBadge": "已校准",

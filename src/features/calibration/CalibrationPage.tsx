@@ -9,7 +9,9 @@ import { AccelCard } from './AccelCard'
 import { CompassCard } from './CompassCard'
 import { RcCalCard } from './RcCalCard'
 import { OrientationNote } from './OrientationNote'
+import { SensorReadout } from './SensorReadout'
 import { StagedReviewBar } from '../staged/StagedReviewBar'
+import { useTelemetry } from '../dashboard/useTelemetry'
 
 /**
  * Sensor Calibration page (Task 8.3) -- wires Task 8.1's `AccelCalibration`
@@ -37,6 +39,9 @@ export function CalibrationPage() {
   const accel = useAccelCalibration(session, phase)
   const compass = useCompassCalibration(session, paramStore, phase)
   const rc = useRcCalibration(session, phase)
+  // Issue #53: the live sensor readout below reads (never writes) the same
+  // Telemetry Snapshot the Dashboard does.
+  const telemetry = useTelemetry(session)
 
   const rcPending = useRcCalStagedStore((s) => s.pending)
   const rcWriteStatus = useRcCalStagedStore((s) => s.writeStatus)
@@ -106,6 +111,8 @@ export function CalibrationPage() {
         <span className="ml-auto text-[12px] text-nvx-faint">{t('calibration.titleNote')}</span>
       </div>
       <p className="mb-4 text-[12.5px] text-nvx-subtle">{t('calibration.subtitle')}</p>
+
+      <SensorReadout imu={telemetry?.imu} />
 
       <div className="grid grid-cols-2 items-start gap-4">
         <AccelCard accel={accel} connected={connected} />

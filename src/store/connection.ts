@@ -68,7 +68,9 @@ const LINK_STATS_INTERVAL_MS = 1000
  * readout (10Hz); SYS_STATUS/GPS_RAW_INT are slow since battery level and
  * GPS fix don't change quickly (2Hz each); RC_CHANNELS/SERVO_OUTPUT_RAW are
  * fast enough to see stick/output movement without flooding the link
- * (5Hz each). `Telemetry.requestStreams()`'s own default (10Hz) would apply
+ * (5Hz each); RAW_IMU feeds the Calibration page's read-only sensor
+ * readout (issue #53) — 5Hz is plenty to confirm "sensor alive, noise
+ * sane". `Telemetry.requestStreams()`'s own default (10Hz) would apply
  * to any message left out of this map — nothing is, here, but it's a
  * `Partial` so that stays true if a message is ever added upstream without
  * this map being updated to match.
@@ -79,6 +81,7 @@ const TELEMETRY_STREAM_RATES_HZ: Partial<Record<TelemetryMsg, number>> = {
   GPS_RAW_INT: 2,
   RC_CHANNELS: 5,
   SERVO_OUTPUT_RAW: 5,
+  RAW_IMU: 5,
 }
 
 export type ConnectionPhase = 'disconnected' | 'connecting' | 'connected' | 'lost'

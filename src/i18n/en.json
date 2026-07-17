@@ -491,6 +491,12 @@
       "label": "AHRS_ORIENTATION",
       "unknown": "unknown"
     },
+    "sensors": {
+      "sectionTitle": "LIVE SENSOR CHECK",
+      "accelLabel": "Accel (m/s²)",
+      "gyroLabel": "Gyro (°/s)",
+      "hint": "At rest, accel Z should read about −9.8 m/s² and gyro near 0 — confirm the sensor is alive and noise is sane before calibrating."
+    },
     "accel": {
       "sectionTitle": "ACCELEROMETER · 6 POSITIONS",
       "calibratedBadge": "CALIBRATED",

@@ -491,6 +491,12 @@
       "label": "AHRS_ORIENTATION",
       "unknown": "알 수 없음"
     },
+    "sensors": {
+      "sectionTitle": "실시간 센서 확인",
+      "accelLabel": "가속도 (m/s²)",
+      "gyroLabel": "자이로 (°/s)",
+      "hint": "정지 상태에서는 가속도 Z가 약 −9.8 m/s², 자이로는 0 근처여야 합니다 — 캘리브레이션 전에 센서가 살아 있고 노이즈가 정상인지 확인하세요."
+    },
     "accel": {
       "sectionTitle": "가속도계 · 6개 자세",
       "calibratedBadge": "캘리브레이션 완료",

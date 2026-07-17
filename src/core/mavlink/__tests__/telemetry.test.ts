@@ -11,6 +11,7 @@ import { Telemetry, type TelemetryState } from '../telemetry'
 const HEARTBEAT_MSGID = 0
 const SYS_STATUS_MSGID = 1
 const GPS_RAW_INT_MSGID = 24
+const RAW_IMU_MSGID = 27
 const ATTITUDE_MSGID = 30
 const SERVO_OUTPUT_RAW_MSGID = 36
 const RC_CHANNELS_MSGID = 65
@@ -22,6 +23,7 @@ const MAV_CMD_SET_MESSAGE_INTERVAL = 511
 const MAV_RESULT_ACCEPTED = 0
 const MAV_RESULT_UNSUPPORTED = 3
 
+const MAV_DATA_STREAM_RAW_SENSORS = 1
 const MAV_DATA_STREAM_EXTENDED_STATUS = 2
 const MAV_DATA_STREAM_RC_CHANNELS = 3
 const MAV_DATA_STREAM_EXTRA1 = 10
@@ -34,13 +36,19 @@ function attitudeFrame(opts: { roll?: number; pitch?: number; yaw?: number }, se
   return frame(ATTITUDE_MSGID, { roll: opts.roll ?? 0, pitch: opts.pitch ?? 0, yaw: opts.yaw ?? 0 }, seq)
 }
 
-function sysStatusFrame(opts: { voltage?: number; current?: number; remaining?: number }, seq = 0): Uint8Array {
+function sysStatusFrame(
+  opts: { voltage?: number; current?: number; remaining?: number; present?: number; enabled?: number; health?: number },
+  seq = 0,
+): Uint8Array {
   return frame(
     SYS_STATUS_MSGID,
     {
       voltage_battery: opts.voltage ?? 12000,
       current_battery: opts.current ?? 100,
       battery_remaining: opts.remaining ?? 80,
+      onboard_control_sensors_present: opts.present ?? 0,
+      onboard_control_sensors_enabled: opts.enabled ?? 0,
+      onboard_control_sensors_health: opts.health ?? 0,
     },
     seq,
   )
@@ -63,6 +71,12 @@ function rcFrame(opts: { rssi?: number; base?: number }, seq = 0): Uint8Array {
   for (let i = 1; i <= 18; i++) fields[`chan${i}_raw`] = (opts.base ?? 1000) + i
   fields.rssi = opts.rssi ?? 200
   return frame(RC_CHANNELS_MSGID, fields, seq)
+}
+
+function rawImuFrame(opts: { acc?: [number, number, number]; gyro?: [number, number, number] }, seq = 0): Uint8Array {
+  const [xacc, yacc, zacc] = opts.acc ?? [0, 0, 0]
+  const [xgyro, ygyro, zgyro] = opts.gyro ?? [0, 0, 0]
+  return frame(RAW_IMU_MSGID, { time_usec: 0n, xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag: 0, ymag: 0, zmag: 0 }, seq)
 }
 
 function servoFrame(base = 1500, seq = 0): Uint8Array {
@@ -214,6 +228,20 @@ describe('Telemetry', () => {
       expect(telemetry.getState().rc?.rssi).toBeUndefined()
     })
 
+    it('RAW_IMU: milli-g -> m/s², mrad/s -> deg/s (ArduPilot scales despite the message name)', async () => {
+      const telemetry = new Telemetry(router, target)
+      transport.feed(rawImuFrame({ acc: [50, -20, -1000], gyro: [1000, -500, 0] }))
+      await flush()
+
+      const imu = telemetry.getState().imu
+      expect(imu?.accX).toBeCloseTo(0.490, 3) // 50 mG
+      expect(imu?.accY).toBeCloseTo(-0.196, 3)
+      expect(imu?.accZ).toBeCloseTo(-9.807, 3) // -1 g, the at-rest Z reading
+      expect(imu?.gyroX).toBeCloseTo(57.296, 3) // 1000 mrad/s
+      expect(imu?.gyroY).toBeCloseTo(-28.648, 3)
+      expect(imu?.gyroZ).toBeCloseTo(0)
+    })
+
     it('SERVO_OUTPUT_RAW: servoN_raw packed into an array', async () => {
       const telemetry = new Telemetry(router, target)
       transport.feed(servoFrame(1500))
@@ -254,14 +282,14 @@ describe('Telemetry', () => {
       await flush()
 
       const cmds = decodeCommandLongs(transport.sent)
-      expect(cmds).toHaveLength(5)
+      expect(cmds).toHaveLength(6)
       for (const c of cmds) {
         expect(c.command).toBe(MAV_CMD_SET_MESSAGE_INTERVAL)
         expect(c.param2).toBe(100000)
       }
       const msgids = cmds.map((c) => c.param1).sort((a, b) => Number(a) - Number(b))
       // HEARTBEAT is deliberately excluded: the FC broadcasts it unconditionally, no stream request needed.
-      expect(msgids).toEqual([SYS_STATUS_MSGID, GPS_RAW_INT_MSGID, ATTITUDE_MSGID, SERVO_OUTPUT_RAW_MSGID, RC_CHANNELS_MSGID].sort((a, b) => a - b))
+      expect(msgids).toEqual([SYS_STATUS_MSGID, GPS_RAW_INT_MSGID, RAW_IMU_MSGID, ATTITUDE_MSGID, SERVO_OUTPUT_RAW_MSGID, RC_CHANNELS_MSGID].sort((a, b) => a - b))
 
       // resolve every pending sendCommand so the test doesn't leak a hanging promise/timer
       transport.feed(ackFrame({ command: MAV_CMD_SET_MESSAGE_INTERVAL, result: MAV_RESULT_ACCEPTED }))
@@ -319,6 +347,21 @@ describe('Telemetry', () => {
       expect(requests[0]).toMatchObject({ req_stream_id: MAV_DATA_STREAM_EXTRA1, start_stop: 1 })
     })
 
+    it('RAW_IMU falls back to the RAW_SENSORS stream group', async () => {
+      const sendCommandFn = vi.fn(async (_router, _target, cmd): Promise<CommandAck> => ({
+        command: cmd.command,
+        result: cmd.param1 === RAW_IMU_MSGID ? MAV_RESULT_UNSUPPORTED : MAV_RESULT_ACCEPTED,
+        progress: 0,
+        resultParam2: 0,
+      }))
+      const telemetry = new Telemetry(router, target, { sendCommandFn })
+      await telemetry.requestStreams()
+
+      const requests = decodeDataStreamRequests(transport.sent)
+      expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ req_stream_id: MAV_DATA_STREAM_RAW_SENSORS, start_stop: 1 })
+    })
+
     it('does not fall back for messages whose ACK is accepted', async () => {
       const sendCommandFn = vi.fn(async (_router, _target, cmd): Promise<CommandAck> => {
         return { command: cmd.command, result: cmd.param1 === RC_CHANNELS_MSGID ? MAV_RESULT_UNSUPPORTED : MAV_RESULT_ACCEPTED, progress: 0, resultParam2: 0 }
@@ -339,7 +382,7 @@ describe('Telemetry', () => {
       await flush()
 
       const cmds = decodeCommandLongs(transport.sent)
-      expect(cmds).toHaveLength(5)
+      expect(cmds).toHaveLength(6)
       for (const c of cmds) {
         expect(c.command).toBe(MAV_CMD_SET_MESSAGE_INTERVAL)
         expect(c.param2).toBe(-1)
