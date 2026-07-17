@@ -23,6 +23,30 @@ Any operation on an aircraft in a flyable state (arm/disarm, mode change, missio
 A typed core-layer operation (e.g. `startMotorTest`, `acceptMagCal`) that declares its own safety pattern — gate, confirmation, stop path. The only way commands reach the vehicle; no generic command channel exists.
 _Avoid_: sendCommand, raw command, passthrough command
 
+### Navigation
+
+**Home**:
+The landing page and journey splitter: first-run users find the Setup Guide, returning users find Connect, rescue users find the path to Firmware. Not part of any Nav Group.
+_Avoid_: welcome page, start page, getting started
+
+**Nav Group**:
+One of three fixed sections of the navigation — **Configure**, **Monitor**, **Maintain** — divided by page nature, matching the layered connection policy (Monitor pages work offline, Configure pages need a connected board, Maintain contains the offline-capable rescue tools).
+
+**Configure (group)**:
+The curated write-path pages (Setup, Calibration, Motors, Tuning), ordered by the guide journey.
+_Avoid_: Setup group (collides with the Setup page), setup-path
+
+**Monitor (group)**:
+The read-only pages (Dashboard, Charts). Fully usable offline.
+
+**Maintain (group)**:
+The low-frequency rescue and debug surfaces (Full Parameters, Firmware, Console), ordered by frequency of use.
+_Avoid_: Advanced (describes a user rank, not the group's purpose)
+
+**Escape Hatch**:
+The full raw parameter table, positioned as the fallback to the curated Configure pages — same data, lower altitude. Its nav label must say so ("Full Parameters"), not pose as a sibling.
+_Avoid_: Parameters (as a bare nav label)
+
 ### Parameters
 
 **Review Gate**:
