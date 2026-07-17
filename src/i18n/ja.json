@@ -311,8 +311,13 @@
     "updateButton": "{{board}} を {{version}} に更新",
     "selectToUpdate": "更新するファームウェアを選択してください",
 
+    "directFlashButton": "ボードはすでにブートローダー中ですか？直接書き込む",
+    "directFlashHint": "再起動するアプリがないボード向け — 先に接続せず、ポート選択ダイアログを直接開きます。",
+    "directFlashFailed": "ブートローダーのポートを開けませんでした:{{message}}",
+
     "confirmTitle": "{{board}} を {{version}} に更新しますか？",
     "confirmBody": "ボードはブートローダーに再起動し、書き込み後にアプリへ再起動します。パラメータは保持されます。この間は USB ケーブルを抜かないでください。",
+    "directFlashConfirmBody": "ボードはすでにブートローダー中です — 直接書き込み後、アプリへ再起動します。パラメータは保持されます。この間は USB ケーブルを抜かないでください。",
     "confirmCancel": "キャンセル",
     "confirmProceed": "更新",
 

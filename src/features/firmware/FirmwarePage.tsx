@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useNavigationStore } from '../../store/navigation'
+import type { Transport } from '../../core/transport/types'
 import { fetchManifest, matchBoards, matchBoardsByName, type BoardFirmware, type FirmwareFile, type FirmwareManifest } from '../../core/firmware/manifest'
 import { parseApj, type ParsedApj } from '../../core/firmware/apj'
 import { FlashLog } from './FlashLog'
 import { DfuRecovery } from './DfuRecovery'
-import { CANCELLABLE_STEPS, useFlashSession, type FlashStep, type FlashTarget } from './flashSession'
+import { CANCELLABLE_STEPS, requestDirectBootloaderTransport, useFlashSession, type FlashStep, type FlashTarget } from './flashSession'
 import { formatBytes } from './firmwareUtils'
 
 type ManifestLoad = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'loaded'; manifest: FirmwareManifest }
@@ -60,6 +61,7 @@ export function FirmwarePage() {
   const [localApj, setLocalApj] = useState<LocalApjState>({ kind: 'idle' })
   const [dragOver, setDragOver] = useState(false)
   const [dfuInFlight, setDfuInFlight] = useState(false)
+  const [directFlashError, setDirectFlashError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -128,30 +130,66 @@ export function FirmwarePage() {
     }
   }
 
-  function startOnlineUpdate(): void {
-    if (!selectedBoard) return
-    const file = apjFile(selectedBoard)
-    if (!file) return
-    const target: FlashTarget = {
-      boardName: selectedBoard.boardName,
-      version: selectedBoard.version,
-      apjBoardId: selectedBoard.apjBoardId,
-      source: { kind: 'online', board: selectedBoard, file },
+  // Local wins only when no board is explicitly selected — matches the
+  // primary-button ternary below, which only ever calls this while that same
+  // precedence holds. Shared by the primary Update button (as a side effect,
+  // via startUpdate()) and the direct-flash button (as a value, to decide
+  // whether to render it at all).
+  function buildTarget(): FlashTarget | null {
+    if (localApj.kind === 'parsed' && !selectedBoard) {
+      const matched = manifestLoad.kind === 'loaded' ? matchBoards(manifestLoad.manifest, localApj.apj.boardId)[0] : undefined
+      return {
+        boardName: matched?.boardName ?? t('firmware.localBoardName', { boardId: localApj.apj.boardId }),
+        version: matched?.version ?? localApj.fileName,
+        apjBoardId: localApj.apj.boardId,
+        source: { kind: 'local', fileName: localApj.fileName, apj: localApj.apj },
+      }
     }
-    session.prepare(target)
+    if (selectedBoard) {
+      const file = apjFile(selectedBoard)
+      if (!file) return null
+      return { boardName: selectedBoard.boardName, version: selectedBoard.version, apjBoardId: selectedBoard.apjBoardId, source: { kind: 'online', board: selectedBoard, file } }
+    }
+    return null
   }
 
-  function startLocalUpdate(): void {
-    if (localApj.kind !== 'parsed') return
-    const matched = manifestLoad.kind === 'loaded' ? matchBoards(manifestLoad.manifest, localApj.apj.boardId)[0] : undefined
-    const target: FlashTarget = {
-      boardName: matched?.boardName ?? t('firmware.localBoardName', { boardId: localApj.apj.boardId }),
-      version: matched?.version ?? localApj.fileName,
-      apjBoardId: localApj.apj.boardId,
-      source: { kind: 'local', fileName: localApj.fileName, apj: localApj.apj },
-    }
-    session.prepare(target)
+  function startUpdate(): void {
+    const target = buildTarget()
+    if (target) session.prepare(target)
   }
+
+  /**
+   * Issue #29: a board already sitting in its bootloader (no running app —
+   * e.g. a flash that died mid-erase) has no MAVLink connection for the
+   * normal flow's `rebooting` step to take over. `navigator.serial.requestPort()`
+   * is called FIRST, directly in this click handler (before any
+   * download/verify network work `run()` might do for an online source) —
+   * see `requestDirectBootloaderTransport()`'s own doc for why the ordering
+   * matters (transient user-activation). The resulting already-open
+   * `Transport` is handed to `session.prepareDirect()`, which pre-seeds
+   * `rebootSent` and reuses it directly — same `run()`, same board_id/capacity
+   * gate inside `Px4Flasher.flash()`, untouched.
+   */
+  async function handleDirectFlash(): Promise<void> {
+    const target = buildTarget()
+    if (!target) return
+    setDirectFlashError(null)
+    let transport: Transport
+    try {
+      transport = await requestDirectBootloaderTransport(baud)
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotFoundError') return // user dismissed the picker — not a failure worth surfacing
+      setDirectFlashError(err instanceof Error ? err.message : String(err))
+      return
+    }
+    session.prepareDirect(target, transport)
+  }
+
+  // Only shown when idle and genuinely disconnected — not e.g. mid-`connect()`,
+  // which is itself awaiting its own requestPort() call (store/connection.ts);
+  // a board already sitting in its bootloader has nothing for that normal
+  // Connect flow to talk to anyway.
+  const directTarget = session.step === 'idle' && phase === 'disconnected' ? buildTarget() : null
 
   // Highlight-only (decisions-m1): matches the banner board name against the
   // manifest — never filters the list, never gates a flash.
@@ -161,8 +199,11 @@ export function FirmwarePage() {
       : []
 
   const visibleSteps = NORMAL_STEP_ORDER.filter((s) => {
-    if (session.target?.source.kind !== 'local') return true
-    return s.step !== 'downloading' && s.step !== 'verifying'
+    if (session.target?.source.kind === 'local' && (s.step === 'downloading' || s.step === 'verifying')) return false
+    // Direct-bootloader entry (issue #29) never reboots a live app or polls
+    // for a reconnect — the transport was already open when handed in.
+    if (session.directEntry && (s.step === 'rebooting' || s.step === 'connecting')) return false
+    return true
   })
   const curIdx = stepIndex(visibleSteps, session.step)
   const failIdx = stepIndex(visibleSteps, session.failedStep)
@@ -326,7 +367,7 @@ export function FirmwarePage() {
                 // `dfuInFlight`: don't let Tab 1 take over the connection
                 // (its `rebooting` step) while Tab 2's DFU flash is using it.
                 disabled={phase !== 'connected' || dfuInFlight}
-                onClick={startLocalUpdate}
+                onClick={startUpdate}
                 className="rounded-[10px] bg-nvx-primary px-5 py-2.5 text-[13px] font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t('firmware.updateButton', { board: t('firmware.localBoardName', { boardId: localApj.apj.boardId }), version: localApj.fileName })}
@@ -335,13 +376,31 @@ export function FirmwarePage() {
               <button
                 type="button"
                 disabled={!selectedBoard || phase !== 'connected' || dfuInFlight}
-                onClick={startOnlineUpdate}
+                onClick={startUpdate}
                 className="rounded-[10px] bg-nvx-primary px-5 py-2.5 text-[13px] font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {selectedBoard ? t('firmware.updateButton', { board: selectedBoard.boardName, version: selectedBoard.version }) : t('firmware.selectToUpdate')}
               </button>
             )}
+
+            {/* Direct-bootloader entry (issue #29): a board already sitting in
+                its bootloader (e.g. a flash that died mid-erase) has no
+                MAVLink connection for the normal flow's reboot step to take
+                over — this is the rescue path for exactly that. */}
+            {directTarget && (
+              <button
+                type="button"
+                disabled={dfuInFlight}
+                onClick={() => void handleDirectFlash()}
+                className="ml-auto rounded-[10px] border border-nvx-borderStrong bg-white px-4 py-2.5 text-[12.5px] font-bold text-nvx-text hover:bg-nvx-field disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t('firmware.directFlashButton')}
+              </button>
+            )}
           </div>
+
+          {directTarget && <p className="mb-3 text-[11px] text-nvx-faint">{t('firmware.directFlashHint')}</p>}
+          {directFlashError && <p className="mb-3 text-[11.5px] text-nvx-danger">{t('firmware.directFlashFailed', { message: directFlashError })}</p>}
 
           {session.step !== 'idle' && (
             <>
@@ -437,7 +496,7 @@ export function FirmwarePage() {
             <div className="mb-1 font-heading text-[16px] font-bold text-nvx-text">
               {t('firmware.confirmTitle', { board: session.target.boardName, version: session.target.version })}
             </div>
-            <div className="mb-4 text-[12.5px] leading-relaxed text-nvx-muted">{t('firmware.confirmBody')}</div>
+            <div className="mb-4 text-[12.5px] leading-relaxed text-nvx-muted">{t(session.directEntry ? 'firmware.directFlashConfirmBody' : 'firmware.confirmBody')}</div>
             <div className="flex justify-end gap-2.5">
               <button
                 type="button"

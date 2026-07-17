@@ -311,8 +311,13 @@
     "updateButton": "Update {{board}} to {{version}}",
     "selectToUpdate": "Select firmware to update",
 
+    "directFlashButton": "Board already in bootloader? Flash it directly",
+    "directFlashHint": "For a board with no app to reboot — opens a port picker instead of connecting first.",
+    "directFlashFailed": "Couldn't open the bootloader port: {{message}}",
+
     "confirmTitle": "Update {{board}} to {{version}}?",
     "confirmBody": "The board reboots into its bootloader, is reflashed, then reboots back. Parameters are preserved. Don't disconnect the USB cable during this process.",
+    "directFlashConfirmBody": "The board is already in its bootloader — it will be reflashed directly, then reboot back into its app. Parameters are preserved. Don't disconnect the USB cable during this process.",
     "confirmCancel": "Cancel",
     "confirmProceed": "Update",
 

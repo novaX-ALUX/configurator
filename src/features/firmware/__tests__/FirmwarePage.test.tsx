@@ -157,6 +157,117 @@ describe('FirmwarePage — Cancel affordance on the in-progress view', () => {
   })
 })
 
+describe('FirmwarePage — direct-bootloader entry (issue #29)', () => {
+  /** Minimal fake `SerialPort` — real `ReadableStream`/`WritableStream` so `SerialTransport.open()` succeeds for real, mirroring `core/transport/__tests__/serial.test.ts`'s own `FakeSerialPort`. */
+  class FakeSerialPort extends EventTarget implements SerialPort {
+    readable: ReadableStream<Uint8Array> | null = null
+    writable: WritableStream<Uint8Array> | null = null
+    connected = true
+    open(): Promise<void> {
+      this.readable = new ReadableStream<Uint8Array>({})
+      this.writable = new WritableStream<Uint8Array>({})
+      return Promise.resolve()
+    }
+    close(): Promise<void> {
+      this.readable = null
+      this.writable = null
+      return Promise.resolve()
+    }
+    forget(): Promise<void> {
+      return Promise.resolve()
+    }
+    getInfo(): SerialPortInfo {
+      return { usbVendorId: 0x1209, usbProductId: 0x5741 }
+    }
+  }
+
+  // jsdom has no `navigator.serial` at all (see serial.ts's own module doc) —
+  // defined per-test and restored after, mirroring how this repo's console
+  // tests stub `navigator.clipboard` (inspectorUtils.test.ts).
+  const originalSerial = (navigator as unknown as { serial?: unknown }).serial
+  afterEach(() => {
+    Object.defineProperty(navigator, 'serial', { value: originalSerial, configurable: true })
+  })
+  function stubRequestPort(impl: () => Promise<SerialPort>): void {
+    Object.defineProperty(navigator, 'serial', { value: { requestPort: impl, getPorts: async () => [] }, configurable: true })
+  }
+
+  it('is hidden while connected, and hidden when nothing is selected', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'connected' })
+    render(<FirmwarePage />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /AF-F4_nano/ })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /already in bootloader/i })).not.toBeInTheDocument()
+  })
+
+  it('appears once disconnected with a board selected, and opens the port picker on click', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'disconnected' })
+    let requestPortCalls = 0
+    stubRequestPort(async () => {
+      requestPortCalls++
+      return new FakeSerialPort()
+    })
+
+    render(<FirmwarePage />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /AF-F4_nano/ })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /AF-F4_nano/ }))
+
+    const directButton = screen.getByRole('button', { name: /already in bootloader/i })
+    expect(directButton).toBeEnabled()
+
+    await act(async () => {
+      fireEvent.click(directButton)
+    })
+
+    expect(requestPortCalls).toBe(1)
+    await waitFor(() => expect(useFlashSession.getState().step).toBe('confirming'))
+    expect(useFlashSession.getState().directEntry).toBe(true)
+    // Direct-entry confirm copy must not claim a reboot is about to happen —
+    // the board is already in its bootloader.
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/already in its bootloader/)).toBeInTheDocument()
+  })
+
+  it('silently does nothing when the user dismisses the native port picker', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'disconnected' })
+    stubRequestPort(async () => {
+      throw new DOMException('cancelled', 'NotFoundError')
+    })
+
+    render(<FirmwarePage />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /AF-F4_nano/ })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /AF-F4_nano/ }))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /already in bootloader/i }))
+    })
+
+    expect(useFlashSession.getState().step).toBe('idle')
+    expect(screen.queryByText(/Couldn't open the bootloader port/)).not.toBeInTheDocument()
+  })
+
+  it('surfaces a non-dismissal requestPort() failure as an inline error', async () => {
+    mockManifestFetch()
+    useConnectionStore.setState({ phase: 'disconnected' })
+    stubRequestPort(async () => {
+      throw new Error('Web Serial is not available in this browser')
+    })
+
+    render(<FirmwarePage />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /AF-F4_nano/ })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /AF-F4_nano/ }))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /already in bootloader/i }))
+    })
+
+    expect(useFlashSession.getState().step).toBe('idle')
+    expect(screen.getByText(/Couldn't open the bootloader port.*Web Serial is not available/)).toBeInTheDocument()
+  })
+})
+
 describe('FirmwarePage — local .apj drop', () => {
   async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
     const input = new ReadableStream<Uint8Array>({

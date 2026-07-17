@@ -33,7 +33,8 @@ import { MessageAggregateStore } from '../core/mavlink/inspector'
 import type { MavSession } from '../core/mavlink/session'
 import { sendCommand } from '../core/mavlink/command'
 
-const NOVAX_USB_VENDOR_ID = 0x1209
+/** Exported so `flashSession.ts`'s direct-bootloader entry (issue #29) can filter its own `requestPort()` call the same way — a board already sitting in its bootloader enumerates under the same VID as the app (confirmed on hardware, issue #28's kernel-log evidence). */
+export const NOVAX_USB_VENDOR_ID = 0x1209
 const DEFAULT_BAUD = 115200
 const STATUSTEXT_MSGID = 253
 const AUTOPILOT_VERSION_MSGID = 148

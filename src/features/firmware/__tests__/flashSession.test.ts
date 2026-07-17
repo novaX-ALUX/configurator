@@ -507,6 +507,154 @@ describe('createFlashSession (normal update, Px4Flasher)', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Direct-bootloader entry (issue #29): a board already sitting in its
+// bootloader (no app to reboot) — `prepareDirect()` pre-seeds `rebootSent`
+// and hands `run()` an already-open transport instead of a live MAVLink
+// connection to take over. Same `run()`, same board_id/capacity gate inside
+// `Px4Flasher.flash()` — these tests exist to prove the entry point wires
+// into that machinery correctly, not to re-test the gate itself.
+// ---------------------------------------------------------------------------
+
+describe('createFlashSession — direct-bootloader entry (prepareDirect, issue #29)', () => {
+  it('happy path: skips rebooting/connecting entirely (no reboot sent, no reconnect poll) and flashes straight through', async () => {
+    const { effects, flasher, transport, calls } = baseEffects()
+    const store = createFlashSession(effects)
+    const seen: string[] = []
+    store.subscribe((s) => seen.push(s.step))
+
+    store.getState().prepareDirect(localTarget(), transport)
+    expect(store.getState().step).toBe('confirming')
+    expect(store.getState().directEntry).toBe(true)
+    store.getState().confirm()
+
+    await waitFor(store, (s) => s.step === 'done' || s.step === 'failed')
+
+    expect(store.getState().step).toBe('done')
+    expect(store.getState().identify).toEqual(flasher.identifyResult)
+    // Neither the reboot-to-bootloader command nor the reconnect-poll effect
+    // is ever invoked — the transport was already open when handed in.
+    expect(calls.reboot).toBe(0)
+    expect(calls.openBootloader).toBe(0)
+    expect(calls.createFlasher).toBe(1)
+    expect(flasher.identifyCalls).toBe(1)
+    expect(seen).not.toContain('rebooting')
+    expect(seen).not.toContain('connecting')
+  })
+
+  it('an online source still downloads + verifies before identifying — direct entry only skips rebooting/connecting, not the download path', async () => {
+    const imageBytes = new TextEncoder().encode('firmware-bytes')
+    const sha = await sha256Hex(imageBytes)
+    const file: FirmwareFile = { kind: 'apj', name: 'x.apj', url: 'https://example.invalid/x.apj', sha256: sha, size: imageBytes.length }
+    const compressed = await deflate(imageBytes)
+    let binary = ''
+    for (const b of compressed) binary += String.fromCharCode(b)
+    const apjJson = JSON.stringify({ board_id: 6203, image_size: imageBytes.length, image: btoa(binary) })
+    const apjBytes = new TextEncoder().encode(apjJson)
+    file.sha256 = await sha256Hex(apjBytes)
+
+    const { effects, transport, calls } = baseEffects({ fetchFn: async () => new Response(apjBytes.buffer as ArrayBuffer, { status: 200 }) })
+    const store = createFlashSession(effects)
+    const seen: string[] = []
+    store.subscribe((s) => seen.push(s.step))
+
+    store.getState().prepareDirect(onlineTarget(file), transport)
+    store.getState().confirm()
+
+    await waitFor(store, (s) => s.step === 'done' || s.step === 'failed')
+
+    expect(store.getState().step).toBe('done')
+    expect(seen).toContain('downloading')
+    expect(seen).toContain('verifying')
+    expect(seen).not.toContain('rebooting')
+    expect(seen).not.toContain('connecting')
+    expect(calls.reboot).toBe(0)
+    expect(calls.openBootloader).toBe(0)
+  })
+
+  it('board_id mismatch is rejected before erase, with both ids in the message, and never sends a reboot command', async () => {
+    const { effects, flasher, transport, calls } = baseEffects()
+    flasher.flashError = new Error('Wrong firmware — flash aborted, nothing erased. This firmware is for board ID 6203, but the connected board is ID 4242.')
+    const store = createFlashSession(effects)
+
+    store.getState().prepareDirect(localTarget(), transport)
+    store.getState().confirm()
+
+    await waitFor(store, (s) => s.step === 'failed')
+
+    expect(store.getState().failedStep).toBe('identifying')
+    expect(store.getState().error).toMatch(/6203/)
+    expect(store.getState().error).toMatch(/4242/)
+    expect(calls.reboot).toBe(0) // no app was ever running to send a reboot command to
+    expect(flasher.flashCalls).toBe(1) // erase was attempted (and its guard fired) — nothing erased per the message
+  })
+
+  it('normal connected flow (prepare/confirm) is unaffected by prepareDirect existing — directEntry stays false', async () => {
+    const { effects, calls } = baseEffects()
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    expect(store.getState().directEntry).toBe(false)
+    store.getState().confirm()
+
+    await waitFor(store, (s) => s.step === 'done' || s.step === 'failed')
+
+    expect(store.getState().step).toBe('done')
+    expect(store.getState().directEntry).toBe(false)
+    expect(calls.reboot).toBe(1) // unchanged: the normal path still reboots the live app
+    expect(calls.openBootloader).toBe(1) // unchanged: the normal path still reconnect-polls
+  })
+
+  it('cancel() from confirming closes the already-open direct transport and returns to idle', async () => {
+    const { effects, transport } = baseEffects()
+    const closeSpy = vi.spyOn(transport, 'close')
+    const store = createFlashSession(effects)
+
+    store.getState().prepareDirect(localTarget(), transport)
+    expect(store.getState().step).toBe('confirming')
+
+    store.getState().cancel()
+
+    expect(store.getState().step).toBe('idle')
+    expect(store.getState().directEntry).toBe(false)
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('retry() after an identify() failure falls back to the (poll-based) openBootloaderTransport effect with no old transport to wait on', async () => {
+    const { effects, flasher, transport } = baseEffects()
+    let identifyCalls = 0
+    const originalIdentify = flasher.identify.bind(flasher)
+    flasher.identify = async () => {
+      identifyCalls++
+      if (identifyCalls === 1) throw new Error('bootloader sync lost (expected INSYNC, got 0x00)')
+      return originalIdentify()
+    }
+    let receivedOldTransport: unknown = 'unset'
+    const reconnectedTransport = new MockTransport()
+    const { effects: patchedEffects } = baseEffects({
+      openBootloaderTransport: async (oldTransport) => {
+        receivedOldTransport = oldTransport
+        return reconnectedTransport
+      },
+    })
+    const finalEffects: FlashSessionEffects = { ...effects, openBootloaderTransport: patchedEffects.openBootloaderTransport }
+    const store = createFlashSession(finalEffects)
+
+    store.getState().prepareDirect(localTarget(), transport)
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+    expect(store.getState().failedStep).toBe('identifying')
+
+    store.getState().retry()
+    await waitFor(store, (s) => s.step === 'done' || s.step === 'failed')
+
+    expect(store.getState().step).toBe('done')
+    // No app-mode transport ever existed for this attempt — the reconnect
+    // effect is called with null rather than a stale/wrong transport.
+    expect(receivedOldTransport).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
 
 function hex(overrides: Partial<ParsedHex> = {}): ParsedHex {
   return { segments: [{ addr: 0x08000000, data: new Uint8Array([1, 2, 3]) }], minAddress: 0x08000000, maxAddress: 0x08000003, totalBytes: 3, ...overrides }

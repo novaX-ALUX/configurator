@@ -20,6 +20,17 @@
  * ever calls `firmwareFileUrl()`; a local `.apj` drop skips
  * downloading/verifying entirely (already parsed, see `FlashSource`).
  *
+ * `prepareDirect()` (issue #29) is a second entry into this SAME `run()` for
+ * a board that is already sitting in its bootloader (e.g. a flash that died
+ * mid-erase, stranding the board with its app erased) — there is no running
+ * app to reboot and no MAVLink connection to take over. It pre-seeds
+ * `rebootSent` and hands `run()` an already-open `Transport` (acquired via
+ * `navigator.serial.requestPort()` at the triggering click, see
+ * `requestDirectBootloaderTransport()` below), so `run()` skips straight
+ * from `confirming`/`downloading`/`verifying` past `rebooting`/`connecting`
+ * into `identifying` — the exact same board_id/capacity gate inside
+ * `Px4Flasher.flash()` still runs first, unmodified.
+ *
  * The connection store's `takeoverForFlash()` is what makes "pause telemetry
  * -> flash -> resume" possible: `rebooting` calls it to get the live
  * transport, sends the MAVLink reboot-to-bootloader command over it (which
@@ -57,7 +68,7 @@ import { firmwareFileUrl, type BoardFirmware, type FirmwareFile } from '../../co
 import type { ParsedHex } from '../../core/firmware/intelhex'
 import type { StmFamily } from '../../core/firmware/dfu'
 import { Px4Flasher, sendRebootToBootloader } from '../../core/firmware/px4bl'
-import { useConnectionStore } from '../../store/connection'
+import { NOVAX_USB_VENDOR_ID, useConnectionStore } from '../../store/connection'
 
 export interface FlashLogEntry {
   ts: number
@@ -121,9 +132,13 @@ export interface FlashSessionEffects {
    * just-rebooted `Transport` (already closed by `rebootToBootloader`, kept
    * only for identity) so the real implementation can wait for *that exact*
    * port's physical disconnect before polling for the bootloader — see
-   * `reconnect.ts`'s module doc (issue #28's Reconnect-race fix).
+   * `reconnect.ts`'s module doc (issue #28's Reconnect-race fix). `null` when
+   * a `prepareDirect()` attempt (issue #29: board already in its bootloader,
+   * no app-mode transport ever existed) retries past a failed `connecting` —
+   * the real implementation already tolerates this (skips the wait-for-
+   * disconnect phase, goes straight to polling `getPorts()`).
    */
-  openBootloaderTransport: (oldTransport: Transport) => Promise<Transport>
+  openBootloaderTransport: (oldTransport: Transport | null) => Promise<Transport>
   /** Fresh `Px4Flasher` per transport generation — never reused across a reconnect (task 3.3/router.ts's architectural fact). */
   createFlasher: (transport: Transport) => Px4FlasherLike
   now: () => number
@@ -161,10 +176,21 @@ export interface FlashSessionState {
   error: string | null
   /** True only when a `failed` state was caused by the connection dropping mid-flash — the page uses this to show reconnect guidance instead of a generic error, and `retry()` knows to redo the `connecting` step rather than reuse a dead transport. */
   disconnected: boolean
+  /** True for an attempt started via `prepareDirect()` (issue #29: board already in its bootloader) — the page uses this to skip rendering the Reboot/Reconnect steps, which never run for this path, and to show accurate confirm-dialog copy (no reboot happens). */
+  directEntry: boolean
   log: FlashLogEntry[]
 
   /** Loads a target and moves to `confirming` — does not start flashing. */
   prepare: (target: FlashTarget) => void
+  /**
+   * Direct-bootloader entry (issue #29): `transport` must already be open —
+   * acquired via `requestDirectBootloaderTransport()` called directly from
+   * the triggering click handler, since `navigator.serial.requestPort()`
+   * needs a live user gesture that would no longer be valid by the time an
+   * effect deep inside `run()`'s download/verify awaits got around to
+   * calling it. Moves to `confirming`, same as `prepare()`.
+   */
+  prepareDirect: (target: FlashTarget, transport: Transport) => void
   /** Starts the flash from `confirming`; a no-op from any other step. */
   confirm: () => void
   /** Safe abort — only takes effect from a step in `CANCELLABLE_STEPS`; a no-op once erasing/programming has started. */
@@ -190,6 +216,8 @@ export function createFlashSession(effects: FlashSessionEffects) {
     let apjRef: ParsedApj | null = null
     /** Set the instant `rebootToBootloader()` succeeds and never cleared until `prepare()`/`reset()`/`cancel()` starts a new attempt — once the running app has been told to reboot into its bootloader, there is no app left to receive that MAVLink command again, so a retry after this point must never re-send it (see `classifyPx4Failure`'s `disconnected` handling, which only clears `bootloaderTransportRef`, not this). */
     let rebootSent = false
+    /** Set by `prepareDirect()` (issue #29) — true when this attempt entered via the direct-bootloader path rather than `prepare()`. Reset alongside `rebootSent` by `prepare()`/`cancel()`/`reset()`. */
+    let directEntry = false
     let bootloaderTransportRef: Transport | null = null
     /** The `Transport` handed to `rebootToBootloader()` (already closed by it) — kept only so `connecting`'s `openBootloaderTransport()` can identify "the exact port the app was just using" for the wait-for-disconnect step (issue #28). Set once per attempt alongside `rebootSent`; survives a `retry()` that resumes at `connecting` (where `rebootSent` is already `true` and this block is skipped). */
     let rebootedTransportRef: Transport | null = null
@@ -210,6 +238,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
       const isCurrent = (): boolean => gen === runGeneration
       let sawProgress = false
       try {
+        if (directEntry) log('Board already in bootloader — skipping reboot and reconnect.')
         if (!apjRef) {
           const target = get().target
           if (!target) throw new FlashStepError('confirming', 'No firmware selected.')
@@ -269,10 +298,14 @@ export function createFlashSession(effects: FlashSessionEffects) {
           log('Waiting for the bootloader to reconnect…')
           let transport: Transport
           try {
-            // Non-null: reaching this point means the `!rebootSent` block above
-            // has run (this attempt or an earlier one before a retry) and set
-            // this — `rebootSent` only ever becomes `true` there, alongside it.
-            transport = await effects.openBootloaderTransport(rebootedTransportRef!)
+            // `rebootedTransportRef` is non-null here for a normal attempt
+            // (set alongside `rebootSent` by the `!rebootSent` block above,
+            // this attempt or an earlier one before a retry) but legitimately
+            // null for a `prepareDirect()` attempt (issue #29) that reaches
+            // this block on a retry after `bootloaderTransportRef` was
+            // cleared by a prior failure — there was never an app-mode
+            // transport to identify. `openBootloaderTransport` handles both.
+            transport = await effects.openBootloaderTransport(rebootedTransportRef)
           } catch (err) {
             throw new FlashStepError('connecting', err instanceof Error ? err.message : String(err))
           }
@@ -361,11 +394,13 @@ export function createFlashSession(effects: FlashSessionEffects) {
       failedStep: null,
       error: null,
       disconnected: false,
+      directEntry: false,
       log: [],
 
       prepare(target) {
         apjRef = target.source.kind === 'local' ? target.source.apj : null
         rebootSent = false
+        directEntry = false
         rebootedTransportRef = null
         closeBootloaderTransport() // abandoning any still-open transport from a previous (failed) attempt on a different target, not just dropping the reference
         runGeneration++ // invalidates any stale in-flight run from a previous target
@@ -377,6 +412,28 @@ export function createFlashSession(effects: FlashSessionEffects) {
           failedStep: null,
           error: null,
           disconnected: false,
+          directEntry: false,
+          log: [],
+        })
+      },
+
+      prepareDirect(target, transport) {
+        apjRef = target.source.kind === 'local' ? target.source.apj : null
+        rebootSent = true // already in the bootloader — no app-mode reboot to send
+        directEntry = true
+        rebootedTransportRef = null // no app-mode transport preceded this attempt
+        closeBootloaderTransport() // abandoning any still-open transport from a previous (failed) attempt
+        bootloaderTransportRef = transport // already open — acquired via requestPort() at the triggering click, see requestDirectBootloaderTransport()
+        runGeneration++
+        set({
+          step: 'confirming',
+          target,
+          progress: null,
+          identify: null,
+          failedStep: null,
+          error: null,
+          disconnected: false,
+          directEntry: true,
           log: [],
         })
       },
@@ -391,9 +448,10 @@ export function createFlashSession(effects: FlashSessionEffects) {
         runGeneration++ // the in-flight run notices at its next checkpoint and returns without touching state
         apjRef = null
         rebootSent = false
+        directEntry = false
         rebootedTransportRef = null
         closeBootloaderTransport()
-        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false })
+        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, directEntry: false })
       },
 
       retry() {
@@ -406,9 +464,10 @@ export function createFlashSession(effects: FlashSessionEffects) {
         runGeneration++
         apjRef = null
         rebootSent = false
+        directEntry = false
         rebootedTransportRef = null
         closeBootloaderTransport()
-        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, log: [] })
+        set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, directEntry: false, log: [] })
       },
     }
   })
@@ -553,9 +612,12 @@ export function createDfuFlashSession(effects: DfuSessionEffects) {
  * full root-cause writeup and its own dedicated unit tests). `oldTransport`
  * is the just-closed app-mode `Transport`; its underlying `SerialPort` (when
  * it's a real `SerialTransport`, always true in production) is what phase 1
- * waits on.
+ * waits on. `null` when called on a `prepareDirect()` retry (issue #29 — no
+ * app-mode transport ever existed for this attempt): phase 1 is skipped and
+ * polling starts immediately, same as the "unknown" case this already
+ * handled before issue #29 existed.
  */
-async function openBootloaderTransport(oldTransport: Transport): Promise<Transport> {
+async function openBootloaderTransport(oldTransport: Transport | null): Promise<Transport> {
   const oldPort = oldTransport instanceof SerialTransport ? oldTransport.rawPort : null
   return waitForBootloaderReconnect({
     serial: navigator.serial,
@@ -566,6 +628,31 @@ async function openBootloaderTransport(oldTransport: Transport): Promise<Transpo
       return transport
     },
   })
+}
+
+/**
+ * Direct-bootloader entry (issue #29): opens a fresh `Transport` for a board
+ * that is ALREADY sitting in its bootloader, via
+ * `navigator.serial.requestPort()` — unlike `openBootloaderTransport()`
+ * above (which only uses the already-authorized `getPorts()`, since it runs
+ * with no user gesture of its own), this calls `requestPort()` directly and
+ * therefore MUST be invoked directly from the triggering click handler
+ * (`FirmwarePage`'s direct-flash button), before any download/verify network
+ * work — a browser's transient user-activation for `requestPort()` is not
+ * guaranteed to still be valid by the time an effect deep inside `run()`'s
+ * own awaits would otherwise get around to calling it. The resulting
+ * already-open `Transport` is handed to `session.prepareDirect()`, not
+ * routed through `FlashSessionEffects` — there is nothing for `run()` itself
+ * to await here. Filtered to novaX's USB vendor ID, same as the normal
+ * Connect flow's `defaultPickPort` (`store/connection.ts`): the bootloader
+ * enumerates under the same VID:PID as the app (confirmed on hardware,
+ * issue #28's kernel-log evidence).
+ */
+export async function requestDirectBootloaderTransport(baud: number): Promise<Transport> {
+  const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: NOVAX_USB_VENDOR_ID }] })
+  const transport = new SerialTransport(port, baud)
+  await transport.open()
+  return transport
 }
 
 /**

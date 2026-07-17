@@ -311,8 +311,13 @@
     "updateButton": "将 {{board}} 更新到 {{version}}",
     "selectToUpdate": "请选择要更新的固件",
 
+    "directFlashButton": "飞控已经在 bootloader 中？直接刷写",
+    "directFlashHint": "适用于没有应用可重启的飞控 — 会直接打开端口选择器，而不是先连接。",
+    "directFlashFailed": "无法打开 bootloader 端口:{{message}}",
+
     "confirmTitle": "将 {{board}} 更新到 {{version}}？",
     "confirmBody": "飞控将重启进入 bootloader、刷写新固件、再重启回应用 — 参数会被保留。刷写期间请勿拔出 USB 线。",
+    "directFlashConfirmBody": "飞控已经在 bootloader 中 — 将直接刷写，完成后重启回应用。参数会被保留。刷写期间请勿拔出 USB 线。",
     "confirmCancel": "取消",
     "confirmProceed": "更新",
 
