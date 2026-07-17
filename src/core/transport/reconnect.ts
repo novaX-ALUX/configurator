@@ -33,14 +33,19 @@ import type { Transport } from './types'
  *    safety net in case the event never arrives; never rejects — polling is
  *    always attempted afterward regardless, and gets its own timeout.
  * 2. `pollForPort` — only then start polling `getPorts()`/opening
- *    candidates. The Web Serial spec does not mandate how (or whether)
- *    `getPorts()` re-grants a port across a VID:PID-only device swap (no
- *    guaranteed serial-number match) — it's implementation-defined — so
- *    this may legitimately find nothing if the bootloader enumerates as a
- *    device Chrome treats as new; that case gets its own distinct,
- *    honest error asking the user to grant access again, rather than the
- *    generic "reconnect the cable" message (which was actively wrong for
- *    it) or hanging forever.
+ *    candidates. USB IDENTITY CAVEAT: the Web Serial spec's `SerialPortInfo`
+ *    only guarantees `usbVendorId`/`usbProductId` (both identical between
+ *    app mode and bootloader here — issue #28's kernel log shows the same
+ *    1209:5741), not `serialNumber`; it does not mandate how (or whether)
+ *    `getPorts()` re-grants a port across that reboot when the bootloader's
+ *    USB serial number differs from the app's (Chrome's actual persisted-
+ *    permission matching, including whether it keys on serial number at
+ *    all, is implementation-defined, not spec-guaranteed). So this may
+ *    legitimately find nothing if the bootloader enumerates as a device
+ *    Chrome treats as new; that case gets its own distinct, honest error
+ *    asking the user to grant access again, rather than the generic
+ *    "reconnect the cable" message (which was actively wrong for it) or
+ *    hanging forever.
  */
 
 /** Subset of `navigator.serial` this module depends on — narrow so tests can inject a fake without implementing the whole `Serial` interface. */
@@ -71,7 +76,7 @@ export interface WaitForBootloaderReconnectOpts {
   sleep?: (ms: number) => Promise<void>
   /** Phase 1 deadline. Default comfortably above the ~2s re-enumeration gap observed on AF-H7E (issue #28). */
   disconnectTimeoutMs?: number
-  /** Phase 2 deadline. Default per issue #28's guidance ("give >= 10s"). */
+  /** Phase 2 deadline. Default chosen to clear the ~2s gap observed on AF-H7E (issue #28) with a wide safety margin — no spec/hardware guarantee bounds re-enumeration time in general. */
   pollTimeoutMs?: number
   pollIntervalMs?: number
 }

@@ -267,13 +267,12 @@ export function createFlashSession(effects: FlashSessionEffects) {
         if (!bootloaderTransportRef) {
           set({ step: 'connecting' })
           log('Waiting for the bootloader to reconnect…')
-          // Invariant: reaching this point means the `!rebootSent` block above
-          // has run (this attempt or an earlier one before a retry) and set
-          // this — `rebootSent` only ever becomes `true` there, alongside it.
-          if (!rebootedTransportRef) throw new FlashStepError('connecting', 'Internal error: reached connecting without a rebooted transport on record.')
           let transport: Transport
           try {
-            transport = await effects.openBootloaderTransport(rebootedTransportRef)
+            // Non-null: reaching this point means the `!rebootSent` block above
+            // has run (this attempt or an earlier one before a retry) and set
+            // this — `rebootSent` only ever becomes `true` there, alongside it.
+            transport = await effects.openBootloaderTransport(rebootedTransportRef!)
           } catch (err) {
             throw new FlashStepError('connecting', err instanceof Error ? err.message : String(err))
           }

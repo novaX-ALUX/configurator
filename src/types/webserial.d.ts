@@ -39,7 +39,7 @@ interface SerialPortRequestOptions {
 }
 
 interface SerialPortEventMap {
-  connect: Event
+  /** Not `connect` — `reconnect.ts` only needs `disconnect` (it polls `getPorts()` for the bootloader's reappearance rather than listening for a per-port `connect`); add it here if a future caller actually needs it. */
   disconnect: Event
 }
 
