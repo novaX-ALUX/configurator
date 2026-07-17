@@ -5,6 +5,8 @@ This document compares novaX Configurator against [axPlanner](https://github.com
 > **Method premise**: This comparison is based on **source-code analysis of both sides** (axPlanner commit as of 2026-07-08, ~80k lines of Dart), not on axPlanner's docs or screen list. Every axPlanner feature was classified as *real implementation*, *partial*, or *placeholder UI* by reading the actual code. Our side was cross-checked against `feature-status.md` and matches it almost 1:1.
 >
 > **Key finding**: axPlanner nominally has ~30 screens, but roughly a third are placeholder UIs with no backend wiring (mock data, no-op buttons). Only the "real" tier below counts as a gap for us.
+>
+> **Revised 2026-07-16**: Live charts done on our side (v0.3.0–v0.5.0, hardware-verified); §V re-ordered and boundary labels applied per ADR-0002 (bench/flight boundary). **axPlanner disposition settled by that ADR: archived, zero further investment, no users** — this document and the archived repo are its remaining value.
 
 ---
 
@@ -14,8 +16,8 @@ Ordered by roadmap value for us:
 
 | # | Feature | axPlanner implementation (source evidence) | Notes for us |
 |---|---------|--------------------------------------------|--------------|
-| 1 | **Live telemetry charts** | Real: fl_chart, 100 ms sampling, 60 s rolling window, selectable variables, persisted selection (`telemetry_chart.dart`) | Our telemetry stream layer is ready; charts are the missing last mile. Already priority #1 vs Mico. |
-| 2 | **Flight action commands** | Real: arm/disarm (400), mode change, servo (183) / relay (181), set home (179), reboot (246), baro/gyro preflight cal (241) (`actions_screen.dart`, `quick_actions.dart`) | We are a pure configurator today — we cannot send a single flight command. Safety design needs its own review before we build this. |
+| 1 | **Live telemetry charts** | Real: fl_chart, 100 ms sampling, 60 s rolling window, selectable variables, persisted selection (`telemetry_chart.dart`) | **Done on our side** (v0.3.0–v0.5.0, hardware-verified) — and without their resampling model (see ADR-0001). No longer a gap. |
+| 2 | **Flight action commands** | Real: arm/disarm (400), mode change, servo (183) / relay (181), set home (179), reboot (246), baro/gyro preflight cal (241) (`actions_screen.dart`, `quick_actions.dart`) | **Flight-side — blocked by ADR-0002**: the flight-command class does not exist in our core layer until the GCS milestone's safety ADR creates it. Their `FS_THR_ENABLE` enum bug (§III) is the cautionary tale. |
 | 3 | **PID tuning** | Real (Copter only): `ATC_ANG_*` / `ATC_RAT_*` / `PSC_*` / `WPNAV_*` sliders live-bound to the parameter store (`software_config_screen.dart`). Plane/Heli/Rover tuning screens exist but are unreachable dead code. | Our biggest Settings gap vs both competitors. |
 | 4 | **Parameter metadata + `.param` files** | Real: ArduPilot XML metadata (display name / description / range / enum labels / units), `.param` save/load, two-file diff with reboot-required heuristic (`parameter_metadata.dart`, `param_comparison.dart`). "Compare to defaults" is a placeholder. | Our param table shows raw names and values only. Small investment, large value. |
 | 5 | **DataFlash log download** | Real: `LOG_REQUEST_LIST` / `LOG_REQUEST_DATA` 90-byte chunked download with progress + `LOG_ERASE` (`logs_screen.dart:182-319`). **No `.BIN` parser anywhere** — raw bytes only. Their "Log Analysis" tab charts synthetic sine waves. | `LOG_REQUEST_*` is far simpler than MAVLink FTP. They shipped download without FTP — corrects our `feature-status.md` assumption that logs depend on FTP (M1 phase 2). |
@@ -64,13 +66,14 @@ Do **not** count these as gaps. They are competitive intelligence: the direction
 3. **Log download and log parsing can ship as two separate milestones** — but don't leave downloaded `.BIN` bytes unparsed indefinitely like they did.
 4. **Config panels must pre-read current FC values before editing** — their embedded panels showing hardcoded defaults is the anti-pattern; our stage → review → write flow already avoids it.
 
-## V. Revised Priority (supersedes §III of feature-status.md where they differ)
+## V. Roadmap Order (revised 2026-07-16; feature-status.md §III now mirrors this)
 
-1. **Live charts** (unchanged #1)
-2. **Parameter metadata + `.param` import/export** *(new — smallest investment, both competitors have it, directly upgrades the params page)*
-3. **MAVLink Inspector** *(new — decode stack ready, debugging staple)*
-4. **PID tuning + flight modes + RC calibration** (was #3)
-5. **Log download via `LOG_REQUEST_*`** — do **not** wait for FTP; corrects the earlier assumption
-6. **Flight action command panel** (arm/mode/servo) — safety design reviewed separately
-7. **ESC 4-Way** — strategic, propose as its own project
-8. **Mission planning** — largest scope, schedule on demand
+1. **Parameter metadata + `.param` import/export** — smallest investment, both competitors have it, directly upgrades the params page (also the most visible UI gap in the side-by-side audit)
+2. **MAVLink Inspector** — decode stack ready, debugging staple; covers the safe part of the Console gap
+3. **PID tuning + flight modes + RC calibration** — "can configure" → "can tune"
+4. **Log download via `LOG_REQUEST_*`** — do **not** wait for FTP; download and `.BIN` parsing may split into two milestones, but no unparsed-bytes limbo (§IV lesson 3)
+
+Off the ordered list:
+- ~~Live charts~~ — **done** (was #1).
+- **ESC 4-Way** — bench-side, in scope, **its own project** outside this order (ADR-0002 rule 4); §IV lessons 1–2 are prerequisites.
+- **Flight action command panel** / **Mission planning** — flight-side, **GCS milestone** (ADR-0002); not schedulable from this list.
