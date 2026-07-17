@@ -246,6 +246,55 @@ describe('createFlashSession (normal update, Px4Flasher)', () => {
     expect(calls.openBootloader).toBe(0)
   })
 
+  it('passes the exact pre-reboot transport through to openBootloaderTransport (issue #28: the reconnect needs to know which port to wait on)', async () => {
+    const liveTransport = new MockTransport()
+    let receivedTransport: unknown
+    const { effects } = baseEffects({
+      takeoverTransport: () => liveTransport,
+      openBootloaderTransport: async (oldTransport) => {
+        receivedTransport = oldTransport
+        return new MockTransport()
+      },
+    })
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+
+    await waitFor(store, (s) => s.step === 'done' || s.step === 'failed')
+
+    expect(store.getState().step).toBe('done')
+    expect(receivedTransport).toBe(liveTransport) // not some fresh/unrelated transport — the reconnect step must see the actual just-rebooted one
+  })
+
+  it('still passes the pre-reboot transport through on retry() (rebootSent already true, the reboot block is skipped)', async () => {
+    const liveTransport = new MockTransport()
+    let openBootloaderCalls = 0
+    let lastReceivedTransport: unknown
+    const { effects } = baseEffects({
+      takeoverTransport: () => liveTransport,
+      openBootloaderTransport: async (oldTransport) => {
+        openBootloaderCalls++
+        lastReceivedTransport = oldTransport
+        if (openBootloaderCalls === 1) throw new Error('timed out waiting for the bootloader')
+        return new MockTransport()
+      },
+    })
+    const store = createFlashSession(effects)
+
+    store.getState().prepare(localTarget())
+    store.getState().confirm()
+    await waitFor(store, (s) => s.step === 'failed')
+    expect(store.getState().failedStep).toBe('connecting')
+
+    store.getState().retry()
+    await waitFor(store, (s) => s.step === 'done' || s.step === 'failed')
+
+    expect(store.getState().step).toBe('done')
+    expect(openBootloaderCalls).toBe(2)
+    expect(lastReceivedTransport).toBe(liveTransport) // the retry still identifies the same original pre-reboot port, not undefined/null
+  })
+
   it('fails at "connecting" when the bootloader never re-enumerates', async () => {
     const { effects } = baseEffects({ openBootloaderTransport: async () => { throw new Error('timed out waiting for the bootloader') } })
     const store = createFlashSession(effects)

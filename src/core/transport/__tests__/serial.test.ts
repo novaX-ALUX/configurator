@@ -22,6 +22,8 @@ import { describeTransportContract } from './contract'
 class FakeSerialPort extends EventTarget implements SerialPort {
   readable: ReadableStream<Uint8Array> | null = null
   writable: WritableStream<Uint8Array> | null = null
+  /** Not exercised by this file's tests (they cover `SerialTransport`'s stream/generation logic, not physical-disconnect detection — that's `reconnect.test.ts`'s job) — present only to satisfy the `SerialPort` interface. */
+  connected = true
   readonly sentFrames: Uint8Array[] = []
   readonly openCalls: SerialOptions[] = []
   closeCalls = 0

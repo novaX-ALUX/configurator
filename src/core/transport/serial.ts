@@ -18,6 +18,19 @@ export class SerialTransport extends BaseTransport {
     this.baud = baud
   }
 
+  /**
+   * The underlying Web Serial `SerialPort` this transport wraps. Exposed
+   * (read-only) so browser-specific reconnect logic that lives outside the
+   * transport-agnostic `Transport` interface (`core/transport/reconnect.ts`,
+   * used by the firmware-update flow around a bootloader reboot — issue #28)
+   * can identify "the exact port the app was just talking to" across a
+   * physical disconnect/reconnect, without leaking `SerialPort` into
+   * `Transport` itself.
+   */
+  get rawPort(): SerialPort {
+    return this.port
+  }
+
   protected async doOpen(generation: number): Promise<void> {
     await this.port.open({ baudRate: this.baud })
     if (!this.isCurrentGeneration(generation)) {

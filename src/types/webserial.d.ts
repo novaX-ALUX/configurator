@@ -38,13 +38,36 @@ interface SerialPortRequestOptions {
   filters?: SerialPortFilter[]
 }
 
+interface SerialPortEventMap {
+  connect: Event
+  disconnect: Event
+}
+
 interface SerialPort extends EventTarget {
   readonly readable: ReadableStream<Uint8Array> | null
   readonly writable: WritableStream<Uint8Array> | null
+  /**
+   * Per spec, for a wired (USB) port this tracks actual physical presence:
+   * true while physically connected, flips false the instant it's
+   * unplugged (or the device resets off the bus) and true again once a
+   * device re-enumerates on that same port object. Added for issue #28's
+   * bootloader-reconnect fix (`core/transport/reconnect.ts`), which needs
+   * to distinguish "still there" from "physically gone" rather than
+   * inferring it from a stale `open()` call succeeding.
+   */
+  readonly connected: boolean
   open(options: SerialOptions): Promise<void>
   close(): Promise<void>
   forget(): Promise<void>
   getInfo(): SerialPortInfo
+  addEventListener<K extends keyof SerialPortEventMap>(
+    type: K,
+    listener: (this: SerialPort, ev: SerialPortEventMap[K]) => void,
+  ): void
+  removeEventListener<K extends keyof SerialPortEventMap>(
+    type: K,
+    listener: (this: SerialPort, ev: SerialPortEventMap[K]) => void,
+  ): void
 }
 
 interface SerialEventMap {

@@ -51,6 +51,7 @@
 import { create } from 'zustand'
 import type { Transport } from '../../core/transport/types'
 import { SerialTransport } from '../../core/transport/serial'
+import { waitForBootloaderReconnect } from '../../core/transport/reconnect'
 import { parseApj, verifyImageSha256, type ParsedApj } from '../../core/firmware/apj'
 import { firmwareFileUrl, type BoardFirmware, type FirmwareFile } from '../../core/firmware/manifest'
 import type { ParsedHex } from '../../core/firmware/intelhex'
@@ -113,8 +114,16 @@ export interface FlashSessionEffects {
   takeoverTransport: () => Transport | null
   /** `sendRebootToBootloader` (px4bl.ts) — sends the MAVLink command and closes `transport`. */
   rebootToBootloader: (transport: Transport) => Promise<void>
-  /** Opens a fresh `Transport` once the board has re-enumerated in bootloader mode (`navigator.serial`-backed in production; a scripted fake in tests). */
-  openBootloaderTransport: () => Promise<Transport>
+  /**
+   * Opens a fresh `Transport` once the board has re-enumerated in bootloader
+   * mode (`navigator.serial`-backed in production via
+   * `core/transport/reconnect.ts`; a scripted fake in tests). Receives the
+   * just-rebooted `Transport` (already closed by `rebootToBootloader`, kept
+   * only for identity) so the real implementation can wait for *that exact*
+   * port's physical disconnect before polling for the bootloader — see
+   * `reconnect.ts`'s module doc (issue #28's Reconnect-race fix).
+   */
+  openBootloaderTransport: (oldTransport: Transport) => Promise<Transport>
   /** Fresh `Px4Flasher` per transport generation — never reused across a reconnect (task 3.3/router.ts's architectural fact). */
   createFlasher: (transport: Transport) => Px4FlasherLike
   now: () => number
@@ -182,6 +191,8 @@ export function createFlashSession(effects: FlashSessionEffects) {
     /** Set the instant `rebootToBootloader()` succeeds and never cleared until `prepare()`/`reset()`/`cancel()` starts a new attempt — once the running app has been told to reboot into its bootloader, there is no app left to receive that MAVLink command again, so a retry after this point must never re-send it (see `classifyPx4Failure`'s `disconnected` handling, which only clears `bootloaderTransportRef`, not this). */
     let rebootSent = false
     let bootloaderTransportRef: Transport | null = null
+    /** The `Transport` handed to `rebootToBootloader()` (already closed by it) — kept only so `connecting`'s `openBootloaderTransport()` can identify "the exact port the app was just using" for the wait-for-disconnect step (issue #28). Set once per attempt alongside `rebootSent`; survives a `retry()` that resumes at `connecting` (where `rebootSent` is already `true` and this block is skipped). */
+    let rebootedTransportRef: Transport | null = null
 
     function log(text: string): void {
       set((s) => ({ log: [...s.log, { ts: effects.now(), text }] }))
@@ -242,6 +253,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
           log('Rebooting the board into its bootloader…')
           const liveTransport = effects.takeoverTransport()
           if (!liveTransport) throw new FlashStepError('rebooting', 'Not connected — connect to the board before updating its firmware.')
+          rebootedTransportRef = liveTransport
           try {
             await effects.rebootToBootloader(liveTransport)
           } catch (err) {
@@ -255,9 +267,13 @@ export function createFlashSession(effects: FlashSessionEffects) {
         if (!bootloaderTransportRef) {
           set({ step: 'connecting' })
           log('Waiting for the bootloader to reconnect…')
+          // Invariant: reaching this point means the `!rebootSent` block above
+          // has run (this attempt or an earlier one before a retry) and set
+          // this — `rebootSent` only ever becomes `true` there, alongside it.
+          if (!rebootedTransportRef) throw new FlashStepError('connecting', 'Internal error: reached connecting without a rebooted transport on record.')
           let transport: Transport
           try {
-            transport = await effects.openBootloaderTransport()
+            transport = await effects.openBootloaderTransport(rebootedTransportRef)
           } catch (err) {
             throw new FlashStepError('connecting', err instanceof Error ? err.message : String(err))
           }
@@ -351,6 +367,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
       prepare(target) {
         apjRef = target.source.kind === 'local' ? target.source.apj : null
         rebootSent = false
+        rebootedTransportRef = null
         closeBootloaderTransport() // abandoning any still-open transport from a previous (failed) attempt on a different target, not just dropping the reference
         runGeneration++ // invalidates any stale in-flight run from a previous target
         set({
@@ -375,6 +392,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
         runGeneration++ // the in-flight run notices at its next checkpoint and returns without touching state
         apjRef = null
         rebootSent = false
+        rebootedTransportRef = null
         closeBootloaderTransport()
         set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false })
       },
@@ -389,6 +407,7 @@ export function createFlashSession(effects: FlashSessionEffects) {
         runGeneration++
         apjRef = null
         rebootSent = false
+        rebootedTransportRef = null
         closeBootloaderTransport()
         set({ step: 'idle', target: null, progress: null, identify: null, failedStep: null, error: null, disconnected: false, log: [] })
       },
@@ -524,43 +543,30 @@ export function createDfuFlashSession(effects: DfuSessionEffects) {
 // once a device is selected rather than using a fixed singleton.
 // ---------------------------------------------------------------------------
 
-const RECONNECT_TIMEOUT_MS = 8000
-const RECONNECT_POLL_MS = 300
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 /**
- * Polls already-authorized serial ports (`navigator.serial.getPorts()` —
- * never `requestPort()`, which needs a user gesture this reconnect doesn't
- * have) for one that opens successfully at the flashing baud, up to
- * `RECONNECT_TIMEOUT_MS`. The bootloader may re-enumerate as the very same
- * `SerialPort` object the app was just using, or a different one Chrome
- * already granted this origin access to earlier — either way this never
- * prompts. If nothing opens in time, throws with user-facing guidance; the
- * page surfaces this as the `connecting` failure (see `FlashSessionState`).
- * Real-hardware re-enumeration timing is unverified in this environment (no
- * board attached) — flagged for Phase 4's real-machine verification pass.
+ * Waits for the bootloader to re-enumerate and opens a fresh `Transport` for
+ * it, never `requestPort()` (which needs a user gesture this reconnect
+ * doesn't have) — only already-authorized ports (`navigator.serial.getPorts()`).
+ * Delegates the actual wait-for-disconnect-then-poll state machine to
+ * `core/transport/reconnect.ts` (issue #28's Reconnect-race fix: the
+ * previous version here polled immediately, without confirming the old
+ * device had actually disconnected first — see that module's doc for the
+ * full root-cause writeup and its own dedicated unit tests). `oldTransport`
+ * is the just-closed app-mode `Transport`; its underlying `SerialPort` (when
+ * it's a real `SerialTransport`, always true in production) is what phase 1
+ * waits on.
  */
-async function openBootloaderTransport(): Promise<Transport> {
-  const deadline = Date.now() + RECONNECT_TIMEOUT_MS
-  for (;;) {
-    const ports = await navigator.serial.getPorts()
-    for (const port of ports) {
+async function openBootloaderTransport(oldTransport: Transport): Promise<Transport> {
+  const oldPort = oldTransport instanceof SerialTransport ? oldTransport.rawPort : null
+  return waitForBootloaderReconnect({
+    serial: navigator.serial,
+    oldPort,
+    openCandidate: async (port) => {
       const transport = new SerialTransport(port, useConnectionStore.getState().baud)
-      try {
-        await transport.open()
-        return transport
-      } catch {
-        // Not the bootloader, or not ready yet — try the next port, or wait and re-poll.
-      }
-    }
-    if (Date.now() > deadline) {
-      throw new Error('The board did not reappear after rebooting into its bootloader. Reconnect the USB cable and try again.')
-    }
-    await sleep(RECONNECT_POLL_MS)
-  }
+      await transport.open()
+      return transport
+    },
+  })
 }
 
 /**
