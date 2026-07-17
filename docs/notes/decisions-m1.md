@@ -120,10 +120,11 @@ states that "the go/no-go call belongs to Task 0.4 and the human, not to the spi
   implementation of `defs.ts` is swapped out, which is exactly the purpose of Decision 2's isolation design.
 
 **Status**: **LOCKED(a)** — human signed off 2026-07-17 on accepting the LGPL. Obligation from option (a): the public
-site must carry a licenses page listing `mavlink-mappings`, its license terms, and how to obtain its source (tracked
-as a GitHub issue at sign-off time). The spike's mitigating factors stand: metadata-only usage, package source
-unmodified. Sign-off was retroactive — GitHub Pages had already been public for several releases when the decision
-was closed.
+site must carry a licenses page listing `mavlink-mappings`, its license terms, and how to obtain its source.
+**Obligation satisfied** the same day: issue #39, shipped in v0.21.0 (licenses page with the pinned version, LGPL-3.0
+terms link, npm/source links, and drift-guard tests against `package.json`). The spike's mitigating factors stand:
+metadata-only usage, package source unmodified. Sign-off was retroactive — GitHub Pages had already been public for
+several releases when the decision was closed.
 
 **How to overturn**: "Overturning" does not apply here — this is an open item that must be explicitly closed by a
 human, not a technical decision that can be automatically superseded by a later spike. See (a)/(b) above for how
