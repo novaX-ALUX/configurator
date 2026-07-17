@@ -1,15 +1,15 @@
 {
   "nav": {
-    "ariaLabel": "Primary navigation",
-    "firmware": "Firmware",
-    "parameters": "Parameters",
-    "debug": "Debug / Status",
-    "dashboard": "Dashboard",
-    "charts": "Charts",
-    "setup": "Setup",
-    "calibration": "Calibration",
-    "motors": "Motors",
-    "console": "Console"
+    "ariaLabel": "主导航",
+    "firmware": "固件",
+    "parameters": "参数",
+    "debug": "调试/状态",
+    "dashboard": "仪表盘",
+    "charts": "图表",
+    "setup": "设置",
+    "calibration": "校准",
+    "motors": "电机",
+    "console": "控制台"
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",

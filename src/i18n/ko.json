@@ -1,15 +1,15 @@
 {
   "nav": {
-    "ariaLabel": "Primary navigation",
-    "firmware": "Firmware",
-    "parameters": "Parameters",
-    "debug": "Debug / Status",
-    "dashboard": "Dashboard",
-    "charts": "Charts",
-    "setup": "Setup",
-    "calibration": "Calibration",
-    "motors": "Motors",
-    "console": "Console"
+    "ariaLabel": "기본 내비게이션",
+    "firmware": "펌웨어",
+    "parameters": "파라미터",
+    "debug": "디버그/상태",
+    "dashboard": "대시보드",
+    "charts": "차트",
+    "setup": "설정",
+    "calibration": "캘리브레이션",
+    "motors": "모터",
+    "console": "콘솔"
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",

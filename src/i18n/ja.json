@@ -1,15 +1,15 @@
 {
   "nav": {
-    "ariaLabel": "Primary navigation",
-    "firmware": "Firmware",
-    "parameters": "Parameters",
-    "debug": "Debug / Status",
-    "dashboard": "Dashboard",
-    "charts": "Charts",
-    "setup": "Setup",
-    "calibration": "Calibration",
-    "motors": "Motors",
-    "console": "Console"
+    "ariaLabel": "メインナビゲーション",
+    "firmware": "ファームウェア",
+    "parameters": "パラメータ",
+    "debug": "デバッグ/状態",
+    "dashboard": "ダッシュボード",
+    "charts": "チャート",
+    "setup": "設定",
+    "calibration": "キャリブレーション",
+    "motors": "モーター",
+    "console": "コンソール"
   },
   "topbar": {
     "brandLabel": "CONFIGURATOR",
