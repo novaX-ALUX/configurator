@@ -294,11 +294,28 @@
     "subtitleBody": "확장 튜닝: 슬라이더를 놓으면 해당 파라미터가 대기열에 추가되고, 아래 바에 모입니다.",
     "noRange": "번들 메타데이터에 문서화된 범위가 없습니다 — 파라미터 페이지에서 편집하세요.",
     "discardedOnDisconnect": "저장하지 않은 튜닝 변경 {{count}}건이 취소되었습니다 — 세션 간에 유지되지 않습니다.",
+    "showAdvanced": "고급 파라미터 표시",
     "rate": {
       "title": "RATE"
     },
     "stabilize": {
-      "title": "STABILIZE"
+      "title": "STABILIZE",
+      "limits": "가속도·각속도 한계"
+    },
+    "althold": {
+      "title": "ALT HOLD",
+      "velz": "스로틀 레이트",
+      "accz": "스로틀 가속도",
+      "pilot": "파일럿 상승/하강"
+    },
+    "loiter": {
+      "title": "LOITER",
+      "posxy": "수평 위치",
+      "velxy": "수평 속도",
+      "shaping": "위치 제어"
+    },
+    "wpnav": {
+      "title": "WPNAV"
     },
     "filters": {
       "title": "FILTERS"
@@ -307,6 +324,10 @@
       "roll": "롤",
       "pitch": "피치",
       "yaw": "요"
+    },
+    "tune": {
+      "title": "송신기 튜닝 노브 TUNE",
+      "subtitle": "송신기의 6번 채널 튜닝 노브에 파라미터를 할당하고, 노브가 훑는 값의 범위를 설정합니다. 여기서는 벤치 설정만 합니다 — 노브 자체는 비행 중 송신기에서 작동합니다."
     },
     "calc": {
       "title": "초기 튜닝 계산기",

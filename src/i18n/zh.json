@@ -294,11 +294,28 @@
     "subtitleBody": "扩展调参:松开滑杆时该参数进入暂存队列,汇总在下方操作栏中。",
     "noRange": "内置元数据中没有该参数的建议范围 — 请在参数页中编辑。",
     "discardedOnDisconnect": "已丢弃 {{count}} 项未保存的调参修改 — 修改不会跨会话保留。",
+    "showAdvanced": "显示高级参数",
     "rate": {
       "title": "角速度环 RATE"
     },
     "stabilize": {
-      "title": "自稳环 STABILIZE"
+      "title": "自稳环 STABILIZE",
+      "limits": "加速度与角速度上限"
+    },
+    "althold": {
+      "title": "定高 ALT HOLD",
+      "velz": "油门速率",
+      "accz": "油门加速度",
+      "pilot": "手动升降"
+    },
+    "loiter": {
+      "title": "悬停 LOITER",
+      "posxy": "水平位置",
+      "velxy": "水平速度",
+      "shaping": "位置控制"
+    },
+    "wpnav": {
+      "title": "航点导航 WPNAV"
     },
     "filters": {
       "title": "滤波器 FILTERS"
@@ -307,6 +324,10 @@
       "roll": "横滚",
       "pitch": "俯仰",
       "yaw": "偏航"
+    },
+    "tune": {
+      "title": "遥控器调参旋钮 TUNE",
+      "subtitle": "把一个参数分配给遥控器 6 通道的调参旋钮,并设置旋钮扫过的取值区间。这里只做台架配置 — 旋钮本身在飞行中通过遥控器起作用。"
     },
     "calc": {
       "title": "初始调参计算器",

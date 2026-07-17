@@ -294,11 +294,28 @@
     "subtitleBody": "拡張チューニング:スライダーを離すとそのパラメータが下のバーのキューに追加されます。",
     "noRange": "同梱メタデータに範囲の記載がありません — パラメータページで編集してください。",
     "discardedOnDisconnect": "未保存のチューニング変更 {{count}} 件を破棄しました — セッションをまたいで保持されません。",
+    "showAdvanced": "詳細パラメータを表示",
     "rate": {
       "title": "RATE"
     },
     "stabilize": {
-      "title": "STABILIZE"
+      "title": "STABILIZE",
+      "limits": "加速度・角速度リミット"
+    },
+    "althold": {
+      "title": "ALT HOLD",
+      "velz": "スロットルレート",
+      "accz": "スロットル加速度",
+      "pilot": "パイロット上下"
+    },
+    "loiter": {
+      "title": "LOITER",
+      "posxy": "水平位置",
+      "velxy": "水平速度",
+      "shaping": "位置制御"
+    },
+    "wpnav": {
+      "title": "WPNAV"
     },
     "filters": {
       "title": "FILTERS"
@@ -307,6 +324,10 @@
       "roll": "ロール",
       "pitch": "ピッチ",
       "yaw": "ヨー"
+    },
+    "tune": {
+      "title": "送信機チューニングノブ TUNE",
+      "subtitle": "送信機のチャンネル 6 ノブにパラメータを割り当て、ノブが動かす値の範囲を設定します。ここではベンチ設定のみ — ノブ自体は飛行中に送信機側で作用します。"
     },
     "calc": {
       "title": "初期チューニング計算機",

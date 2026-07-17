@@ -8,16 +8,21 @@ import { StagedReviewBar } from '../staged/StagedReviewBar'
 import { useTuningStore } from './tuningStore'
 import { TUNING_CARDS } from './tuningFields'
 import { TuningSlider } from './TuningSlider'
+import { TuneKnobCard } from './TuneKnobCard'
 import { InitialTuneCalculator } from './InitialTuneCalculator'
 
 type LoadState = { kind: 'idle' } | { kind: 'loading'; got: number; total: number | undefined } | { kind: 'error'; message: string } | { kind: 'loaded' }
 
 /**
- * Tuning page (issue #35, PRD #32 ticket 1): Extended Tuning's Rate /
- * Stabilize / Filters cards plus the initial-tune calculator, all staged
+ * Tuning page (issues #35/#36, PRD #32 tickets 1–2): all six Extended
+ * Tuning cards (Rate / Stabilize / AltHold / Loiter / WPNav / Filters), the
+ * transmitter tuning knob card, and the initial-tune calculator, all staged
  * against `tuningStore` and written together via the sticky
  * `StagedReviewBar` — the Review Gate of ADR-0003, no input event ever
- * writes. Connection/load gating mirrors `SetupPage` (same shared
+ * writes. Show Advanced (off by default, PRD story #6) reveals each
+ * section's `advancedParams`; hiding them again does NOT discard their
+ * Staged Changes — the review bar stays the one truthful list of what
+ * Apply will write. Connection/load gating mirrors `SetupPage` (same shared
  * `ParamStore`, same full-table fetch); slider ranges/steps/units and the
  * post-Apply reboot-required banner come from the bundled parameter
  * metadata, fetched the same way as `ParamsPage`.
@@ -48,6 +53,7 @@ export function TuningPage() {
   const [meta, setMeta] = useState<LoadedParamMetadata | null>(null)
   const [rebootBanner, setRebootBanner] = useState(false)
   const [rebooting, setRebooting] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const prevParamStoreRef = useRef(paramStore)
 
@@ -230,7 +236,13 @@ export function TuningPage() {
           <span className="font-heading text-[19px] font-bold text-nvx-text">{t('nav.tuning')}</span>
           <span className="ml-auto text-[12px] text-nvx-faint">{t('tuning.subtitleNote')}</span>
         </div>
-        <div className="mb-4 text-[12.5px] text-nvx-subtle">{t('tuning.subtitleBody')}</div>
+        <div className="mb-4 flex items-baseline">
+          <span className="text-[12.5px] text-nvx-subtle">{t('tuning.subtitleBody')}</span>
+          <label className="ml-auto flex flex-none cursor-pointer items-center gap-1.5 text-[12px] font-semibold text-nvx-subtle">
+            <input type="checkbox" checked={showAdvanced} onChange={(e) => setShowAdvanced(e.target.checked)} />
+            {t('tuning.showAdvanced')}
+          </label>
+        </div>
 
         {rebootBanner && (
           <div className="mb-3 flex items-center gap-2.5 rounded-lg border border-nvx-warningBorder bg-nvx-warningSoft px-3.5 py-2.5 text-[12px] text-nvx-warningText opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none [@starting-style]:opacity-0">
@@ -252,28 +264,34 @@ export function TuningPage() {
               <span className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t(card.titleKey)}</span>
             </div>
             <div className="flex flex-col gap-3.5">
-              {card.sections.map((section, i) => (
-                <div key={section.labelKey ?? i}>
-                  {section.labelKey !== undefined && (
-                    <div className="mb-2 text-[11px] font-bold uppercase tracking-[.08em] text-nvx-faint">{t(section.labelKey)}</div>
-                  )}
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-3">
-                    {section.params.map((param) => (
-                      <TuningSlider
-                        key={param}
-                        param={param}
-                        meta={metaOf(param)}
-                        value={valueOf(param)}
-                        staged={pending.has(param)}
-                        onCommit={(value, label) => stage(param, value, label)}
-                      />
-                    ))}
+              {card.sections.map((section, i) => {
+                const params = showAdvanced ? [...section.params, ...(section.advancedParams ?? [])] : section.params
+                if (params.length === 0) return null // all-advanced section, toggle off: heading hides with it
+                return (
+                  <div key={section.labelKey ?? i}>
+                    {section.labelKey !== undefined && (
+                      <div className="mb-2 text-[11px] font-bold uppercase tracking-[.08em] text-nvx-faint">{t(section.labelKey)}</div>
+                    )}
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 lg:grid-cols-3">
+                      {params.map((param) => (
+                        <TuningSlider
+                          key={param}
+                          param={param}
+                          meta={metaOf(param)}
+                          value={valueOf(param)}
+                          staged={pending.has(param)}
+                          onCommit={(value, label) => stage(param, value, label)}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </section>
         ))}
+
+        <TuneKnobCard valueOf={valueOf} metaOf={metaOf} staged={(param) => pending.has(param)} onStage={stage} />
 
         <InitialTuneCalculator currentOf={currentOf} metaOf={metaOf} onStage={stageMany} />
 

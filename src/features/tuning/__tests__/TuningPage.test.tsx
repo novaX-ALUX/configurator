@@ -31,7 +31,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-/** Every param the three cards show, at ArduCopter-ish defaults, REAL32 like the board reports them. */
+/** The board-primed subset of the six cards' params (plus TUNE), at ArduCopter-ish defaults, REAL32 like the board reports them. */
 const TUNING_PARAMS = [
   { name: 'ATC_RAT_RLL_P', value: 0.135 },
   { name: 'ATC_RAT_RLL_I', value: 0.135 },
@@ -53,6 +53,21 @@ const TUNING_PARAMS = [
   { name: 'ATC_RAT_PIT_FLTT', value: 20 },
   { name: 'ATC_RAT_YAW_FLTE', value: 2 },
   { name: 'ATC_RAT_YAW_FLTT', value: 20 },
+  { name: 'ATC_RAT_RLL_IMAX', value: 0.5 },
+  { name: 'PSC_POSZ_P', value: 1 },
+  { name: 'PSC_VELZ_P', value: 5 },
+  { name: 'PSC_ACCZ_P', value: 0.5 },
+  { name: 'PSC_ACCZ_I', value: 1 },
+  { name: 'PSC_ACCZ_D', value: 0 },
+  { name: 'LOIT_SPEED', value: 1250 },
+  { name: 'PSC_POSXY_P', value: 1 },
+  { name: 'PSC_VELXY_P', value: 2 },
+  { name: 'PSC_VELXY_I', value: 1 },
+  { name: 'WPNAV_SPEED', value: 1000 },
+  { name: 'WPNAV_RADIUS', value: 200 },
+  { name: 'TUNE', value: 0 },
+  { name: 'TUNE_MIN', value: 0 },
+  { name: 'TUNE_MAX', value: 1 },
 ]
 
 /**
@@ -67,6 +82,20 @@ const META_FIXTURE: ParamMetaFile = {
   ATC_ANG_RLL_P: { displayName: 'Roll axis angle controller P gain', description: 'x', range: [3, 12] },
   INS_GYRO_FILTER: { displayName: 'Gyro filter cutoff frequency', description: 'x', range: [0, 256], units: 'Hz' },
   INS_ACCEL_FILTER: { displayName: 'Accel filter cutoff frequency', description: 'x', range: [0, 256], units: 'Hz', rebootRequired: true },
+  ATC_RAT_RLL_IMAX: { displayName: 'Roll axis rate controller I gain maximum', description: 'x', range: [0, 1], increment: 0.01 },
+  PSC_POSZ_P: { displayName: 'Position (vertical) controller P gain', description: 'x', range: [1, 3] },
+  LOIT_SPEED: { displayName: 'Loiter Horizontal Maximum Speed', description: 'x', range: [20, 3500], increment: 50, units: 'cm/s' },
+  WPNAV_SPEED: { displayName: 'Waypoint Horizontal Speed Target', description: 'x', range: [10, 2000], increment: 50, units: 'cm/s' },
+  TUNE: {
+    displayName: 'Channel 6 Tuning',
+    description: 'x',
+    values: [
+      { value: 0, label: 'None' },
+      { value: 4, label: 'Rate Roll/Pitch kP' },
+    ],
+  },
+  TUNE_MIN: { displayName: 'Tuning minimum', description: 'x' },
+  TUNE_MAX: { displayName: 'Tuning maximum', description: 'x' },
 }
 
 function paramValueFrame(opts: { name: string; value: number; type?: number; count: number; index: number }): Uint8Array {
@@ -238,6 +267,117 @@ describe('TuningPage', () => {
     })
   })
 
+  describe('six Extended Tuning groups (issue #36)', () => {
+    it('renders all six group cards, matching the Mico/MP Extended Tuning block structure', async () => {
+      await renderLoaded()
+      for (const title of ['RATE', 'STABILIZE', 'ALT HOLD', 'LOITER', 'WPNAV', 'FILTERS']) {
+        expect(screen.getByText(title)).toBeInTheDocument()
+      }
+    })
+
+    it('new-group sliders are metadata-driven and stage through the same Review Gate', async () => {
+      const { transport } = await renderLoaded()
+
+      const posz = screen.getByLabelText('PSC_POSZ_P') // AltHold
+      expect(posz).toHaveAttribute('min', '1')
+      expect(posz).toHaveAttribute('max', '3')
+      expect(screen.getByLabelText('WPNAV_SPEED')).toHaveAttribute('step', '50')
+
+      fireEvent.pointerUp(dragSlider('LOIT_SPEED', '1000')) // Loiter
+      fireEvent.pointerUp(dragSlider('WPNAV_SPEED', '1500')) // WPNav
+      expect(screen.getByText('2 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('LOIT_SPEED → 1000')).toBeInTheDocument()
+      expect(screen.getByText('WPNAV_SPEED → 1500')).toBeInTheDocument()
+      expect(paramSetFrames(transport)).toHaveLength(0)
+    })
+  })
+
+  describe('Show Advanced toggle', () => {
+    it('is off by default: advanced parameters are not rendered at all', async () => {
+      await renderLoaded()
+      expect(screen.getByRole('checkbox', { name: 'Show advanced' })).not.toBeChecked()
+      expect(screen.queryByLabelText('ATC_RAT_RLL_IMAX')).not.toBeInTheDocument()
+      expect(screen.queryByText('ATC_RAT_RLL_IMAX')).not.toBeInTheDocument()
+      // An all-advanced section stays hidden with its label (Pilot Vertical is advanced-only).
+      expect(screen.queryByText('Pilot')).not.toBeInTheDocument()
+    })
+
+    it('toggling on reveals metadata-driven advanced sliders that stage through the same Review Gate', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Show advanced' }))
+
+      const imax = screen.getByLabelText('ATC_RAT_RLL_IMAX')
+      expect(imax).toHaveAttribute('min', '0')
+      expect(imax).toHaveAttribute('max', '1')
+      expect(imax).toHaveAttribute('step', '0.01')
+
+      fireEvent.pointerUp(dragSlider('ATC_RAT_RLL_IMAX', '0.6'))
+      expect(screen.getByText('1 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('ATC_RAT_RLL_IMAX → 0.6')).toBeInTheDocument()
+      expect(paramSetFrames(transport)).toHaveLength(0)
+    })
+
+    it('toggling back off hides the advanced sliders again but keeps their staged edits pending', async () => {
+      await renderLoaded()
+      const toggle = screen.getByRole('checkbox', { name: 'Show advanced' })
+      fireEvent.click(toggle)
+      fireEvent.pointerUp(dragSlider('ATC_RAT_RLL_IMAX', '0.6'))
+      fireEvent.click(toggle)
+      expect(screen.queryByLabelText('ATC_RAT_RLL_IMAX')).not.toBeInTheDocument()
+      expect(screen.getByText('1 pending — nothing written yet')).toBeInTheDocument()
+    })
+  })
+
+  describe('transmitter tuning knob (TUNE)', () => {
+    it('offers the metadata enum options and stages a selection without writing', async () => {
+      const { transport } = await renderLoaded()
+      const select = screen.getByLabelText('TUNE')
+      expect(screen.getByRole('option', { name: 'None' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Rate Roll/Pitch kP' })).toBeInTheDocument()
+
+      fireEvent.change(select, { target: { value: '4' } })
+      expect(screen.getByText('1 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('TUNE → 4')).toBeInTheDocument()
+      expect(paramSetFrames(transport)).toHaveLength(0)
+    })
+
+    it('stages TUNE_MIN/TUNE_MAX numeric edits on commit, through the same pending set', async () => {
+      const { transport } = await renderLoaded()
+      const min = screen.getByLabelText('TUNE_MIN')
+      fireEvent.change(min, { target: { value: '0.08' } })
+      fireEvent.blur(min)
+      const max = screen.getByLabelText('TUNE_MAX')
+      fireEvent.change(max, { target: { value: '0.25' } })
+      fireEvent.blur(max)
+
+      expect(screen.getByText('2 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('TUNE_MIN → 0.08')).toBeInTheDocument()
+      expect(screen.getByText('TUNE_MAX → 0.25')).toBeInTheDocument()
+      expect(paramSetFrames(transport)).toHaveLength(0)
+    })
+
+    it('falls back to a numeric field when the board value is outside the metadata enum list', async () => {
+      const { transport } = await renderLoaded()
+      // A passively broadcast PARAM_VALUE moves TUNE to 99 — not among the fixture's options.
+      await act(async () => {
+        transport.feed(paramValueFrame({ name: 'TUNE', value: 99, count: TUNING_PARAMS.length, index: 0 }))
+      })
+      const field = screen.getByLabelText('TUNE')
+      expect(field.tagName).toBe('INPUT') // no dropdown that would hide the real value
+      expect(field).toHaveValue('99')
+      expect(screen.queryByRole('option', { name: 'None' })).not.toBeInTheDocument()
+    })
+
+    it('rejects a non-numeric TUNE_MIN without staging', async () => {
+      await renderLoaded()
+      const min = screen.getByLabelText('TUNE_MIN')
+      fireEvent.change(min, { target: { value: 'abc' } })
+      fireEvent.blur(min)
+      expect(screen.getByRole('alert')).toBeInTheDocument()
+      expect(screen.queryByText(/pending — nothing written yet/)).not.toBeInTheDocument()
+    })
+  })
+
   describe('initial-tune calculator', () => {
     it('shows a current → suggested comparison; staging enters the same set as slider edits; a deselected row is not staged', async () => {
       const { transport } = await renderLoaded()
@@ -270,7 +410,8 @@ describe('TuningPage', () => {
       fireEvent.change(screen.getByLabelText('Prop diameter (in)'), { target: { value: '0' } })
       fireEvent.click(screen.getByRole('button', { name: 'Calculate' }))
       expect(screen.getByRole('alert')).toHaveTextContent('Prop diameter must be greater than 0')
-      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+      // No suggestion-row checkboxes — only the page's Show advanced toggle remains.
+      expect(screen.queryByRole('checkbox', { name: 'INS_GYRO_FILTER' })).not.toBeInTheDocument()
     })
   })
 

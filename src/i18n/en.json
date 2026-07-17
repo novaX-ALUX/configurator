@@ -294,11 +294,28 @@
     "subtitleBody": "Extended Tuning: each slider stages its parameter on release. Changes queue in the bar below.",
     "noRange": "No documented range in the bundled metadata — edit this parameter from the Parameters page.",
     "discardedOnDisconnect": "{{count}} unsaved tuning change(s) were discarded — they don't persist across sessions.",
+    "showAdvanced": "Show advanced",
     "rate": {
       "title": "RATE"
     },
     "stabilize": {
-      "title": "STABILIZE"
+      "title": "STABILIZE",
+      "limits": "Accel & Rate Limits"
+    },
+    "althold": {
+      "title": "ALT HOLD",
+      "velz": "Throttle Rate",
+      "accz": "Throttle Accel",
+      "pilot": "Pilot"
+    },
+    "loiter": {
+      "title": "LOITER",
+      "posxy": "Position XY",
+      "velxy": "Velocity XY",
+      "shaping": "Position Control"
+    },
+    "wpnav": {
+      "title": "WPNAV"
     },
     "filters": {
       "title": "FILTERS"
@@ -307,6 +324,10 @@
       "roll": "Roll",
       "pitch": "Pitch",
       "yaw": "Yaw"
+    },
+    "tune": {
+      "title": "TRANSMITTER TUNING",
+      "subtitle": "Assign a parameter to your radio's channel-6 tuning knob and set the value span it sweeps. Configured here on the bench — the knob itself acts in flight, on the radio."
     },
     "calc": {
       "title": "INITIAL TUNE CALCULATOR",
