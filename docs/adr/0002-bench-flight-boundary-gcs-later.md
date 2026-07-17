@@ -52,6 +52,9 @@ change in review.
    of `feature-status-vs-axplanner.md` §V. Prerequisites: the §IV lessons
    (never truncate `SERIAL_CONTROL` msgid 126; route flash addresses through
    one encode function with ADDRESS_SHIFT).
+   *Superseded by ADR-0005 (2026-07-18): the in-house ESC line is entirely
+   DroneCAN; the strategic in-house-ESC project is DroneCAN tooling, and
+   4-Way is demoted to unscheduled backlog.*
 5. **axPlanner is archived.** It has no users, so no safety-fix pass is
    owed. Zero further investment; its only role is a read-only reference
    (lessons already extracted into `feature-status-vs-axplanner.md` §IV);

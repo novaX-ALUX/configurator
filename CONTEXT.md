@@ -50,12 +50,22 @@ _Avoid_: Parameters (as a bare nav label)
 ### Parameters
 
 **Review Gate**:
-The rule that no parameter value ever reaches the vehicle as a side effect of input. Edits accumulate as **Staged Changes**; only an explicit user Apply writes them, and every write is read back. There is no direct-write path, including sliders.
+The rule that no parameter value ever reaches the vehicle as a side effect of input. Edits accumulate as **Staged Changes**; only an explicit user Apply writes them, and every write is read back. There is no direct-write path, including sliders. Applies to flight-controller parameters and Node Parameters alike; for a Node Parameter, Apply also includes persistence on the Node.
 _Avoid_: live-bind, direct write, real-time write
 
 **Staged Change**:
-One pending parameter edit (name + new value) awaiting Apply. Later edits to the same parameter replace the earlier Staged Change.
+One pending parameter edit (scope + name + new value) awaiting Apply — the scope is the flight controller or one Node. Later edits to the same scope and name replace the earlier Staged Change.
 _Avoid_: dirty value, pending write
+
+### DroneCAN
+
+**Node**:
+A device on the vehicle's CAN bus with its own DroneCAN node ID, discovered and configured through the flight controller. In-house ESCs are Nodes; the term deliberately does not presume ESC — future CAN peripherals are Nodes too.
+_Avoid_: device, peripheral, CAN device, ESC node (as the generic term)
+
+**Node Parameter**:
+A parameter that lives on a Node. Its identity is node ID + name — two Nodes can carry the same name. Writes go through the same Review Gate as flight-controller parameters.
+_Avoid_: CAN parameter, ESC setting, remote parameter
 
 ### Telemetry
 
