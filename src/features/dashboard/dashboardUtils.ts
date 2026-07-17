@@ -88,6 +88,61 @@ export function isVoltageImplausible(voltage: number): boolean {
   return voltage > 0 && voltage < IMPLAUSIBLE_VOLTAGE_FLOOR_V
 }
 
+/**
+ * Sensors-health grid (issue #52, UI audit D2) — bit values from the MAVLink
+ * `MAV_SYS_STATUS_SENSOR` enum, matched against the raw
+ * `SYS_STATUS.onboard_control_sensors_present/_enabled/_health` bitmasks the
+ * Telemetry Snapshot's `sensors` block passes through (telemetry.ts).
+ */
+const SENSOR_3D_GYRO = 0x01
+const SENSOR_3D_ACCEL = 0x02
+const SENSOR_3D_MAG = 0x04
+const SENSOR_ABSOLUTE_PRESSURE = 0x08
+const SENSOR_GPS = 0x20
+const SENSOR_OPTICAL_FLOW = 0x40
+/** ArduPilot reports rangefinder health under this bit (GCS_Common's SYS_STATUS mapping). */
+const SENSOR_LASER_POSITION = 0x100
+
+export type SensorTileKey = 'imu' | 'compass' | 'baro' | 'gps' | 'optflow' | 'rangefinder'
+
+export interface SensorTile {
+  key: SensorTileKey
+  /** The `MAV_SYS_STATUS_SENSOR` bit(s) this tile summarizes. */
+  mask: number
+  /** True for the sensors the Calibration page can actually calibrate (accel/gyro, compass) — these tiles double as navigation there. */
+  calibratable: boolean
+}
+
+/** The six tiles of the audit's D2 grid, in display order. */
+export const SENSOR_TILES: readonly SensorTile[] = [
+  { key: 'imu', mask: SENSOR_3D_GYRO | SENSOR_3D_ACCEL, calibratable: true },
+  { key: 'compass', mask: SENSOR_3D_MAG, calibratable: true },
+  { key: 'baro', mask: SENSOR_ABSOLUTE_PRESSURE, calibratable: false },
+  { key: 'gps', mask: SENSOR_GPS, calibratable: false },
+  { key: 'optflow', mask: SENSOR_OPTICAL_FLOW, calibratable: false },
+  { key: 'rangefinder', mask: SENSOR_LASER_POSITION, calibratable: false },
+]
+
+export type SensorTileStatus = 'ok' | 'attention' | 'disabled' | 'absent'
+
+/**
+ * Standard GCS reading of the SYS_STATUS sensor bitmasks (what Mission
+ * Planner's HUD sensor lights do): a sensor only demands attention when it is
+ * present AND enabled AND unhealthy. Present-but-disabled (e.g. a compass
+ * with COMPASS_USE=0) is `'disabled'` — rendered in the same gray as
+ * `'absent'` (deliberately unused is not a problem to fix), but labeled
+ * distinctly so the tile never claims hardware is missing when it's merely
+ * turned off. For a multi-bit mask (IMU = gyro|accel), only the bits that are
+ * actually present+enabled must be healthy.
+ */
+export function sensorTileStatus(sensors: { present: number; enabled: number; health: number }, mask: number): SensorTileStatus {
+  const present = sensors.present & mask
+  if (present === 0) return 'absent'
+  const active = present & sensors.enabled
+  if (active === 0) return 'disabled'
+  return (sensors.health & active) === active ? 'ok' : 'attention'
+}
+
 /** `+12.3°` / `-4.5°` — sign always shown explicitly (matches the design file's own rollTxt/pitchTxt convention). */
 export function formatSignedDeg(deg: number): string {
   return `${deg >= 0 ? '+' : ''}${deg.toFixed(1)}°`

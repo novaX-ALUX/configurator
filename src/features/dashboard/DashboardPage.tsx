@@ -6,6 +6,7 @@ import { VehicleCard } from './VehicleCard'
 import { PowerCard } from './PowerCard'
 import { GpsCard } from './GpsCard'
 import { MotorOutputsCard } from './MotorOutputsCard'
+import { SensorsCard } from './SensorsCard'
 import { RcChannelsCard } from './RcChannelsCard'
 import { PREARM_PREFIX } from './dashboardUtils'
 
@@ -20,7 +21,7 @@ const FRAME_CLASS_PARAM = 'FRAME_CLASS'
  * is an explicit "Offline" chip per Block so nothing pretends to be live
  * (see each card's own `offline` prop). The connected layout follows the
  * design file's own 3-column grid (ATTITUDE / VEHICLE+POWER / GPS+MOTOR
- * OUTPUTS) plus a full-width RC CHANNELS row.
+ * OUTPUTS) plus full-width SENSORS (issue #52) and RC CHANNELS rows.
  */
 export function DashboardPage() {
   const { t } = useTranslation()
@@ -62,6 +63,7 @@ export function DashboardPage() {
           <MotorOutputsCard servo={telemetry?.servo} offline={offline} />
         </div>
       </div>
+      <SensorsCard sensors={telemetry?.sensors} offline={offline} />
       <RcChannelsCard rc={telemetry?.rc} offline={offline} />
     </div>
   )

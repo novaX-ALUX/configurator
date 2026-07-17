@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { arduCopterModeName, formatSignedDeg, gpsFixTier, isVoltageImplausible, normalizeHeadingDeg, pctFromUs } from '../dashboardUtils'
+import {
+  arduCopterModeName,
+  formatSignedDeg,
+  gpsFixTier,
+  isVoltageImplausible,
+  normalizeHeadingDeg,
+  pctFromUs,
+  SENSOR_TILES,
+  sensorTileStatus,
+} from '../dashboardUtils'
 
 describe('arduCopterModeName', () => {
   it('decodes the common ArduCopter modes', () => {
@@ -82,5 +91,41 @@ describe('normalizeHeadingDeg', () => {
   it('wraps a negative yaw into 0-360', () => {
     expect(normalizeHeadingDeg(-90)).toBe(270)
     expect(normalizeHeadingDeg(-1)).toBe(359)
+  })
+})
+
+describe('SENSOR_TILES', () => {
+  it('covers the six audit-D2 tiles in display order, with only IMU and Compass calibratable', () => {
+    expect(SENSOR_TILES.map((t) => t.key)).toEqual(['imu', 'compass', 'baro', 'gps', 'optflow', 'rangefinder'])
+    expect(SENSOR_TILES.filter((t) => t.calibratable).map((t) => t.key)).toEqual(['imu', 'compass'])
+  })
+})
+
+describe('sensorTileStatus', () => {
+  const COMPASS = 0x04
+  const IMU = 0x01 | 0x02
+
+  it('absent when the present bit is clear', () => {
+    expect(sensorTileStatus({ present: 0, enabled: 0, health: 0 }, COMPASS)).toBe('absent')
+  })
+
+  it('disabled when present but not enabled (e.g. COMPASS_USE=0) — unused on purpose, but never claimed missing', () => {
+    expect(sensorTileStatus({ present: COMPASS, enabled: 0, health: 0 }, COMPASS)).toBe('disabled')
+  })
+
+  it('ok when present, enabled, and healthy', () => {
+    expect(sensorTileStatus({ present: COMPASS, enabled: COMPASS, health: COMPASS }, COMPASS)).toBe('ok')
+  })
+
+  it('attention when present and enabled but unhealthy', () => {
+    expect(sensorTileStatus({ present: COMPASS, enabled: COMPASS, health: 0 }, COMPASS)).toBe('attention')
+  })
+
+  it('IMU (gyro|accel): attention if either active bit is unhealthy', () => {
+    expect(sensorTileStatus({ present: IMU, enabled: IMU, health: 0x01 }, IMU)).toBe('attention')
+  })
+
+  it('IMU (gyro|accel): ok when only the gyro is active and healthy — inactive bits inside the mask are not held against it', () => {
+    expect(sensorTileStatus({ present: 0x01, enabled: 0x01, health: 0x01 }, IMU)).toBe('ok')
   })
 })

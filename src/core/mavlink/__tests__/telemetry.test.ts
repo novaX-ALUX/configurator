@@ -192,6 +192,14 @@ describe('Telemetry', () => {
       })
     })
 
+    it('SYS_STATUS: onboard_control_sensors_present/enabled/health bitmasks pass through into the sensors block', async () => {
+      const telemetry = new Telemetry(router, target)
+      transport.feed(sysStatusFrame({ present: 0x12f, enabled: 0x2f, health: 0x0d }))
+      await flush()
+
+      expect(telemetry.getState().sensors).toMatchObject({ present: 0x12f, enabled: 0x2f, health: 0x0d })
+    })
+
     it('GPS_RAW_INT: eph (cm-scaled hdop) -> hdop, fix_type/satellites pass through', async () => {
       const telemetry = new Telemetry(router, target)
       transport.feed(gpsFrame({ eph: 150, fixType: 3, sats: 11 }))

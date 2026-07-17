@@ -184,6 +184,22 @@
       "title": "RC Channels",
       "channel": "CH{{n}}",
       "noData": "No RC channel telemetry yet."
+    },
+    "sensors": {
+      "title": "Sensors",
+      "imu": "IMU",
+      "compass": "Compass",
+      "baro": "Baro",
+      "gps": "GPS",
+      "optflow": "OptFlow",
+      "rangefinder": "Rangefinder",
+      "openCalibration": "Open Calibration",
+      "status": {
+        "ok": "OK",
+        "attention": "Needs attention",
+        "disabled": "Disabled",
+        "absent": "Not fitted"
+      }
     }
   },
   "charts": {

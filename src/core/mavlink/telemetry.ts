@@ -17,6 +17,10 @@
  *   -> `undefined`.
  * - SYS_STATUS.battery_remaining: already percent; -1 ("unknown") ->
  *   `undefined`.
+ * - SYS_STATUS.onboard_control_sensors_present/enabled/health: pass through
+ *   as-is into the `sensors` block (dimensionless `MAV_SYS_STATUS_SENSOR`
+ *   bitmasks, nothing to unit-convert) — per-sensor bit interpretation is a
+ *   UI concern (dashboardUtils' sensor tiles), not this layer's.
  * - GPS_RAW_INT.eph: cm-scaled HDOP -> `hdop` (divide by 100); UINT16_MAX
  *   (65535, "unknown") -> `undefined`. `fix_type`/`satellites_visible` pass
  *   through as-is (no conversion, no sentinel).
@@ -131,6 +135,8 @@ export interface TelemetryState {
   servo?: { outputs: number[]; ts: number }
   heartbeat?: { armed: boolean; customMode: number; baseMode: number; systemStatus: number; ts: number }
   imu?: { accX: number; accY: number; accZ: number; gyroX: number; gyroY: number; gyroZ: number; ts: number }
+  /** SYS_STATUS.onboard_control_sensors_present/_enabled/_health — raw `MAV_SYS_STATUS_SENSOR` bitmasks (see module doc). */
+  sensors?: { present: number; enabled: number; health: number; ts: number }
 }
 
 export interface TelemetryOpts {
@@ -311,6 +317,12 @@ export class Telemetry {
         voltage: voltageRaw === UINT16_MAX ? undefined : voltageRaw / 1000,
         current: currentRaw === -1 ? undefined : currentRaw / 100,
         batteryRemaining: remainingRaw === -1 ? undefined : remainingRaw,
+        ts: this.now(),
+      },
+      sensors: {
+        present: Number(fields.onboard_control_sensors_present),
+        enabled: Number(fields.onboard_control_sensors_enabled),
+        health: Number(fields.onboard_control_sensors_health),
         ts: this.now(),
       },
     }

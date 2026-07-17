@@ -184,6 +184,22 @@
       "title": "RC 채널",
       "channel": "CH{{n}}",
       "noData": "아직 RC 채널 텔레메트리가 없습니다."
+    },
+    "sensors": {
+      "title": "센서",
+      "imu": "IMU",
+      "compass": "컴퍼스",
+      "baro": "기압계",
+      "gps": "GPS",
+      "optflow": "옵티컬 플로우",
+      "rangefinder": "거리계",
+      "openCalibration": "캘리브레이션 열기",
+      "status": {
+        "ok": "정상",
+        "attention": "점검 필요",
+        "disabled": "비활성화됨",
+        "absent": "미장착"
+      }
     }
   },
   "charts": {

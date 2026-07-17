@@ -184,6 +184,22 @@
       "title": "RC チャンネル",
       "channel": "CH{{n}}",
       "noData": "RC チャンネルのテレメトリーはまだありません。"
+    },
+    "sensors": {
+      "title": "センサー",
+      "imu": "IMU",
+      "compass": "コンパス",
+      "baro": "気圧計",
+      "gps": "GPS",
+      "optflow": "オプティカルフロー",
+      "rangefinder": "測距計",
+      "openCalibration": "キャリブレーションを開く",
+      "status": {
+        "ok": "正常",
+        "attention": "要対応",
+        "disabled": "無効",
+        "absent": "未搭載"
+      }
     }
   },
   "charts": {

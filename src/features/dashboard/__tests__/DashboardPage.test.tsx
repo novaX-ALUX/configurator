@@ -36,11 +36,12 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Attitude')).toBeInTheDocument()
     expect(screen.getByText('Vehicle')).toBeInTheDocument()
     expect(screen.getByText('Power')).toBeInTheDocument()
-    expect(screen.getByText('GPS')).toBeInTheDocument()
+    expect(screen.getAllByText('GPS')).toHaveLength(2) // GpsCard title + the sensors grid's GPS tile
     expect(screen.getByText('Motor Outputs')).toBeInTheDocument()
+    expect(screen.getByText('Sensors')).toBeInTheDocument()
     expect(screen.getByText('RC Channels')).toBeInTheDocument()
-    // One "Offline" chip per Block (attitude, vehicle, power, gps, motors, rc).
-    expect(screen.getAllByText('Offline')).toHaveLength(6)
+    // One "Offline" chip per Block card (attitude, vehicle, power, gps, motors, sensors, rc).
+    expect(screen.getAllByText('Offline')).toHaveLength(7)
     // No live data is fabricated — the same no-data fallbacks used while
     // connected-but-no-telemetry-yet.
     expect(screen.getByText('No heartbeat')).toBeInTheDocument()
@@ -52,12 +53,12 @@ describe('DashboardPage', () => {
   it('connecting/lost: still full layout with "Offline" chips (only "connected" counts as online)', () => {
     useConnectionStore.setState({ phase: 'connecting', session: null })
     const { unmount } = render(<DashboardPage />)
-    expect(screen.getAllByText('Offline')).toHaveLength(6)
+    expect(screen.getAllByText('Offline')).toHaveLength(7)
     unmount()
 
     useConnectionStore.setState({ phase: 'lost' })
     render(<DashboardPage />)
-    expect(screen.getAllByText('Offline')).toHaveLength(6)
+    expect(screen.getAllByText('Offline')).toHaveLength(7)
   })
 
   it('reconnecting restores live rendering without a remount — the "Offline" chips fade out (not vanish) and are gone once the exit transition finishes', async () => {
@@ -65,7 +66,7 @@ describe('DashboardPage', () => {
     try {
       useConnectionStore.setState({ phase: 'disconnected', session: null, paramStore: null, statustext: [] })
       render(<DashboardPage />)
-      expect(screen.getAllByText('Offline')).toHaveLength(6)
+      expect(screen.getAllByText('Offline')).toHaveLength(7)
 
       act(() => {
         useConnectionStore.setState({ phase: 'connected' })
@@ -105,6 +106,8 @@ describe('DashboardPage', () => {
       rc: { channels: [1500, 1500, 1100, 1500, 1900, 1500, 1000, 2000], ts: 0 },
       servo: { outputs: [1500, 1500, 1500, 1500, 0, 0, 0, 0], ts: 0 },
       heartbeat: { armed: true, customMode: 5, baseMode: 0, systemStatus: 0, ts: 0 },
+      // IMU/compass/baro/gps fitted+enabled, compass (0x04) unhealthy, optflow/rangefinder absent.
+      sensors: { present: 0x2f, enabled: 0x2f, health: 0x2b, ts: 0 },
     })
     useConnectionStore.setState({
       phase: 'connected',
@@ -124,5 +127,9 @@ describe('DashboardPage', () => {
     expect(screen.getByText('3D fix')).toBeInTheDocument()
     expect(screen.getByText('14')).toBeInTheDocument()
     expect(screen.getByText('2000')).toBeInTheDocument()
+    // Sensors grid: IMU/baro/gps OK, compass needs attention, optflow/rangefinder gray.
+    expect(screen.getAllByText('OK')).toHaveLength(3)
+    expect(screen.getByText('Needs attention')).toBeInTheDocument()
+    expect(screen.getAllByText('Not fitted')).toHaveLength(2)
   })
 })

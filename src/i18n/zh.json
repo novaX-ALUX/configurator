@@ -184,6 +184,22 @@
       "title": "遥控通道",
       "channel": "CH{{n}}",
       "noData": "暂无遥控通道遥测数据。"
+    },
+    "sensors": {
+      "title": "传感器",
+      "imu": "IMU",
+      "compass": "罗盘",
+      "baro": "气压计",
+      "gps": "GPS",
+      "optflow": "光流",
+      "rangefinder": "测距仪",
+      "openCalibration": "打开校准",
+      "status": {
+        "ok": "正常",
+        "attention": "需要处理",
+        "disabled": "已禁用",
+        "absent": "未安装"
+      }
     }
   },
   "charts": {
