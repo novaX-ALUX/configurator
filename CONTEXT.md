@@ -23,6 +23,16 @@ Any operation on an aircraft in a flyable state (arm/disarm, mode change, missio
 A typed core-layer operation (e.g. `startMotorTest`, `acceptMagCal`) that declares its own safety pattern — gate, confirmation, stop path. The only way commands reach the vehicle; no generic command channel exists.
 _Avoid_: sendCommand, raw command, passthrough command
 
+### Parameters
+
+**Review Gate**:
+The rule that no parameter value ever reaches the vehicle as a side effect of input. Edits accumulate as **Staged Changes**; only an explicit user Apply writes them, and every write is read back. There is no direct-write path, including sliders.
+_Avoid_: live-bind, direct write, real-time write
+
+**Staged Change**:
+One pending parameter edit (name + new value) awaiting Apply. Later edits to the same parameter replace the earlier Staged Change.
+_Avoid_: dirty value, pending write
+
 ### Telemetry
 
 **Telemetry Snapshot**:
