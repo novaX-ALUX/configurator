@@ -7,6 +7,7 @@ import type { ParsedHex } from '../../../core/firmware/intelhex'
 import {
   createDfuFlashSession,
   createFlashSession,
+  realFlashSessionEffects,
   type DfuSessionEffects,
   type DfuSessionState,
   type FlashSessionEffects,
@@ -539,5 +540,41 @@ describe('createDfuFlashSession (DFU recovery, Stm32Dfu)', () => {
 
     store.getState().cancel() // idle -> cancel is a no-op
     expect(store.getState().step).toBe('idle')
+  })
+})
+
+describe('realFlashSessionEffects — issue #27 regression ("Illegal invocation")', () => {
+  /**
+   * jsdom/undici's `fetch` is NOT this-strict — `const f = fetch; f.call(someObject, url)`
+   * succeeds there — so a naive test against the real global `fetch` would
+   * pass both before and after the fix and prove nothing (this is exactly
+   * how the original bug shipped unnoticed). This stub stands in for
+   * Chrome's actual `Window.fetch`, which throws "Illegal invocation" for
+   * any `this` other than `window`/`undefined`/`globalThis`.
+   */
+  function chromeStrictFetch(this: unknown): ReturnType<typeof fetch> {
+    if (this !== undefined && this !== globalThis) {
+      throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation")
+    }
+    return Promise.resolve(new Response('ok'))
+  }
+
+  it('reproduces the original bug: a bare stored fetchFn throws when invoked method-style off its containing object', async () => {
+    // Mirrors the pre-fix shape at flashSession.ts:568 (`fetchFn: fetch`, no
+    // `.bind()`) and the pre-fix call site at run() (`effects.fetchFn(url)`,
+    // method-style) — proves the stub above is a faithful stand-in for
+    // Chrome's fetch before asserting the fix neutralizes it below.
+    const unbound = { fetchFn: chromeStrictFetch as unknown as typeof fetch }
+    // Real Chrome throws this synchronously (not a rejected promise) — matches
+    // why flashSession.ts's run() wraps the call in try/catch around the
+    // `await`, which catches both forms.
+    expect(() => unbound.fetchFn('https://example.invalid/x.apj')).toThrow('Illegal invocation')
+  })
+
+  it('fix: realFlashSessionEffects binds fetchFn at the storage site, so the same method-style call succeeds', async () => {
+    const effects = realFlashSessionEffects(chromeStrictFetch as unknown as typeof fetch)
+    // Method-style, exactly like `effects.fetchFn(firmwareFileUrl(file))` in
+    // run() above — this is the call that broke in Chrome (issue #27).
+    await expect(effects.fetchFn('https://example.invalid/x.apj')).resolves.toBeInstanceOf(Response)
   })
 })

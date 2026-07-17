@@ -134,8 +134,15 @@ export function parseManifest(json: unknown): FirmwareManifest {
  * a GitHub URL. `reason` on a thrown `ManifestError` distinguishes network
  * failure, non-2xx HTTP status, and schema violations so the UI can offer a
  * local-file fallback.
+ *
+ * `= fetch.bind(globalThis)` rather than the bare global (issue #27's sweep):
+ * this default is only ever reached via a plain `fetchManifest()` call today,
+ * which is already safe (`this === undefined`, which Chrome's `fetch`
+ * tolerates), but binding here removes the same latent "Illegal invocation"
+ * trap flashSession.ts hit the moment anything starts calling this
+ * method-style — cheap enough that there's no reason to leave it fragile.
  */
-export async function fetchManifest(fetchFn: typeof fetch = fetch): Promise<FirmwareManifest> {
+export async function fetchManifest(fetchFn: typeof fetch = fetch.bind(globalThis)): Promise<FirmwareManifest> {
   const url = `${import.meta.env.BASE_URL}firmware/manifest.json`
 
   let response: Response

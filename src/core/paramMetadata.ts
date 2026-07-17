@@ -193,8 +193,14 @@ const metaCache = new Map<string, Promise<ParamMetaTable>>()
  * Results are cached in-memory per version for the module's lifetime (PRD
  * §1.5): the data is immutable per version, so there's never a reason to
  * refetch or invalidate it, including across a disconnect/reconnect.
+ *
+ * `= fetch.bind(globalThis)`, not the bare global (issue #27's sweep — see
+ * manifest.ts's `fetchManifest` for the full rationale): this and the other
+ * three `typeof fetch = fetch` defaults below are only ever reached via
+ * plain calls today, already safe from the "Illegal invocation" bug class
+ * flashSession.ts hit, but normalized anyway since binding costs nothing.
  */
-export function fetchParamMetadata(version: string, fetchFn: typeof fetch = fetch): Promise<ParamMetaTable> {
+export function fetchParamMetadata(version: string, fetchFn: typeof fetch = fetch.bind(globalThis)): Promise<ParamMetaTable> {
   const cached = metaCache.get(version)
   if (cached) return cached
 
@@ -229,7 +235,7 @@ export interface LoadedParamMetadata {
  */
 export async function loadParamMetadata(
   fwVersion: string | undefined,
-  fetchFn: typeof fetch = fetch,
+  fetchFn: typeof fetch = fetch.bind(globalThis),
 ): Promise<LoadedParamMetadata> {
   const version = matchFirmwareVersion(AVAILABLE_METADATA_VERSIONS, fwVersion)
   const banner = metadataVersionBanner(version, fwVersion)
@@ -274,7 +280,7 @@ const defaultsCache = new Map<string, Promise<ParamDefaultsFile>>()
  * loaded, and vice versa — both are purely additive, PRD §1.4's principle
  * extended to this second asset).
  */
-export function fetchParamDefaults(version: string, fetchFn: typeof fetch = fetch): Promise<ParamDefaultsFile> {
+export function fetchParamDefaults(version: string, fetchFn: typeof fetch = fetch.bind(globalThis)): Promise<ParamDefaultsFile> {
   const cached = defaultsCache.get(version)
   if (cached) return cached
 
@@ -299,7 +305,7 @@ export function fetchParamDefaults(version: string, fetchFn: typeof fetch = fetc
  * Not-Default filter) without affecting whether display names/descriptions
  * loaded.
  */
-export async function loadParamDefaults(fwVersion: string | undefined, fetchFn: typeof fetch = fetch): Promise<ParamDefaultsFile> {
+export async function loadParamDefaults(fwVersion: string | undefined, fetchFn: typeof fetch = fetch.bind(globalThis)): Promise<ParamDefaultsFile> {
   const version = matchFirmwareVersion(AVAILABLE_METADATA_VERSIONS, fwVersion)
   return fetchParamDefaults(version, fetchFn)
 }

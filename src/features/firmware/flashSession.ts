@@ -563,12 +563,28 @@ async function openBootloaderTransport(): Promise<Transport> {
   }
 }
 
+/**
+ * Builds the real effects object for the Tab 1 singleton below. A factory
+ * (not inlined into the `createFlashSession` call) so tests can construct it
+ * against an injected `fetch` stub and verify the storage-site `.bind()`
+ * actually neutralizes Chrome's "Illegal invocation" (see flashSession.test.ts's
+ * regression test for issue #27): storing the bare global `fetch` here as an
+ * object property and calling it method-style (`effects.fetchFn(url)`, as
+ * `run()` above does) makes Chrome bind `this` to the effects object, which
+ * its native `fetch` rejects — `.bind(globalThis)` fixes `this` permanently
+ * at the storage site regardless of how the resulting function is later
+ * invoked.
+ */
+export function realFlashSessionEffects(fetchFn: typeof fetch = fetch): FlashSessionEffects {
+  return {
+    fetchFn: fetchFn.bind(globalThis),
+    takeoverTransport: () => useConnectionStore.getState().takeoverForFlash(),
+    rebootToBootloader: sendRebootToBootloader,
+    openBootloaderTransport,
+    createFlasher: (transport) => new Px4Flasher(transport),
+    now: () => Date.now(),
+  }
+}
+
 /** The app-wide singleton for Tab 1 (normal update), using real effects. */
-export const useFlashSession = createFlashSession({
-  fetchFn: fetch,
-  takeoverTransport: () => useConnectionStore.getState().takeoverForFlash(),
-  rebootToBootloader: sendRebootToBootloader,
-  openBootloaderTransport,
-  createFlasher: (transport) => new Px4Flasher(transport),
-  now: () => Date.now(),
-})
+export const useFlashSession = createFlashSession(realFlashSessionEffects())
