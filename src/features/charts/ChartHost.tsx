@@ -29,8 +29,14 @@ import 'uplot/dist/uPlot.min.css'
  * restarted session begins from a blank plot instead of a stale time axis.
  * Series definitions (labels/colors, even the series count) are fixed for
  * the life of the component — the Charts page remounts this component (React
- * key) when the Unit Group's selection changes; only `timestampsMs`/`values`
- * and `windowEndMs` may change between renders.
+ * key) when the Unit Group's selection changes; only `timestampsMs`/`values`,
+ * `windowEndMs` and `windowSec` may change between renders. A `windowSec`
+ * change (issue #50's window selector) only re-scales the x axis — the data
+ * handed to uPlot is untouched.
+ *
+ * The plot fills this component's container (issue #50, CH4): the parent
+ * decides the height via layout, and the resize observer keeps the plot
+ * matched to both dimensions.
  */
 
 export interface ChartHostSeries {
@@ -73,16 +79,16 @@ export interface ChartHostProps {
   onCursor?: (readout: CursorReadout | null) => void
 }
 
-const CHART_HEIGHT = 320
-
 export function ChartHost({ series, windowEndMs, windowSec, onCursor }: ChartHostProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const mountRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<uPlot | null>(null)
   // The x-scale range closure below is created once (with the plot) but must
   // track the page-wide window end. Updated in the data effect below, before
   // the setData/create that triggers the redraw consulting it.
   const windowEndRef = useRef(windowEndMs)
-  // Same one-time-closure situation for the setCursor hook.
+  // Same one-time-closure situation for the window span and setCursor hook.
+  const windowSecRef = useRef(windowSec)
   const onCursorRef = useRef(onCursor)
 
   // No dependency array on purpose: data arrays get a fresh identity every
@@ -91,9 +97,11 @@ export function ChartHost({ series, windowEndMs, windowSec, onCursor }: ChartHos
   // more than the setData call it saves.
   useEffect(() => {
     windowEndRef.current = windowEndMs
+    windowSecRef.current = windowSec
     onCursorRef.current = onCursor
     const container = containerRef.current
-    if (!container) return
+    const mount = mountRef.current
+    if (!container || !mount) return
 
     if (series.every((s) => s.timestampsMs.length === 0)) {
       plotRef.current?.destroy()
@@ -113,7 +121,7 @@ export function ChartHost({ series, windowEndMs, windowSec, onCursor }: ChartHos
     plotRef.current = new uPlot(
       {
         width: container.clientWidth,
-        height: CHART_HEIGHT,
+        height: container.clientHeight,
         legend: { show: false },
         cursor: {
           // Drag-to-zoom is off: the x scale is a rolling window re-pinned on
@@ -160,7 +168,7 @@ export function ChartHost({ series, windowEndMs, windowSec, onCursor }: ChartHos
             // Pin the window to the page-wide newest Sample so all subplots
             // scroll in lockstep; on disconnect Samples stop arriving and the
             // window stops moving.
-            range: () => [windowEndRef.current / 1000 - windowSec, windowEndRef.current / 1000],
+            range: () => [windowEndRef.current / 1000 - windowSecRef.current, windowEndRef.current / 1000],
           },
         },
         series: [
@@ -174,7 +182,7 @@ export function ChartHost({ series, windowEndMs, windowSec, onCursor }: ChartHos
         ],
       },
       data,
-      container,
+      mount,
     )
   })
 
@@ -182,7 +190,7 @@ export function ChartHost({ series, windowEndMs, windowSec, onCursor }: ChartHos
     const container = containerRef.current
     if (!container) return
     const observer = new ResizeObserver(() => {
-      plotRef.current?.setSize({ width: container.clientWidth, height: CHART_HEIGHT })
+      plotRef.current?.setSize({ width: container.clientWidth, height: container.clientHeight })
     })
     observer.observe(container)
     return () => observer.disconnect()
@@ -196,5 +204,19 @@ export function ChartHost({ series, windowEndMs, windowSec, onCursor }: ChartHos
     [],
   )
 
-  return <div ref={containerRef} />
+  // The outer div is a flex item of the subplot card's column: `flex-1`
+  // takes all the height the card's fixed rows (header, legend) leave, and
+  // the min-height is the floor below which the page scrolls rather than
+  // squishing the plot further (issue #50, CH4). Sized by flex, not by a
+  // percentage chain — a percentage would resolve against the flex-grown
+  // parent's `auto` height and collapse to 0. uPlot mounts into the
+  // absolutely-positioned layer so its pixel-sized DOM (canvas, u-wrap) is
+  // out of flow: in-flow it would feed the current plot height back into
+  // the flex min-content sizing, ratcheting the card so it can grow but
+  // never shrink.
+  return (
+    <div ref={containerRef} className="relative min-h-[220px] flex-1">
+      <div ref={mountRef} className="absolute inset-0 overflow-hidden" />
+    </div>
+  )
 }

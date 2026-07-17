@@ -49,7 +49,19 @@ interface PausedView {
  * Pause is display-local `useState` — deliberately not persisted and not in
  * a store: a page switch, reload, or new session (see the render-phase reset
  * below) always starts live, per the spec's "pausing is never a dead end".
+ *
+ * The time window (issue #50, UI audit CH2) is a view, never a filter: the
+ * selector only changes the x-axis span handed to the subplots; the History
+ * Buffer keeps retaining the longest option (`RETENTION_MS`) and the Samples
+ * handed down are identical at every setting, so switching windows can never
+ * drop or fabricate a Sample. Like Pause it is display-local `useState` —
+ * the Series selection stays the one piece of Charts state the spec
+ * persists (see `chartSelectionStore`).
  */
+
+/** Selectable x-axis spans; the longest IS the buffer's retention window, so every option is fully backed by retained Samples. */
+const WINDOW_OPTIONS_SEC = [5, 10, 30, RETENTION_MS / 1000] as const
+
 export function ChartsPage() {
   const { t } = useTranslation()
   const phase = useConnectionStore((s) => s.phase)
@@ -59,6 +71,7 @@ export function ChartsPage() {
   const toggleSeries = useChartSelectionStore((s) => s.toggleSeries)
 
   const [pausedView, setPausedView] = useState<PausedView | null>(null)
+  const [windowSec, setWindowSec] = useState<number>(RETENTION_MS / 1000)
   // "Adjusting state when a prop changes" (same pattern as useTelemetry): a
   // new session identity — reconnect — snaps the display back to live, so a
   // pause can never show a previous session's frozen data as if current.
@@ -117,23 +130,42 @@ export function ChartsPage() {
   }
 
   return (
-    <div className="px-5 pb-6 pt-[18px]">
+    <div className="flex min-h-full flex-col px-5 pb-6 pt-[18px]">
       <div className="mb-3.5 flex items-baseline justify-between">
         <span className="flex items-center gap-2.5">
           <span className="font-heading text-[19px] font-bold text-nvx-text">{t('nav.charts')}</span>
           <OfflineChip active={offline} label={t(hasHistory ? 'charts.offlineFrozen' : 'charts.offline')} />
         </span>
-        <button
-          type="button"
-          onClick={togglePause}
-          className={`rounded-[10px] border px-3.5 py-1.5 text-[12px] font-bold ${
-            pausedView !== null
-              ? 'border-nvx-warningBorder bg-nvx-warningSoft text-nvx-warningText'
-              : 'border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
-          }`}
-        >
-          {t(pausedView !== null ? 'charts.resume' : 'charts.pause')}
-        </button>
+        <span className="flex items-center gap-2">
+          <span role="group" aria-label={t('charts.windowLabel')} className="flex gap-1">
+            {WINDOW_OPTIONS_SEC.map((sec) => (
+              <button
+                key={sec}
+                type="button"
+                onClick={() => setWindowSec(sec)}
+                aria-pressed={sec === windowSec}
+                className={`rounded-[10px] border px-2.5 py-1.5 font-mono text-[11.5px] font-bold ${
+                  sec === windowSec
+                    ? 'border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText'
+                    : 'border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
+                }`}
+              >
+                {t('charts.windowSeconds', { s: sec })}
+              </button>
+            ))}
+          </span>
+          <button
+            type="button"
+            onClick={togglePause}
+            className={`rounded-[10px] border px-3.5 py-1.5 text-[12px] font-bold ${
+              pausedView !== null
+                ? 'border-nvx-warningBorder bg-nvx-warningSoft text-nvx-warningText'
+                : 'border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
+            }`}
+          >
+            {t(pausedView !== null ? 'charts.resume' : 'charts.pause')}
+          </button>
+        </span>
       </div>
 
       <SeriesPicker
@@ -144,7 +176,9 @@ export function ChartsPage() {
       />
 
       {groups.length === 0 ? (
-        <div className="rounded-xl border border-nvx-border bg-white px-5 py-10 text-center shadow-card">
+        // `flex-1` so the hint fills the space the subplots would (CH4's "no
+        // page-level dead space" applies to the empty selection too).
+        <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-nvx-border bg-white px-5 py-10 text-center shadow-card">
           <div className="font-heading text-[15px] font-bold text-nvx-text">{t('charts.emptyTitle')}</div>
           <div className="mt-1.5 text-[13px] text-nvx-muted">{t('charts.emptyBody')}</div>
         </div>
@@ -155,7 +189,7 @@ export function ChartsPage() {
             unitGroup={unitGroup}
             series={defs.map((def) => ({ def, samples: displaySamples(def.id) }))}
             windowEndMs={displayWindowEndMs}
-            windowSec={RETENTION_MS / 1000}
+            windowSec={windowSec}
           />
         ))
       )}

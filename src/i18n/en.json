@@ -191,6 +191,8 @@
     "offlineFrozen": "Offline — frozen",
     "awaitingConnection": "Awaiting connection",
     "pickerTitle": "Series",
+    "windowLabel": "Time window",
+    "windowSeconds": "{{s}}s",
     "pause": "Pause",
     "resume": "Resume",
     "emptyTitle": "No Series selected",

@@ -191,6 +191,8 @@
     "offlineFrozen": "オフライン — 停止中",
     "awaitingConnection": "接続待ち",
     "pickerTitle": "系列",
+    "windowLabel": "時間ウィンドウ",
+    "windowSeconds": "{{s}}秒",
     "pause": "一時停止",
     "resume": "再開",
     "emptyTitle": "系列が選択されていません",

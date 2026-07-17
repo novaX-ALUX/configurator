@@ -191,6 +191,8 @@
     "offlineFrozen": "离线 — 已冻结",
     "awaitingConnection": "等待连接",
     "pickerTitle": "数据序列",
+    "windowLabel": "时间窗口",
+    "windowSeconds": "{{s}}秒",
     "pause": "暂停",
     "resume": "继续",
     "emptyTitle": "未选择任何序列",

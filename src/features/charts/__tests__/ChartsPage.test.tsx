@@ -428,6 +428,57 @@ describe('ChartsPage', () => {
     expect(within(picker).queryByText('—')).not.toBeInTheDocument()
   })
 
+  it('window selector (issue #50, CH2): four options 5/10/30/60s, 60s active by default and fed to the subplots', () => {
+    connectedWith(attitudeHistory(3))
+    render(<ChartsPage />)
+
+    const selector = screen.getByRole('group', { name: 'Time window' })
+    expect(within(selector).getAllByRole('button').map((b) => b.textContent)).toEqual(['5s', '10s', '30s', '60s'])
+    expect(within(selector).getByRole('button', { name: '60s' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(selector).getByRole('button', { name: '5s' })).toHaveAttribute('aria-pressed', 'false')
+    expect(hostProps('deg').windowSec).toBe(60)
+  })
+
+  it('switching the window re-scales every subplot without dropping or fabricating Samples', () => {
+    const history = attitudeHistory(3) // newest ts 1200
+    history.append('power.voltage', 1150, 12.6)
+    useChartSelectionStore.setState({ selectedIds: ['attitude.roll', 'power.voltage'] })
+    connectedWith(history)
+    render(<ChartsPage />)
+
+    const before = hostProps('deg')
+    fireEvent.click(screen.getByRole('button', { name: '10s' }))
+
+    // Both subplots now span 10s…
+    expect(hostProps('deg').windowSec).toBe(10)
+    expect(hostProps('V').windowSec).toBe(10)
+    expect(screen.getByRole('button', { name: '10s' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '60s' })).toHaveAttribute('aria-pressed', 'false')
+    // …and the data handed down is exactly what it was: same Samples, same
+    // trailing edge — the window is a view, never a filter.
+    expect(hostProps('deg').series[0].timestampsMs).toEqual(before.series[0].timestampsMs)
+    expect(hostProps('deg').series[0].values).toEqual(before.series[0].values)
+    expect(hostProps('deg').windowEndMs).toBe(before.windowEndMs)
+  })
+
+  it('switching the window while paused keeps the frozen view: same Samples, same window end, new span', () => {
+    const history = attitudeHistory(2) // ts 1000, 1100
+    connectedWith(history)
+    const { rerender } = render(<ChartsPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+    history.append('attitude.roll', 1200, 12)
+    history.append('attitude.pitch', 1200, -3)
+    history.append('attitude.yaw', 1200, 92)
+    fireEvent.click(screen.getByRole('button', { name: '5s' }))
+    rerender(<ChartsPage />)
+
+    const props = hostProps('deg')
+    expect(props.windowSec).toBe(5)
+    expect(props.series[0].timestampsMs).toEqual([1000, 1100]) // still frozen
+    expect(props.windowEndMs).toBe(1100)
+  })
+
   it('offline: selected Series read "—" in the picker — there is no live Snapshot to show', () => {
     useConnectionStore.setState({ phase: 'disconnected', session: null, history: attitudeHistory(2) })
     render(<ChartsPage />)

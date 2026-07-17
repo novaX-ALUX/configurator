@@ -191,6 +191,8 @@
     "offlineFrozen": "오프라인 — 정지됨",
     "awaitingConnection": "연결 대기 중",
     "pickerTitle": "시리즈",
+    "windowLabel": "시간 창",
+    "windowSeconds": "{{s}}초",
     "pause": "일시정지",
     "resume": "재개",
     "emptyTitle": "선택된 시리즈가 없습니다",

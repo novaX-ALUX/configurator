@@ -15,6 +15,12 @@ import { formatTime } from '../../utils/time'
  * plot. Values come from whatever Samples the page hands down, so a paused
  * display freezes the legend along with the traces for free. A `null` value
  * (recorded gap, or nothing at the cursor) reads as '—', never as 0.
+ *
+ * The card is a `flex-1` column (issue #50, UI audit CH4): the page's flex
+ * stack divides the viewport's leftover height equally among the subplots
+ * and each card passes its share down to the chart area, which the host
+ * fills. The chart area's min-height is the floor below which the page
+ * scrolls instead of squishing the plots further.
  */
 
 /**
@@ -47,7 +53,7 @@ export function ChartSubplot({ unitGroup, series, windowEndMs, windowSec }: Char
   const [readout, setReadout] = useState<CursorReadout | null>(null)
 
   return (
-    <div data-testid={`subplot-${unitGroup}`} className="mb-4 rounded-xl border border-nvx-border bg-white p-4 shadow-card last:mb-0">
+    <div data-testid={`subplot-${unitGroup}`} className="mb-4 flex flex-1 flex-col rounded-xl border border-nvx-border bg-white p-4 shadow-card last:mb-0">
       <div className="mb-2 flex items-baseline justify-between">
         <span className="font-mono text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t(`charts.units.${unitGroup}`)}</span>
         {readout !== null && <span className="font-mono text-[10.5px] text-nvx-faint">{formatReadoutTime(readout.tsMs)}</span>}

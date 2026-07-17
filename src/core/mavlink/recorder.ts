@@ -30,7 +30,7 @@
  */
 import type { Telemetry, TelemetryState } from './telemetry'
 
-/** Rolling retention window — fixed at 60s in v1 (spec), not configurable. Exported because the chart window IS the retention window (CONTEXT.md: the buffer "retains the most recent chart window"), so the Charts page derives its x-axis span from this rather than duplicating the constant. */
+/** Rolling retention window — fixed at 60s, not configurable. Exported because retention IS the longest chart window (CONTEXT.md: the buffer "retains the most recent chart window"): the Charts page's window selector (issue #50) tops out at this span rather than duplicating the constant, so every selectable window is fully backed by retained Samples. */
 export const RETENTION_MS = 60_000
 
 export interface Sample {
