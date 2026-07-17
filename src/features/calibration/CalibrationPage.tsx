@@ -1,10 +1,15 @@
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { useAccelCalibration } from './useAccelCalibration'
 import { useCompassCalibration } from './useCompassCalibration'
+import { useRcCalibration } from './useRcCalibration'
+import { useRcCalStagedStore } from './rcCalStagedStore'
 import { AccelCard } from './AccelCard'
 import { CompassCard } from './CompassCard'
+import { RcCalCard } from './RcCalCard'
 import { OrientationNote } from './OrientationNote'
+import { StagedReviewBar } from '../staged/StagedReviewBar'
 
 /**
  * Sensor Calibration page (Task 8.3) -- wires Task 8.1's `AccelCalibration`
@@ -31,6 +36,24 @@ export function CalibrationPage() {
 
   const accel = useAccelCalibration(session, phase)
   const compass = useCompassCalibration(session, paramStore, phase)
+  const rc = useRcCalibration(session, phase)
+
+  const rcPending = useRcCalStagedStore((s) => s.pending)
+  const rcWriteStatus = useRcCalStagedStore((s) => s.writeStatus)
+  const rcWriting = useRcCalStagedStore((s) => s.writing)
+  const rcWriteAll = useRcCalStagedStore((s) => s.writeAll)
+  const rcRevertAll = useRcCalStagedStore((s) => s.revertAll)
+  const rcClearForDisconnect = useRcCalStagedStore((s) => s.clearForDisconnect)
+
+  // A fresh ParamStore (new connect() generation) or its disappearance
+  // (disconnect) clears staged RC-cal edits — they don't survive a session,
+  // same policy and idiom as SetupPage.
+  const prevParamStoreRef = useRef(paramStore)
+  useEffect(() => {
+    if (prevParamStoreRef.current === paramStore) return
+    prevParamStoreRef.current = paramStore
+    rcClearForDisconnect()
+  }, [paramStore, rcClearForDisconnect])
 
   const connected = phase === 'connected'
   // Only the true "nothing has happened yet" case falls back to the generic
@@ -46,7 +69,11 @@ export function CalibrationPage() {
   // board" and hide the compass card right as it was about to reveal
   // whether the write actually landed -- the single most safety-critical
   // moment this feature has.
-  const showEmptyState = !connected && accel.status === 'idle' && compass.status === 'idle'
+  // The RC card joins the same rule: an interrupted latch or any non-idle
+  // wizard state (sampling snapshot frozen by a disconnect, aborted banner,
+  // reviewable results) must keep the connected layout mounted.
+  const showEmptyState =
+    !connected && accel.status === 'idle' && compass.status === 'idle' && rc.snapshot.phase === 'idle' && !rc.interrupted
 
   if (showEmptyState) {
     return (
@@ -85,7 +112,19 @@ export function CalibrationPage() {
         <CompassCard compass={compass} connected={connected} />
       </div>
 
+      <RcCalCard rc={rc} connected={connected} paramStore={paramStore} />
+
       <OrientationNote paramStore={paramStore} />
+
+      {rcPending.size > 0 && (
+        <StagedReviewBar
+          pending={rcPending}
+          writeStatus={rcWriteStatus}
+          writing={rcWriting}
+          onWrite={() => paramStore && void rcWriteAll(paramStore)}
+          onRevert={rcRevertAll}
+        />
+      )}
 
       <div className="mt-3.5 flex items-center gap-1.5 text-[11.5px] text-nvx-faint">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

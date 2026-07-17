@@ -12,6 +12,7 @@ import { encodePayload } from '../../../core/mavlink/encode'
 import { decodePayload } from '../../../core/mavlink/decode'
 import { MavRouter } from '../../../core/mavlink/router'
 import { ParamStore } from '../../../core/mavlink/params'
+import { Telemetry } from '../../../core/mavlink/telemetry'
 import type { MavSession } from '../../../core/mavlink/session'
 
 const COMMAND_LONG_MSGID = 76
@@ -121,7 +122,9 @@ async function connectSession(): Promise<{ transport: MockTransport; paramStore:
   router.start()
   const target = { sysid: 1, compid: 1 }
   const paramStore = new ParamStore(router, target)
-  const session: MavSession = { router, target, paramStore, telemetry: {} as MavSession['telemetry'] }
+  // A real Telemetry (not a stub): the page's RC-calibration hook subscribes
+  // to it on mount (issue #38).
+  const session: MavSession = { router, target, paramStore, telemetry: new Telemetry(router, target) }
   useConnectionStore.setState({ phase: 'connected', session, paramStore })
   return { transport, paramStore, session }
 }
