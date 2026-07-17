@@ -79,6 +79,30 @@ describe('deriveGroup', () => {
   it('falls back to the whole name for a leading underscore, instead of an empty-string group', () => {
     expect(deriveGroup('_FOO_BAR')).toBe('_FOO_BAR')
   })
+
+  it('folds a numbered instance prefix into its base family (issue #22)', () => {
+    expect(deriveGroup('BATT2_CAPACITY')).toBe('BATT')
+    expect(deriveGroup('BATT9_MONITOR')).toBe('BATT')
+    expect(deriveGroup('BARO1_GND_PRESS')).toBe('BARO')
+    expect(deriveGroup('CAM1_TYPE')).toBe('CAM')
+    expect(deriveGroup('FILT8_TYPE')).toBe('FILT')
+    expect(deriveGroup('GPS2_TYPE')).toBe('GPS')
+    expect(deriveGroup('SERVO16_FUNCTION')).toBe('SERVO')
+  })
+
+  it('folds a numbered whole-name fallback too (FLTMODE1 has no underscore)', () => {
+    expect(deriveGroup('FLTMODE1')).toBe('FLTMODE')
+    expect(deriveGroup('FLTMODE6')).toBe('FLTMODE')
+  })
+
+  it('keeps EK2/EK3 apart — the digit names a distinct EKF implementation, not an instance', () => {
+    expect(deriveGroup('EK2_ENABLE')).toBe('EK2')
+    expect(deriveGroup('EK3_SRC1_POSXY')).toBe('EK3')
+  })
+
+  it('never strips down to an empty group name', () => {
+    expect(deriveGroup('123')).toBe('123')
+  })
 })
 
 describe('groupParams', () => {
@@ -97,8 +121,16 @@ describe('groupParams', () => {
   })
 
   it('includes every group present, however many — no top-N cap (PA2 deleted the chip row/GROUP_CHIP_MAX)', () => {
-    const params = Array.from({ length: 30 }, (_, i) => param({ name: `G${i}_X` }))
+    const params = Array.from({ length: 30 }, (_, i) => param({ name: `G${i}A_X` }))
     expect(groupParams(params)).toHaveLength(30)
+  })
+
+  it('merges numbered instances into the base family bucket (issue #22)', () => {
+    const params = [param({ name: 'BATT_MONITOR' }), param({ name: 'BATT2_MONITOR' }), param({ name: 'FLTMODE1' }), param({ name: 'FLTMODE_CH' })]
+    expect(groupParams(params).map((g) => [g.group, g.items.map((p) => p.name)])).toEqual([
+      ['BATT', ['BATT_MONITOR', 'BATT2_MONITOR']],
+      ['FLTMODE', ['FLTMODE1', 'FLTMODE_CH']],
+    ])
   })
 
   it('returns nothing for an empty input, e.g. a search with zero matches', () => {

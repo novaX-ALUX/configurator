@@ -132,15 +132,33 @@ export function wouldLosePrecision(type: number, value: number): boolean {
 }
 
 /**
+ * Families whose trailing digit names a distinct subsystem, not an instance:
+ * EK2_/EK3_ are separate EKF implementations, and a merged "EK" group would
+ * conflate them (issue #22's stated collision case). Everything else numbered
+ * in the ArduPilot param set (BATT2_, BARO1_, SERIAL0_, SR0_, RC1_...) is an
+ * instance of its base family and folds cleanly.
+ */
+const DISTINCT_NUMBERED_FAMILIES = new Set(['EK2', 'EK3'])
+
+/**
  * First `_`-segment of a parameter name (e.g. `ATC_RAT_PIT_P` -> `ATC`); the
  * whole name if there's no `_` at all, or if `_` is the very first character
  * (a leading underscore, e.g. `_FOO_BAR`) — an empty-string group would
  * render as a nameless "_ (N)" section, so that case falls back to the same
  * "no delimiter" behavior as a name with no underscore at all.
+ *
+ * Trailing digits of the segment fold into the base family (`BATT2_CAPACITY`
+ * -> `BATT`, and likewise the no-underscore fallback `FLTMODE1` -> `FLTMODE`)
+ * so numbered instances land in one group instead of dozens of single-item
+ * sections (issue #22) — except the `DISTINCT_NUMBERED_FAMILIES` above, and
+ * never down to an empty string.
  */
 export function deriveGroup(name: string): string {
   const idx = name.indexOf('_')
-  return idx <= 0 ? name : name.slice(0, idx)
+  const prefix = idx <= 0 ? name : name.slice(0, idx)
+  if (DISTINCT_NUMBERED_FAMILIES.has(prefix)) return prefix
+  const base = prefix.replace(/\d+$/, '')
+  return base === '' ? prefix : base
 }
 
 export interface ParamGroup {
