@@ -486,4 +486,104 @@ describe('ChartsPage', () => {
     const picker = screen.getByTestId('series-picker')
     expect(within(picker).getAllByText('—')).toHaveLength(3) // roll, pitch, yaw
   })
+
+  describe('CSV export (issue #51, CH3)', () => {
+    // jsdom has neither createObjectURL nor a navigable anchor click; the
+    // stubs capture the Blob and the anchor's download name instead.
+    let blobs: Blob[]
+    let filenames: string[]
+
+    beforeEach(() => {
+      blobs = []
+      filenames = []
+      URL.createObjectURL = vi.fn((b: Blob) => {
+        blobs.push(b)
+        return 'blob:mock'
+      })
+      URL.revokeObjectURL = vi.fn()
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+        filenames.push(this.download)
+      })
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    /** The captured Blob's text via FileReader (jsdom's Blob has no `.text()`), decoded from raw bytes with the BOM kept — `readAsText` would silently strip it, and the Excel-compat BOM is part of what the tests pin down. */
+    function blobText(blob: Blob): Promise<string> {
+      return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(new TextDecoder('utf-8', { ignoreBOM: true }).decode(reader.result as ArrayBuffer))
+        reader.readAsArrayBuffer(blob)
+      })
+    }
+
+    it('downloads exactly the recorded Samples for the selected Series: real timestamps, null gap as empty cell, headers naming Series and units', async () => {
+      connectedWith(attitudeHistory(2)) // ts 1000: 10/-5/90; ts 1100: 11/-4/null
+      render(<ChartsPage />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+      expect(await blobText(blobs[0])).toBe(
+        '\uFEFF' +
+          'time_iso,time_ms,Roll (deg),Pitch (deg),Yaw (deg)\r\n' +
+          '1970-01-01T00:00:01.000Z,1000,10,-5,90\r\n' +
+          '1970-01-01T00:00:01.100Z,1100,11,-4,\r\n',
+      )
+      // named after the newest exported Sample, and the object URL is released
+      expect(filenames).toEqual(['novax-samples-1970-01-01T00-00-01Z.csv'])
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:mock')
+    })
+
+    it('a selected Series with no recorded Samples contributes no column — the CSV holds only real Samples', async () => {
+      useChartSelectionStore.setState({ selectedIds: ['attitude.roll', 'power.voltage'] })
+      connectedWith(attitudeHistory(2)) // no power Samples ever arrived
+      render(<ChartsPage />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+      const csv = await blobText(blobs[0])
+      expect(csv).toContain('Roll (deg)')
+      expect(csv).not.toContain('Voltage')
+    })
+
+    it('works on the frozen post-disconnect buffer', async () => {
+      useConnectionStore.setState({ phase: 'disconnected', session: null, history: attitudeHistory(2) })
+      render(<ChartsPage />)
+
+      const button = screen.getByRole('button', { name: 'Export CSV' })
+      expect(button).toBeEnabled()
+      fireEvent.click(button)
+      expect(await blobText(blobs[0])).toContain('1970-01-01T00:00:01.100Z,1100,11,-4,')
+    })
+
+    it('while paused, export still reads the History Buffer — the ticket names the buffer, not the frozen display copy', async () => {
+      const history = attitudeHistory(2) // ts 1000, 1100
+      connectedWith(history)
+      const { rerender } = render(<ChartsPage />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+      history.append('attitude.roll', 1200, 12)
+      history.append('attitude.pitch', 1200, -3)
+      history.append('attitude.yaw', 1200, 92)
+      rerender(<ChartsPage />)
+      fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+      expect(await blobText(blobs[0])).toContain('1970-01-01T00:00:01.200Z,1200,12,-3,92')
+      expect(filenames).toEqual(['novax-samples-1970-01-01T00-00-01Z.csv'])
+    })
+
+    it('disabled while there is nothing to export: no history yet, or an empty selection', () => {
+      useConnectionStore.setState({ phase: 'disconnected', session: null, history: new HistoryBuffer() })
+      const { unmount } = render(<ChartsPage />)
+      expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled()
+      unmount()
+
+      useChartSelectionStore.setState({ selectedIds: [] })
+      connectedWith(attitudeHistory(2))
+      render(<ChartsPage />)
+      expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled()
+    })
+  })
 })

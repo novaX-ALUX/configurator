@@ -195,6 +195,7 @@
     "windowSeconds": "{{s}}s",
     "pause": "Pause",
     "resume": "Resume",
+    "exportCsv": "Export CSV",
     "emptyTitle": "No Series selected",
     "emptyBody": "Pick one or more Series above — a chart appears for each unit as soon as something is selected.",
     "blocks": {

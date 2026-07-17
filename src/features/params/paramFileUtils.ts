@@ -1,9 +1,10 @@
 /**
  * `.param` file parsing/serialization and import staging-plan logic (PRD #12
  * §3, issue #16). Pure, DOM-free functions only — the one DOM-touching piece
- * (`downloadParamFile`, the Blob/anchor-click dance) is isolated at the
- * bottom so the parsing/planning logic above it stays trivially unit
- * testable, matching this file's siblings (`paramUtils.ts`).
+ * (`downloadParamFile`, delegating to the shared Blob/anchor-click dance in
+ * `utils/download.ts`) is isolated at the bottom so the parsing/planning
+ * logic above it stays trivially unit testable, matching this file's
+ * siblings (`paramUtils.ts`).
  *
  * **Import never writes.** `planImport` only classifies each parsed line
  * into "stage" or one of three skip reasons — it never calls
@@ -14,6 +15,7 @@
  * differentiator — see that file's module doc).
  */
 import { wouldLosePrecision } from './paramUtils'
+import { downloadTextFile } from '../../utils/download'
 import type { Param } from '../../core/mavlink/params'
 
 export interface ParamFileEntry {
@@ -132,22 +134,7 @@ export function planImport(entries: readonly ParamFileEntry[], current: Readonly
   return plan
 }
 
-/**
- * Triggers a browser "Save As" for `content` as a same-origin, no-network
- * download — the standard Blob + object-URL + synthetic-anchor-click
- * pattern (no library: this is a few lines, not worth a dependency per
- * CLAUDE.md §8). `URL.revokeObjectURL` runs synchronously right after the
- * click dispatch; browsers keep the object URL alive long enough to service
- * the navigation it just triggered, so this doesn't race the download.
- */
+/** Browser "Save As" for a serialized `.param` file — the shared Blob/anchor-click pattern (see `utils/download.ts`), pinned to `text/plain`. */
 export function downloadParamFile(filename: string, content: string): void {
-  const blob = new Blob([content], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  document.body.appendChild(anchor)
-  anchor.click()
-  document.body.removeChild(anchor)
-  URL.revokeObjectURL(url)
+  downloadTextFile(filename, content, 'text/plain')
 }

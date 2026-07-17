@@ -5,6 +5,7 @@ import { RETENTION_MS, type Sample } from '../../core/mavlink/recorder'
 import { useTelemetry } from '../dashboard/useTelemetry'
 import { OfflineChip } from '../../layout/OfflineChip'
 import { ChartSubplot } from './ChartSubplot'
+import { buildSamplesCsv, csvFilename, downloadCsv } from './exportCsv'
 import { SeriesPicker } from './SeriesPicker'
 import { useChartSelectionStore } from './chartSelectionStore'
 import { SERIES_CATALOG, UNIT_GROUP_ORDER } from './seriesCatalog'
@@ -118,6 +119,23 @@ export function ChartsPage() {
     pausedView !== null ? (pausedView.samplesById.get(id) ?? []) : (samplesById.get(id) ?? [])
   const displayWindowEndMs = pausedView !== null ? pausedView.windowEndMs : windowEndMs
 
+  // CSV export (issue #51, CH3): always reads the History Buffer — the
+  // ticket's source of truth — live or frozen, deliberately not the paused
+  // display copy. Read-only: the buffer arrays go into the CSV builder
+  // untouched. Selected Series that never received a Sample contribute no
+  // column, so the file holds only real Samples.
+  const exportable = selectedDefs.some((def) => (samplesById.get(def.id) ?? []).length > 0)
+  const exportCsv = () => {
+    const columns = selectedDefs
+      .map((def) => ({
+        label: t(def.labelKey, def.labelParams),
+        unit: t(`charts.units.${def.unitGroup}`),
+        samples: samplesById.get(def.id) ?? [],
+      }))
+      .filter((c) => c.samples.length > 0)
+    downloadCsv(csvFilename(windowEndMs), buildSamplesCsv(columns))
+  }
+
   const togglePause = () => {
     setPausedView(
       pausedView !== null
@@ -137,6 +155,14 @@ export function ChartsPage() {
           <OfflineChip active={offline} label={t(hasHistory ? 'charts.offlineFrozen' : 'charts.offline')} />
         </span>
         <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={!exportable}
+            className="rounded-[10px] border border-nvx-border bg-white px-3.5 py-1.5 text-[12px] font-bold text-nvx-muted hover:border-nvx-borderStrong disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {t('charts.exportCsv')}
+          </button>
           <span role="group" aria-label={t('charts.windowLabel')} className="flex gap-1">
             {WINDOW_OPTIONS_SEC.map((sec) => (
               <button

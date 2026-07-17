@@ -195,6 +195,7 @@
     "windowSeconds": "{{s}}秒",
     "pause": "一時停止",
     "resume": "再開",
+    "exportCsv": "CSVエクスポート",
     "emptyTitle": "系列が選択されていません",
     "emptyBody": "上で系列を1つ以上選択してください。選択すると単位ごとにチャートが表示されます。",
     "blocks": {

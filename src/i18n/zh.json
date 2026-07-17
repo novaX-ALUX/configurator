@@ -195,6 +195,7 @@
     "windowSeconds": "{{s}}秒",
     "pause": "暂停",
     "resume": "继续",
+    "exportCsv": "导出 CSV",
     "emptyTitle": "未选择任何序列",
     "emptyBody": "在上方选择一个或多个序列，图表会立即按单位分组显示。",
     "blocks": {
