@@ -7,6 +7,7 @@ import { useConnectionStore } from '../../../store/connection'
 import { useChartSelectionStore } from '../chartSelectionStore'
 import { HistoryBuffer } from '../../../core/mavlink/recorder'
 import type { MavSession } from '../../../core/mavlink/session'
+import type { TelemetryState } from '../../../core/mavlink/telemetry'
 
 // jsdom has no canvas, so uPlot cannot render here (issue #3's testing
 // decision): the chart host is stubbed and these tests assert the page's
@@ -35,14 +36,27 @@ afterEach(() => {
   useConnectionStore.setState(initialConnection, true)
 })
 
-/** Minimal double satisfying only what `useTelemetry` reads — same shape DashboardPage.test.tsx's `fakeSession()` documents. */
-function fakeSession(): MavSession {
+/**
+ * Minimal double satisfying only what `useTelemetry` reads — same shape
+ * DashboardPage.test.tsx's `fakeSession()` documents. `state` feeds the
+ * picker's live readout; `subscribers` (when given) captures the
+ * subscription callback so a test can push a later snapshot.
+ */
+function fakeSession(state: TelemetryState = {}, subscribers?: Array<(s: TelemetryState) => void>): MavSession {
   return {
     telemetry: {
-      getState: () => ({}),
-      subscribe: () => () => {},
+      getState: () => state,
+      subscribe: (cb: (s: TelemetryState) => void) => {
+        subscribers?.push(cb)
+        return () => {}
+      },
     },
   } as unknown as MavSession
+}
+
+/** Expands a picker group by its header button ("RC (0/19)" etc.). */
+function expandGroup(name: RegExp): void {
+  fireEvent.click(screen.getByRole('button', { name }))
 }
 
 /** `n` attitude Block updates the way the Recorder writes them: roll/pitch/yaw appended together per update, sharing one receive timestamp. */
@@ -74,8 +88,11 @@ describe('ChartsPage', () => {
 
     render(<ChartsPage />)
 
-    // Picker still renders, all 43 Series still listed.
-    expect(screen.getAllByRole('checkbox')).toHaveLength(43)
+    // Picker still renders: all five Block groups listed, the default
+    // selection's group (Attitude) expanded with its checkboxes disabled.
+    for (const block of [/^Attitude/, /^Power/, /^GPS/, /^RC/, /^Servo/]) {
+      expect(screen.getByRole('button', { name: block })).toBeInTheDocument()
+    }
     expect(screen.getByText('Awaiting connection')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeDisabled()
     // "Offline" (not "— frozen": there's nothing recorded yet).
@@ -120,14 +137,13 @@ describe('ChartsPage', () => {
     }
   })
 
-  it('lists all 43 Series as checkboxes grouped by Block; fix_type is absent', () => {
+  it('lists all 43 Series as checkboxes across the five Block groups once expanded; fix_type is absent', () => {
     connectedWith(attitudeHistory(1))
     render(<ChartsPage />)
 
+    // Attitude (the default selection's group) is already expanded.
+    for (const block of [/^Power/, /^GPS/, /^RC/, /^Servo/]) expandGroup(block)
     expect(screen.getAllByRole('checkbox')).toHaveLength(43)
-    for (const block of ['Attitude', 'Power', 'GPS', 'RC', 'Servo']) {
-      expect(screen.getByText(block)).toBeInTheDocument()
-    }
     // Interpolated labels cover the full RC/servo ranges…
     expect(screen.getByRole('checkbox', { name: 'CH18' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'OUT16' })).toBeInTheDocument()
@@ -192,6 +208,7 @@ describe('ChartsPage', () => {
     render(<ChartsPage />)
 
     expect(screen.queryByTestId('subplot-us')).not.toBeInTheDocument()
+    expandGroup(/^RC/)
     fireEvent.click(screen.getByRole('checkbox', { name: 'CH3' }))
     expect(screen.getByTestId('subplot-us')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: 'CH3' }))
@@ -207,12 +224,16 @@ describe('ChartsPage', () => {
 
     expect(screen.getByText('No Series selected')).toBeInTheDocument()
     expect(screen.queryByTestId('chart-host')).not.toBeInTheDocument()
-    expect(screen.getAllByRole('checkbox')).toHaveLength(43) // still pickable
+    // Still pickable: every group starts collapsed (nothing selected), but
+    // expanding one exposes enabled checkboxes.
+    expandGroup(/^Attitude/)
+    expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeEnabled()
   })
 
   it('selection survives navigating away and back (unmount/remount) and is written to localStorage', () => {
     connectedWith(attitudeHistory(2))
     const { unmount } = render(<ChartsPage />)
+    expandGroup(/^Power/)
     fireEvent.click(screen.getByRole('checkbox', { name: 'Voltage' }))
     unmount()
 
@@ -328,5 +349,90 @@ describe('ChartsPage', () => {
     // can still change which Series are inspected in the frozen buffer.
     expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeEnabled()
     expect(screen.queryByText('Awaiting connection')).not.toBeInTheDocument()
+  })
+
+  it('picker groups holding a selected Series start expanded, the rest collapsed (issue #49 — no more 43-chip wall)', () => {
+    connectedWith(attitudeHistory(1))
+    render(<ChartsPage />)
+
+    expect(screen.getByRole('button', { name: /^Attitude/ })).toHaveAttribute('aria-expanded', 'true')
+    for (const block of [/^Power/, /^GPS/, /^RC/, /^Servo/]) {
+      expect(screen.getByRole('button', { name: block })).toHaveAttribute('aria-expanded', 'false')
+    }
+    // Collapsed groups keep their Series out of the DOM entirely.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3)
+    expect(screen.queryByRole('checkbox', { name: 'CH3' })).not.toBeInTheDocument()
+  })
+
+  it('collapsing a group preserves its selection: the subplot stays, the header count still shows it, re-expanding finds it checked', () => {
+    connectedWith(attitudeHistory(2))
+    render(<ChartsPage />)
+
+    expandGroup(/^RC/)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'CH3' }))
+    expect(screen.getByTestId('subplot-us')).toBeInTheDocument()
+
+    expandGroup(/^RC/) // collapse again
+    expect(screen.queryByRole('checkbox', { name: 'CH3' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('subplot-us')).toBeInTheDocument() // still charted
+    expect(screen.getByRole('button', { name: /^RC/ })).toHaveTextContent('RC (1/19)')
+
+    expandGroup(/^RC/)
+    expect(screen.getByRole('checkbox', { name: 'CH3' })).toBeChecked()
+    // And the persisted store never saw the collapse.
+    expect(JSON.parse(localStorage.getItem('novax.charts.selectedSeries')!)).toContain('rc.ch3')
+  })
+
+  it('each selected Series shows its live Snapshot value (already unit-converted) beside the checkbox; unselected Series show none', () => {
+    useChartSelectionStore.setState({ selectedIds: ['attitude.roll', 'attitude.pitch', 'power.voltage'] })
+    const snapshot: TelemetryState = {
+      attitude: { rollDeg: 12.34, pitchDeg: -4.26, yawDeg: 180.05, ts: 1000 },
+      power: { voltage: 12.61, ts: 1000 },
+    }
+    useConnectionStore.setState({ phase: 'connected', session: fakeSession(snapshot), history: attitudeHistory(1) })
+
+    render(<ChartsPage />)
+    const picker = screen.getByTestId('series-picker')
+
+    // Snapshot values at each Unit Group's display precision, with a unit.
+    expect(within(picker).getByText('12.3')).toBeInTheDocument() // roll, deg → 1 decimal
+    expect(within(picker).getByText('-4.3')).toBeInTheDocument() // pitch, rounded
+    expect(within(picker).getByText('12.61')).toBeInTheDocument() // voltage, V → 2 decimals
+    expect(within(picker).getAllByText('deg')).toHaveLength(2)
+    expect(within(picker).getByText('V')).toBeInTheDocument()
+    // Yaw is unselected — its Snapshot value must not render.
+    expect(within(picker).queryByText('180.1')).not.toBeInTheDocument()
+    // The checkbox's accessible name stays the label alone, without the value.
+    expect(screen.getByRole('checkbox', { name: 'Roll' })).toBeChecked()
+  })
+
+  it('the picker readout is live: a new Snapshot updates it; a Block that never arrived reads as "—"', () => {
+    useChartSelectionStore.setState({ selectedIds: ['power.voltage', 'rc.ch3'] })
+    const subscribers: Array<(s: TelemetryState) => void> = []
+    const first: TelemetryState = { power: { voltage: 12.61, ts: 1000 } }
+    useConnectionStore.setState({ phase: 'connected', session: fakeSession(first, subscribers), history: attitudeHistory(1) })
+
+    render(<ChartsPage />)
+    const picker = screen.getByTestId('series-picker')
+
+    expect(within(picker).getByText('12.61')).toBeInTheDocument()
+    expect(within(picker).getByText('—')).toBeInTheDocument() // rc.ch3: no RC Block yet
+
+    act(() => {
+      subscribers[0]({ power: { voltage: 11.98, ts: 2000 }, rc: { channels: [1500, 1500, 1512], ts: 2000 } })
+    })
+
+    expect(within(picker).getByText('11.98')).toBeInTheDocument()
+    expect(within(picker).queryByText('12.61')).not.toBeInTheDocument()
+    expect(within(picker).getByText('1512')).toBeInTheDocument()
+    expect(within(picker).queryByText('—')).not.toBeInTheDocument()
+  })
+
+  it('offline: selected Series read "—" in the picker — there is no live Snapshot to show', () => {
+    useConnectionStore.setState({ phase: 'disconnected', session: null, history: attitudeHistory(2) })
+    render(<ChartsPage />)
+
+    const picker = screen.getByTestId('series-picker')
+    expect(within(picker).getAllByText('—')).toHaveLength(3) // roll, pitch, yaw
   })
 })

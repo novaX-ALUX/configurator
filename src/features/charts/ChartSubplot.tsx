@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Sample } from '../../core/mavlink/recorder'
 import { ChartHost, type CursorReadout } from './ChartHost'
+import { formatValue } from './formatValue'
 import type { SeriesDef, UnitGroupId } from './seriesCatalog'
 import { formatTime } from '../../utils/time'
 
@@ -27,14 +28,6 @@ const PALETTE = [
   '#2B5CE6', '#1E9E6A', '#D97706', '#DC2626', '#7C3AED',
   '#0891B2', '#DB2777', '#65A30D', '#475569', '#B45309',
 ] as const
-
-/** Display precision per Unit Group — enough to be exact at each unit's real resolution without noise digits (trailing zeros are trimmed by the parseFloat round-trip in formatValue). */
-const GROUP_DECIMALS: Record<UnitGroupId, number> = { deg: 1, V: 2, A: 2, pct: 0, us: 0, count: 1 }
-
-function formatValue(value: number | null, unitGroup: UnitGroupId): string {
-  if (value === null) return '—'
-  return String(parseFloat(value.toFixed(GROUP_DECIMALS[unitGroup])))
-}
 
 /** `HH:MM:SS.mmm` — Samples arrive at up to 10Hz, so the readout needs the sub-second precision the shared `formatTime` (HH:MM:SS) doesn't carry. */
 function formatReadoutTime(tsMs: number): string {

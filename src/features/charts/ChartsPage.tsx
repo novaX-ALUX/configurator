@@ -5,8 +5,9 @@ import { RETENTION_MS, type Sample } from '../../core/mavlink/recorder'
 import { useTelemetry } from '../dashboard/useTelemetry'
 import { OfflineChip } from '../../layout/OfflineChip'
 import { ChartSubplot } from './ChartSubplot'
+import { SeriesPicker } from './SeriesPicker'
 import { useChartSelectionStore } from './chartSelectionStore'
-import { BLOCK_ORDER, SERIES_CATALOG, UNIT_GROUP_ORDER } from './seriesCatalog'
+import { SERIES_CATALOG, UNIT_GROUP_ORDER } from './seriesCatalog'
 
 /**
  * A frozen copy of the display at the moment Pause was clicked (issue #5).
@@ -67,9 +68,10 @@ export function ChartsPage() {
     setPausedView(null)
   }
 
-  // Redraw trigger only — the snapshot itself isn't read; the Recorder has
-  // already turned it into Samples by the time this notification fires.
-  useTelemetry(session)
+  // Doubles as the redraw trigger (the Recorder has already turned the
+  // snapshot into Samples by the time this notification fires) and as the
+  // picker's live readout source (issue #49) — display only, never Samples.
+  const telemetry = useTelemetry(session)
 
   // A Series id only appears once something was appended for it, so key
   // presence is "has history" (the newest Sample is never evicted).
@@ -134,41 +136,12 @@ export function ChartsPage() {
         </button>
       </div>
 
-      <div className="mb-4 rounded-xl border border-nvx-border bg-white p-4 shadow-card">
-        <div className="mb-3 flex items-baseline justify-between">
-          <span className="text-[10.5px] font-extrabold tracking-[.14em] text-nvx-subtle">{t('charts.pickerTitle')}</span>
-          {awaitingConnection && <span className="text-[11px] font-semibold text-nvx-faint">{t('charts.awaitingConnection')}</span>}
-        </div>
-        {BLOCK_ORDER.map((block) => (
-          <div key={block} className="mb-2.5 flex flex-wrap items-baseline gap-1.5 last:mb-0">
-            <span className="w-[72px] shrink-0 text-[11px] font-bold text-nvx-muted">{t(`charts.blocks.${block}`)}</span>
-            {SERIES_CATALOG.filter((def) => def.block === block).map((def) => {
-              const selected = selectedIds.includes(def.id)
-              return (
-                <label
-                  key={def.id}
-                  className={`select-none rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
-                    awaitingConnection
-                      ? 'cursor-not-allowed border-nvx-border bg-white text-nvx-disabled'
-                      : selected
-                        ? 'cursor-pointer border-nvx-primary bg-nvx-primarySoft text-nvx-primarySoftText'
-                        : 'cursor-pointer border-nvx-border bg-white text-nvx-muted hover:border-nvx-borderStrong'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={selected}
-                    disabled={awaitingConnection}
-                    onChange={() => toggleSeries(def.id)}
-                  />
-                  {t(def.labelKey, def.labelParams)}
-                </label>
-              )
-            })}
-          </div>
-        ))}
-      </div>
+      <SeriesPicker
+        selectedIds={selectedIds}
+        toggleSeries={toggleSeries}
+        awaitingConnection={awaitingConnection}
+        telemetry={telemetry}
+      />
 
       {groups.length === 0 ? (
         <div className="rounded-xl border border-nvx-border bg-white px-5 py-10 text-center shadow-card">
