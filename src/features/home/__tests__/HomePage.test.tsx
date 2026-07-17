@@ -7,12 +7,14 @@ import { useNavigationStore } from '../../../store/navigation'
 import { useSetupStore } from '../../setup/setupStore'
 import { useCalibrationProgress } from '../../calibration/calibrationProgress'
 import { useMotorTestStore } from '../../motors/motorTestStore'
+import { useTuningStore } from '../../tuning/tuningStore'
 
 const initialConnection = useConnectionStore.getState()
 const initialNav = useNavigationStore.getState()
 const initialSetup = useSetupStore.getState()
 const initialCalProgress = useCalibrationProgress.getState()
 const initialMotorTest = useMotorTestStore.getState()
+const initialTuning = useTuningStore.getState()
 
 afterEach(() => {
   useConnectionStore.setState(initialConnection, true)
@@ -20,14 +22,15 @@ afterEach(() => {
   useSetupStore.setState(initialSetup, true)
   useCalibrationProgress.setState(initialCalProgress, true)
   useMotorTestStore.setState(initialMotorTest, true)
+  useTuningStore.setState(initialTuning, true)
   vi.restoreAllMocks()
 })
 
 describe('HomePage: guide steps first-class (same derivation as the drawer)', () => {
-  it('shows all 5 steps as "To do" and 0 / 5 on a fresh session', () => {
+  it('shows all 6 steps as "To do" and 0 / 6 on a fresh session', () => {
     render(<HomePage />)
-    expect(screen.getByText('0 / 5')).toBeInTheDocument()
-    expect(screen.getAllByText('To do')).toHaveLength(5)
+    expect(screen.getByText('0 / 6')).toBeInTheDocument()
+    expect(screen.getAllByText('To do')).toHaveLength(6)
     expect(screen.queryByText('Done')).not.toBeInTheDocument()
   })
 
@@ -39,10 +42,10 @@ describe('HomePage: guide steps first-class (same derivation as the drawer)', ()
 
     render(<HomePage />)
 
-    // connect + frameEsc + calibrate done; motorTest + failsafes still to do
-    expect(screen.getByText('3 / 5')).toBeInTheDocument()
+    // connect + frameEsc + calibrate done; motorTest + failsafes + initialTune still to do
+    expect(screen.getByText('3 / 6')).toBeInTheDocument()
     expect(screen.getAllByText('Done')).toHaveLength(3)
-    expect(screen.getAllByText('To do')).toHaveLength(2)
+    expect(screen.getAllByText('To do')).toHaveLength(3)
   })
 
   it('"Open page" on a step switches the active page to that step\'s target', () => {
@@ -85,10 +88,11 @@ describe('HomePage: rescue bypass', () => {
 })
 
 describe('HomePage: bench-side read-only guarantee', () => {
-  it('never touches setupStore/motorTestStore/calibrationProgress state — only reads them', () => {
+  it('never touches setupStore/motorTestStore/calibrationProgress/tuningStore state — only reads them', () => {
     const stageSpy = vi.spyOn(useSetupStore.getState(), 'stage')
     const setPercentSpy = vi.spyOn(useMotorTestStore.getState(), 'setMotorPercent')
     const markAccelSpy = vi.spyOn(useCalibrationProgress.getState(), 'markAccelDone')
+    const stageManySpy = vi.spyOn(useTuningStore.getState(), 'stageMany')
 
     render(<HomePage />)
     for (const btn of screen.getAllByRole('button')) {
@@ -98,5 +102,6 @@ describe('HomePage: bench-side read-only guarantee', () => {
     expect(stageSpy).not.toHaveBeenCalled()
     expect(setPercentSpy).not.toHaveBeenCalled()
     expect(markAccelSpy).not.toHaveBeenCalled()
+    expect(stageManySpy).not.toHaveBeenCalled()
   })
 })

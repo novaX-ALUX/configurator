@@ -12,19 +12,20 @@ function inputs(overrides: Partial<GuideStepInputs> = {}): GuideStepInputs {
     compassApplied: false,
     motorsTested: false,
     fsTouched: false,
+    initialTuneStaged: false,
     ...overrides,
   }
 }
 
 describe('buildGuideSteps', () => {
-  it('returns exactly the 5 steps in the task brief order, with their routing target pages', () => {
+  it('returns exactly the 6 steps in order, with their routing target pages', () => {
     const steps = buildGuideSteps(inputs())
-    expect(steps.map((s) => s.id)).toEqual(['connect', 'frameEsc', 'calibrate', 'motorTest', 'failsafes'])
-    expect(steps.map((s) => s.n)).toEqual([1, 2, 3, 4, 5])
-    expect(steps.map((s) => s.page)).toEqual(['dashboard', 'setup', 'calibration', 'motors', 'setup'])
+    expect(steps.map((s) => s.id)).toEqual(['connect', 'frameEsc', 'calibrate', 'motorTest', 'failsafes', 'initialTune'])
+    expect(steps.map((s) => s.n)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(steps.map((s) => s.page)).toEqual(['dashboard', 'setup', 'calibration', 'motors', 'setup', 'tuning'])
   })
 
-  it('all 5 steps start not-done when every input is false/empty', () => {
+  it('all 6 steps start not-done when every input is false/empty', () => {
     const steps = buildGuideSteps(inputs())
     expect(steps.every((s) => !s.done)).toBe(true)
   })
@@ -104,6 +105,22 @@ describe('buildGuideSteps', () => {
 
     it('routes to the setup page', () => {
       expect(buildGuideSteps(inputs())[4].page).toBe('setup')
+    })
+  })
+
+  describe('step 6 — initial tune', () => {
+    it('done iff tuningStore.initialTuneStaged', () => {
+      expect(buildGuideSteps(inputs({ initialTuneStaged: false }))[5].done).toBe(false)
+      expect(buildGuideSteps(inputs({ initialTuneStaged: true }))[5].done).toBe(true)
+    })
+
+    it('description reflects the todo/done split', () => {
+      expect(buildGuideSteps(inputs({ initialTuneStaged: false }))[5].descKey).toBe('guide.steps.initialTune.descTodo')
+      expect(buildGuideSteps(inputs({ initialTuneStaged: true }))[5].descKey).toBe('guide.steps.initialTune.descDone')
+    })
+
+    it('routes to the tuning page', () => {
+      expect(buildGuideSteps(inputs())[5].page).toBe('tuning')
     })
   })
 

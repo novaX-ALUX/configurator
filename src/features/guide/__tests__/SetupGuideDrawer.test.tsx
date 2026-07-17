@@ -8,6 +8,7 @@ import { useNavigationStore } from '../../../store/navigation'
 import { useSetupStore } from '../../setup/setupStore'
 import { useCalibrationProgress } from '../../calibration/calibrationProgress'
 import { useMotorTestStore } from '../../motors/motorTestStore'
+import { useTuningStore } from '../../tuning/tuningStore'
 import { MockTransport } from '../../../core/transport/mock'
 import { defs } from '../../../core/mavlink/defs'
 import { encodeFrame } from '../../../core/mavlink/frame'
@@ -23,6 +24,7 @@ const initialNav = useNavigationStore.getState()
 const initialSetup = useSetupStore.getState()
 const initialCalProgress = useCalibrationProgress.getState()
 const initialMotorTest = useMotorTestStore.getState()
+const initialTuning = useTuningStore.getState()
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -35,6 +37,7 @@ afterEach(() => {
   useSetupStore.setState(initialSetup, true)
   useCalibrationProgress.setState(initialCalProgress, true)
   useMotorTestStore.setState(initialMotorTest, true)
+  useTuningStore.setState(initialTuning, true)
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -95,11 +98,11 @@ describe('SetupGuideDrawer: open/close', () => {
 })
 
 describe('SetupGuideDrawer: step derivation + progress', () => {
-  it('all 5 steps read as "To do" and 0 / 5 when nothing has happened yet', () => {
+  it('all 6 steps read as "To do" and 0 / 6 when nothing has happened yet', () => {
     act(() => useGuideStore.getState().openGuide())
     render(<SetupGuideDrawer />)
-    expect(screen.getByText('0 / 5')).toBeInTheDocument()
-    expect(screen.getAllByText('To do')).toHaveLength(5)
+    expect(screen.getByText('0 / 6')).toBeInTheDocument()
+    expect(screen.getAllByText('To do')).toHaveLength(6)
     expect(screen.queryByText('Done')).not.toBeInTheDocument()
   })
 
@@ -112,10 +115,10 @@ describe('SetupGuideDrawer: step derivation + progress', () => {
     act(() => useGuideStore.getState().openGuide())
     render(<SetupGuideDrawer />)
 
-    // connect + frameEsc + calibrate done; motorTest + failsafes still to do
-    expect(screen.getByText('3 / 5')).toBeInTheDocument()
+    // connect + frameEsc + calibrate done; motorTest + failsafes + initialTune still to do
+    expect(screen.getByText('3 / 6')).toBeInTheDocument()
     expect(screen.getAllByText('Done')).toHaveLength(3)
-    expect(screen.getAllByText('To do')).toHaveLength(2)
+    expect(screen.getAllByText('To do')).toHaveLength(3)
   })
 
   it('step 3 needs BOTH accelDone and compassApplied — accel alone is not enough', () => {
@@ -123,18 +126,19 @@ describe('SetupGuideDrawer: step derivation + progress', () => {
     act(() => useGuideStore.getState().openGuide())
     render(<SetupGuideDrawer />)
     expect(screen.getByText('Accel done · compass pending')).toBeInTheDocument()
-    expect(screen.getByText('0 / 5')).toBeInTheDocument() // step 3 not counted as done
+    expect(screen.getByText('0 / 6')).toBeInTheDocument() // step 3 not counted as done
   })
 
-  it('all 5 done reaches 5 / 5 with no special terminal/celebration state — just every row green', () => {
+  it('all 6 done reaches 6 / 6 with no special terminal/celebration state — just every row green', () => {
     useConnectionStore.setState({ phase: 'connected' })
     useSetupStore.setState({ frameEscTouched: true, fsTouched: true })
     useCalibrationProgress.setState({ accelDone: true, compassApplied: true })
     useMotorTestStore.setState({ motorsTested: true })
+    useTuningStore.setState({ initialTuneStaged: true })
     act(() => useGuideStore.getState().openGuide())
     render(<SetupGuideDrawer />)
-    expect(screen.getByText('5 / 5')).toBeInTheDocument()
-    expect(screen.getAllByText('Done')).toHaveLength(5)
+    expect(screen.getByText('6 / 6')).toBeInTheDocument()
+    expect(screen.getAllByText('Done')).toHaveLength(6)
   })
 })
 
@@ -148,7 +152,7 @@ describe('SetupGuideDrawer: routing', () => {
     expect(useGuideStore.getState().open).toBe(false)
   })
 
-  it('routes step 2 and step 5 both to setup, step 3 to calibration, step 1 to dashboard', () => {
+  it('routes step 2 and step 5 both to setup, step 3 to calibration, step 1 to dashboard, step 6 to tuning', () => {
     act(() => useGuideStore.getState().openGuide())
     render(<SetupGuideDrawer />)
     let openPageButtons = screen.getAllByRole('button', { name: 'Open page' })
@@ -164,6 +168,11 @@ describe('SetupGuideDrawer: routing', () => {
     openPageButtons = screen.getAllByRole('button', { name: 'Open page' })
     fireEvent.click(openPageButtons[4])
     expect(useNavigationStore.getState().activePage).toBe('setup')
+
+    act(() => useGuideStore.getState().openGuide())
+    openPageButtons = screen.getAllByRole('button', { name: 'Open page' })
+    fireEvent.click(openPageButtons[5])
+    expect(useNavigationStore.getState().activePage).toBe('tuning')
   })
 })
 
@@ -193,10 +202,11 @@ describe('SetupGuideDrawer: read-only guarantee', () => {
     expect(setSpy).not.toHaveBeenCalled()
   })
 
-  it('never touches setupStore/motorTestStore/calibrationProgress state either — only reads them', () => {
+  it('never touches setupStore/motorTestStore/calibrationProgress/tuningStore state either — only reads them', () => {
     const stageSpy = vi.spyOn(useSetupStore.getState(), 'stage')
     const setPercentSpy = vi.spyOn(useMotorTestStore.getState(), 'setMotorPercent')
     const markAccelSpy = vi.spyOn(useCalibrationProgress.getState(), 'markAccelDone')
+    const stageManySpy = vi.spyOn(useTuningStore.getState(), 'stageMany')
 
     act(() => useGuideStore.getState().openGuide())
     render(<SetupGuideDrawer />)
@@ -209,5 +219,6 @@ describe('SetupGuideDrawer: read-only guarantee', () => {
     expect(stageSpy).not.toHaveBeenCalled()
     expect(setPercentSpy).not.toHaveBeenCalled()
     expect(markAccelSpy).not.toHaveBeenCalled()
+    expect(stageManySpy).not.toHaveBeenCalled()
   })
 })

@@ -6,9 +6,10 @@ import { useSetupStore } from '../setup/setupStore'
 import { ESC_PROTOCOL_FIELD, FRAME_FIELD } from '../setup/paramEnums'
 import { useCalibrationProgress } from '../calibration/calibrationProgress'
 import { useMotorTestStore } from '../motors/motorTestStore'
+import { useTuningStore } from '../tuning/tuningStore'
 import { buildGuideSteps, type GuideStep } from './guideSteps'
 
-export const TOTAL_STEPS = 5
+export const TOTAL_STEPS = 6
 
 /** Resolves the board's current frame tile (Setup's `FRAME_CLASS`/`FRAME_TYPE`, Task 7.1) to a translated label, or `null` if not read yet — same lookup `MotorTestPage.tsx`'s `resolveFrameOption` does, just display-only here (never written). */
 function frameLabel(paramStore: ParamStore | null, t: (k: string) => string): string | null {
@@ -26,9 +27,9 @@ function escLabel(paramStore: ParamStore | null, t: (k: string) => string): stri
 }
 
 /**
- * The one live-derivation seam for the guide's 5 steps: gathers every store
+ * The one live-derivation seam for the guide's 6 steps: gathers every store
  * flag `buildGuideSteps` needs (`useConnectionStore`, `useSetupStore`,
- * `useCalibrationProgress`, `useMotorTestStore`), resolves the two
+ * `useCalibrationProgress`, `useMotorTestStore`, `useTuningStore`), resolves the two
  * board-derived labels via `t()`, and re-renders on late-arriving
  * PARAM_VALUEs. Extracted from `SetupGuideDrawer.tsx` for IA T2 (issue #44)
  * so the Home page renders the exact same step states as the drawer —
@@ -44,6 +45,7 @@ export function useGuideSteps(): GuideStep[] {
   const accelDone = useCalibrationProgress((s) => s.accelDone)
   const compassApplied = useCalibrationProgress((s) => s.compassApplied)
   const motorsTested = useMotorTestStore((s) => s.motorsTested)
+  const initialTuneStaged = useTuningStore((s) => s.initialTuneStaged)
 
   // `paramStore.get()` isn't itself reactive to values arriving after this
   // component has already rendered (a passively-received PARAM_VALUE, or a
@@ -65,5 +67,6 @@ export function useGuideSteps(): GuideStep[] {
     compassApplied,
     motorsTested,
     fsTouched,
+    initialTuneStaged,
   })
 }

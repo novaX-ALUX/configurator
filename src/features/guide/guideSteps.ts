@@ -1,7 +1,7 @@
 import type { PageId } from '../../store/navigation'
 
 /**
- * Pure derivation for the Setup Guide drawer's 5 steps (Task 10.1) -- no
+ * Pure derivation for the Setup Guide's 6 steps (Task 10.1) -- no
  * React, no i18n, per the same "pure data + types" split
  * `features/setup/paramEnums.ts` uses. `SetupGuideDrawer.tsx` is the only
  * caller: it reads the live store flags, resolves the two board-derived
@@ -9,16 +9,20 @@ import type { PageId } from '../../store/navigation'
  * `GuideStepInputs`. Every `done` flag below is a plain read of state some
  * other feature already owns (`setupStore`'s `frameEscTouched`/`fsTouched`,
  * `useCalibrationProgress`'s `accelDone`/`compassApplied`,
- * `motorTestStore`'s `motorsTested`, `useConnectionStore`'s `phase`) --
- * nothing here ever calls a setter, stages a param, or sends a command,
- * which is the whole point of a "read-only" guide.
+ * `motorTestStore`'s `motorsTested`, `useConnectionStore`'s `phase`,
+ * `tuningStore`'s `initialTuneStaged`) -- nothing here ever calls a setter,
+ * stages a param, or sends a command, which is the whole point of a
+ * "read-only" guide.
  *
- * Step order and `page` targets are exactly the task brief's ①-⑤: connect ->
- * frame/ESC -> calibrate -> motor test -> failsafes. Note step ② and ⑤ both
- * route to `'setup'` (frame/ESC and failsafes are both fields on the same
- * Setup page) -- not a typo, matches the design mock's own `go` targets.
+ * Step order and `page` targets are the task brief's ①-⑤ (connect ->
+ * frame/ESC -> calibrate -> motor test -> failsafes) plus issue #41's ⑥
+ * initial tune, appended last per ArduPilot's initial-parameters guidance
+ * (the starting tune is the final pre-maiden step, after all bench setup).
+ * Note step ② and ⑤ both route to `'setup'` (frame/ESC and failsafes are
+ * both fields on the same Setup page) -- not a typo, matches the design
+ * mock's own `go` targets.
  *
- * **Known limitation: 4 of 5 `done` flags are session-scoped, not
+ * **Known limitation: 5 of 6 `done` flags are session-scoped, not
  * board-derived.** `frameEscTouched`/`fsTouched` (Task 7.2), `accelDone`/
  * `compassApplied` (`calibrationProgress.ts`), and `motorsTested`
  * (`motorTestStore.ts`) are all plain booleans latched by *this session's*
@@ -35,7 +39,7 @@ import type { PageId } from '../../store/navigation'
  * `COMPASS_OFS_*` non-default, or clearing these flags on a new `session`
  * identity) -- out of scope for Task 10.1.
  */
-export type GuideStepId = 'connect' | 'frameEsc' | 'calibrate' | 'motorTest' | 'failsafes'
+export type GuideStepId = 'connect' | 'frameEsc' | 'calibrate' | 'motorTest' | 'failsafes' | 'initialTune'
 
 export interface GuideStepInputs {
   /** `useConnectionStore().phase === 'connected'`. */
@@ -56,6 +60,8 @@ export interface GuideStepInputs {
   motorsTested: boolean
   /** `setupStore.fsTouched`. */
   fsTouched: boolean
+  /** `tuningStore.initialTuneStaged`. */
+  initialTuneStaged: boolean
 }
 
 export interface GuideStep {
@@ -118,6 +124,15 @@ export function buildGuideSteps(inputs: GuideStepInputs): GuideStep[] {
       page: 'setup',
       done: inputs.fsTouched,
       descKey: 'guide.steps.failsafes.desc',
+      descOptions: {},
+    },
+    {
+      id: 'initialTune',
+      n: 6,
+      titleKey: 'guide.steps.initialTune.title',
+      page: 'tuning',
+      done: inputs.initialTuneStaged,
+      descKey: inputs.initialTuneStaged ? 'guide.steps.initialTune.descDone' : 'guide.steps.initialTune.descTodo',
       descOptions: {},
     },
   ]

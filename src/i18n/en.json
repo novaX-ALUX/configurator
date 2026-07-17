@@ -653,7 +653,7 @@
   "guide": {
     "openButton": "Setup Guide",
     "title": "First-flight Setup Guide",
-    "subtitle": "Five checks between a fresh board and a safe first hover. Progress is tracked for this session — skip anything you've done elsewhere.",
+    "subtitle": "Six checks between a fresh board and a safe first hover. Progress is tracked for this session — skip anything you've done elsewhere.",
     "progress": "{{done}} / {{total}}",
     "close": "Close",
     "skip": "Skip for now",
@@ -686,6 +686,11 @@
       "failsafes": {
         "title": "Failsafes",
         "desc": "RC loss · low battery · GCS loss"
+      },
+      "initialTune": {
+        "title": "Set the initial tune",
+        "descTodo": "Run the initial tune calculator before the first flight",
+        "descDone": "Starting tune staged from the calculator"
       }
     }
   },
