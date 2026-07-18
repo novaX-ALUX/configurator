@@ -104,12 +104,15 @@ const MOTOR_TEST_ORDER_DEFAULT = 0
 const SINGLE_MOTOR_COUNT = 0
 
 /**
- * Hard cap on `throttlePercent`, enforced by `runMotorTest` regardless of
- * caller input — defense-in-depth against a UI slider bug or a direct caller
- * exceeding the intended bench-test range, even though the UI slider (Task
- * 9.3) is already meant to cap at this value.
+ * Upper clamp on `throttlePercent`, enforced by `runMotorTest` regardless of
+ * caller input. 100 is the protocol ceiling (`MOTOR_TEST_THROTTLE_PERCENT`
+ * is "0 ~ 100", module doc point 2), so this is a validity clamp against a
+ * garbage caller value, not a bench cap: issue #59 deliberately opened the
+ * full 0-100% range (the old 30% bench cap is gone), judging the existing
+ * safety model — props-off gate, arming countdown, six-layer stop, idle
+ * timeouts, stall detection — sufficient on its own.
  */
-export const MOTOR_TEST_MAX_PERCENT = 30
+export const MOTOR_TEST_MAX_PERCENT = 100
 
 /**
  * Default `timeoutS` for `runMotorTest` — short on purpose (module doc point

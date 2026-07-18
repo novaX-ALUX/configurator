@@ -141,6 +141,9 @@ afterEach(() => {
   // reactive-field reset.
   useMotorTestStore.getState().confirmProps(false)
   useMotorTestStore.getState().stop('test cleanup')
+  // `spinDurationS` deliberately survives a stop (bench configuration, issue
+  // #59) -- reset it here for the same fresh-start reason as the engine state.
+  useMotorTestStore.getState().setSpinDuration(5)
   useConnectionStore.setState(initialConnectionState, true)
   useNavigationStore.setState(initialNavigationState, true)
   vi.useRealTimers()
@@ -239,13 +242,16 @@ describe('MotorTestPage: safety gating', () => {
     expect(screen.getByRole('slider', { name: 'M1' })).not.toBeDisabled()
   })
 
-  it('moving a slider drives onRenew -> runMotorTest with the value, capped at 30 by the input itself', async () => {
+  it('moving a slider drives onRenew -> runMotorTest with the value; the slider itself spans the full 0-100% range (issue #59)', async () => {
     const { transport } = await connectSession()
     render(<MotorTestPage />)
     await arm()
 
+    const slider = screen.getByRole('slider', { name: 'M2' })
+    expect(slider).toHaveAttribute('max', '100') // the old 30% input cap is gone
+
     transport.sent.length = 0
-    fireEvent.change(screen.getByRole('slider', { name: 'M2' }), { target: { value: '25' } })
+    fireEvent.change(slider, { target: { value: '100' } })
     // Nothing sent yet -- onRenew only fires from the tick loop.
     await tick()
     expect(decodeMotorTestCmds(transport.sent)).toHaveLength(0)
@@ -253,9 +259,35 @@ describe('MotorTestPage: safety gating', () => {
     await advance(400) // default renewMs
     const cmds = decodeMotorTestCmds(transport.sent)
     expect(cmds).toHaveLength(1)
-    expect(cmds[0]).toMatchObject({ command: MAV_CMD_DO_MOTOR_TEST, param1: 2, param3: 25 })
+    expect(cmds[0]).toMatchObject({ command: MAV_CMD_DO_MOTOR_TEST, param1: 2, param3: 100 })
+    // The wire command's own timeout stays the short renewal fail-safe --
+    // full throttle never widens the FC-side stop window.
+    expect(Number(cmds[0].param4)).toBeLessThanOrEqual(1)
     transport.feed(ackFrame())
     await tick()
+  })
+
+  it('the spin-duration input (1-30s) drives the store and the step-3 hint; a long spin outlives the old 5s burst and still auto-stops', async () => {
+    const { transport } = await connectSession()
+    render(<MotorTestPage />)
+    await arm()
+
+    const duration = screen.getByRole('spinbutton', { name: /Spin duration/i })
+    expect(duration).toHaveValue(5) // default = today's spin length
+    fireEvent.change(duration, { target: { value: '8' } })
+    expect(screen.getByText(/8 s no-input/)).toBeInTheDocument() // step-3 hint reflects the live setting
+    expect(useMotorTestStore.getState().spinDurationS).toBe(8)
+
+    fireEvent.change(screen.getByRole('slider', { name: 'M1' }), { target: { value: '100' } })
+    await advance(7800)
+    expect(useMotorTestStore.getState().state).toBe('testing') // past the old 5s window, still spinning
+
+    transport.sent.length = 0
+    await advance(200) // the 8s boundary
+    expect(useMotorTestStore.getState().state).toBe('locked')
+    await settleStopAcks(transport, 4)
+    const stops = decodeMotorTestCmds(transport.sent).filter((c) => c.param3 === 0 && c.param4 === 0)
+    expect(stops.map((c) => c.param1)).toEqual([1, 2, 3, 4])
   })
 })
 

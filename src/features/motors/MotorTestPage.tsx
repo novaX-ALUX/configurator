@@ -42,10 +42,12 @@ interface SafetyProgressProps {
   propsConfirmed: boolean
   countdown: number
   idleLeft: number
+  /** Hands-off spin duration in seconds (issue #59) — the step-3 hint shows the live setting, not a hardcoded 5. */
+  spinDurationS: number
 }
 
 /** The design mock's 3-step safety progress strip above the two-column layout -- purely a read-out of the same `useMotorTestStore` fields `SafetyGate`/the global banners already show, laid out as a compact "1. confirm -> 2. enable -> 3. test" strip. */
-function SafetyProgress({ state, propsConfirmed, countdown, idleLeft }: SafetyProgressProps) {
+function SafetyProgress({ state, propsConfirmed, countdown, idleLeft, spinDurationS }: SafetyProgressProps) {
   const { t } = useTranslation()
   const step2Live = state === 'ready' || state === 'testing'
 
@@ -92,7 +94,7 @@ function SafetyProgress({ state, propsConfirmed, countdown, idleLeft }: SafetyPr
         </span>
         <span className="flex flex-col">
           <span className="text-[12.5px] font-bold text-nvx-text">{t('motors.steps.test')}</span>
-          <span className="text-[11px] text-nvx-faint">{t('motors.steps.testHint', { s: 5 })}</span>
+          <span className="text-[11px] text-nvx-faint">{t('motors.steps.testHint', { s: spinDurationS })}</span>
         </span>
       </div>
     </div>
@@ -147,6 +149,8 @@ export function MotorTestPage() {
   const idleLeft = useMotorTestStore((s) => s.idleLeft)
   const percents = useMotorTestStore((s) => s.percents)
   const sequenceRunning = useMotorTestStore((s) => s.sequenceRunning)
+  const spinDurationS = useMotorTestStore((s) => s.spinDurationS)
+  const setSpinDuration = useMotorTestStore((s) => s.setSpinDuration)
   const confirmProps = useMotorTestStore((s) => s.confirmProps)
   const enable = useMotorTestStore((s) => s.enable)
   const setMotorPercent = useMotorTestStore((s) => s.setMotorPercent)
@@ -293,7 +297,7 @@ export function MotorTestPage() {
           </div>
         )}
 
-        <SafetyProgress state={state} propsConfirmed={propsConfirmed} countdown={countdown} idleLeft={idleLeft} />
+        <SafetyProgress state={state} propsConfirmed={propsConfirmed} countdown={countdown} idleLeft={idleLeft} spinDurationS={spinDurationS} />
 
         <div className="grid grid-cols-2 items-start gap-4">
           <div className="flex flex-col gap-4">
@@ -318,6 +322,8 @@ export function MotorTestPage() {
               onSetPercent={setMotorPercent}
               sequenceRunning={sequenceRunning}
               onRunSequence={() => runSequence(motorCount)}
+              spinDurationS={spinDurationS}
+              onSetSpinDuration={setSpinDuration}
             />
           </div>
         </div>

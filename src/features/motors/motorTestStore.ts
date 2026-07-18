@@ -74,6 +74,20 @@ import type { MavSession } from '../../core/mavlink/session'
 /** Short per-motor-test timeout for renewal commands — comfortably inside `motorSafety.ts`'s own `stallStopMs` default and its documented 0.5-1s renewal window. */
 const RENEW_TIMEOUT_S = 0.6
 
+/**
+ * Issue #59's settable hands-off spin duration: the range the UI accepts and
+ * `setSpinDuration` clamps to, mapped onto `MotorSafety`'s 'testing'
+ * auto-stop window (`setSpinIdleMs`). The default matches the engine's own
+ * 5s default — today's spin length. Deliberately NOT the wire command's
+ * `timeoutS`: renewal commands keep `RENEW_TIMEOUT_S` so the FC still stops
+ * a motor within ~1s if the page dies mid-spin — the renewal stream, not a
+ * long FC-side timeout, is what sustains a 30s spin (see `motorSafety.ts`'s
+ * module doc on the short-timeout renewal model).
+ */
+export const SPIN_DURATION_MIN_S = 1
+export const SPIN_DURATION_MAX_S = 30
+export const DEFAULT_SPIN_DURATION_S = 5
+
 /** Sequence-test throttle and per-motor dwell — design mock's own "Sequence M1→M4 @ 12%". Owned here (not `MotorSliders`) so a stop can cancel it centrally; see module doc. */
 const SEQUENCE_PERCENT = 12
 const SEQUENCE_STEP_MS = 900
@@ -91,6 +105,8 @@ export interface MotorTestState {
   percents: Record<number, number>
   /** True while `runSequence`'s own interval is active. `MotorSliders` reads this instead of owning any timer of its own — see module doc's adversarial-review fix. */
   sequenceRunning: boolean
+  /** Hands-off spin duration in seconds (issue #59): how long a spin runs without input before the safety engine auto-stops it. Clamped to `[SPIN_DURATION_MIN_S, SPIN_DURATION_MAX_S]`. Bench configuration, not spin state — survives a stop (unlike `percents`). */
+  spinDurationS: number
   /**
    * Set the first time any motor is actually driven above 0% this session
    * (via either the manual sliders or the sequence test) — Task 10.1's Setup
@@ -116,6 +132,8 @@ export interface MotorTestState {
   setSessionInfo: (session: MavSession | null, motorCount: number) => void
   confirmProps: (v: boolean) => void
   enable: () => void
+  /** Sets the hands-off spin duration (clamped to 1-30s; non-finite input is a no-op) by moving `MotorSafety`'s 'testing' auto-stop window. Counts as user activity (same rationale as a slider move). Never touches the wire commands' own short renewal timeout — see `SPIN_DURATION_MIN_S`'s doc. */
+  setSpinDuration: (seconds: number) => void
   /** Sets one motor's slider percent (clamped to `[0, MOTOR_TEST_MAX_PERCENT]`), drives `noteActivity`/`setSpinning`, and re-syncs reactive state. The FC command itself is sent by `onRenew` on the next tick, not here. A no-op (does not touch `percents`) unless `state` is currently 'ready'/'testing' — see module doc. */
   setMotorPercent: (motorSeq: number, percent: number) => void
   /**
@@ -177,6 +195,9 @@ export function createMotorTestStore(now: () => number = () => Date.now()) {
 
     const safety = new MotorSafety({
       now,
+      // Explicit rather than relying on the engine's own identical default,
+      // so `spinDurationS` below and the engine's live window can't drift.
+      spinIdleMs: DEFAULT_SPIN_DURATION_S * 1000,
       onStop: () => {
         // Cancel the sequence feeder FIRST, before anything else -- this is
         // the one callback every path into 'locked' funnels through (the six
@@ -221,6 +242,7 @@ export function createMotorTestStore(now: () => number = () => Date.now()) {
       stopLeft: 0,
       percents: {},
       sequenceRunning: false,
+      spinDurationS: DEFAULT_SPIN_DURATION_S,
       motorsTested: false,
 
       setSessionInfo(session, motorCount) {
@@ -236,6 +258,14 @@ export function createMotorTestStore(now: () => number = () => Date.now()) {
       enable() {
         safety.enable()
         set(readSafety())
+      },
+
+      setSpinDuration(seconds) {
+        if (!Number.isFinite(seconds)) return
+        const clamped = Math.min(SPIN_DURATION_MAX_S, Math.max(SPIN_DURATION_MIN_S, seconds))
+        safety.setSpinIdleMs(clamped * 1000)
+        safety.noteActivity()
+        set({ spinDurationS: clamped, ...readSafety() })
       },
 
       setMotorPercent(motorSeq, percent) {

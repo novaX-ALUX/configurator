@@ -357,6 +357,84 @@ describe('MotorSafety', () => {
     })
   })
 
+  describe('setSpinIdleMs (issue #59: settable spin duration)', () => {
+    it('a longer window set at runtime moves the auto-stop boundary — no stop just before it, stop exactly at it', () => {
+      const h = harness()
+      h.safety.setSpinIdleMs(8000)
+      arm(h)
+      h.safety.setSpinning(true, [1])
+
+      tickOverTime(h, 7800)
+      expect(h.safety.state).toBe('testing') // past the old 5s default — the longer window holds the spin
+      expect(h.safety.stopLeft).toBe(200)
+      expect(h.onStop).not.toHaveBeenCalled()
+
+      tickOverTime(h, 200)
+      expect(h.safety.state).toBe('locked')
+      expect(h.onStop).toHaveBeenCalledWith('auto-stop')
+    })
+
+    it('shrinking the window mid-spin below the already-elapsed idle stops on the very next tick', () => {
+      const h = harness()
+      arm(h)
+      h.safety.setSpinning(true, [1])
+
+      tickOverTime(h, 3000)
+      expect(h.safety.state).toBe('testing')
+
+      h.safety.setSpinIdleMs(1000) // less than the 3000ms already idle
+      h.advance(200)
+      h.safety.tick()
+      expect(h.safety.state).toBe('locked')
+      expect(h.onStop).toHaveBeenCalledWith('auto-stop')
+    })
+
+    it('a long (30s) hands-off spin keeps renewing the whole way, then auto-stops exactly at the window — every other layer untouched', () => {
+      const h = harness()
+      h.safety.setSpinIdleMs(30000)
+      arm(h)
+      h.safety.setSpinning(true, [2])
+
+      tickOverTime(h, 29800)
+      expect(h.safety.state).toBe('testing')
+      // Renewals ran the entire spin at the normal cadence (renewMs=400,
+      // page tick 200ms => one renew every other tick) — the long window
+      // never pauses or slows the short-timeout renewal model.
+      expect(h.onRenew.mock.calls.length).toBe(Math.floor(29800 / 400))
+      expect(h.onRenew).toHaveBeenLastCalledWith([2])
+
+      tickOverTime(h, 200)
+      expect(h.safety.state).toBe('locked')
+      expect(h.onStop).toHaveBeenCalledWith('auto-stop')
+    })
+
+    it('does not touch the ready-state idle auto-lock: a long spin window never extends the 30s armed-idle authority', () => {
+      const h = harness()
+      h.safety.setSpinIdleMs(30000)
+      arm(h)
+
+      h.advance(30000) // 'ready' the whole time — idleLockMs still governs
+      h.safety.tick()
+      expect(h.safety.state).toBe('locked')
+      expect(h.onStop).toHaveBeenCalledWith('auto-lock')
+    })
+
+    it('stall detection keeps its authority inside a long spin window: a stalled tick gap stops instead of renewing', () => {
+      const h = harness()
+      h.safety.setSpinIdleMs(30000)
+      arm(h)
+      h.safety.setSpinning(true, [1])
+
+      tickOverTime(h, 2000)
+      expect(h.safety.state).toBe('testing')
+
+      h.advance(2000) // > stallStopMs(1200), far under the 30s spin window
+      h.safety.tick()
+      expect(h.safety.state).toBe('locked')
+      expect(h.onStop).toHaveBeenCalledWith('auto-stop: tick stall detected, outputs may have lapsed')
+    })
+  })
+
   describe('onRenew (short-timeout command renewal while testing)', () => {
     it('fires every renewMs with the current activeMotors while testing', () => {
       const h = harness()

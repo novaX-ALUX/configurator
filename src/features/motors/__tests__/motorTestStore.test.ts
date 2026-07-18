@@ -125,11 +125,26 @@ describe('motorTestStore', () => {
     expect(store.getState().motorsTested).toBe(false)
   })
 
-  describe('the six kill switches all call MotorSafety.stop AND send a real FC stop to every motor', () => {
+  describe('the six kill switches all call MotorSafety.stop AND send a real FC stop to every motor, interrupting a running long full-throttle spin immediately (issue #59)', () => {
     async function assertKillSwitchStops(trigger: (s: MotorTestState & ReturnType<typeof store.getState>) => void): Promise<void> {
       arm()
-      store.getState().setMotorPercent(1, 20)
+      // Issue #59's worst case: a 30s hands-off spin at 100% — every stop
+      // path must interrupt it mid-flight, well past the old 5s window.
+      store.getState().setSpinDuration(30)
+      store.getState().setMotorPercent(1, 100)
       expect(store.getState().state).toBe('testing')
+
+      // Run the spin for 6s of renewed ticks — longer than the old fixed
+      // 5s burst, proving the spin is genuinely still live when the kill
+      // switch fires.
+      for (let i = 0; i < 30; i++) {
+        advance(200)
+        store.getState().tick()
+      }
+      expect(store.getState().state).toBe('testing')
+      // Let the in-flight renewal commands' ACK waits lapse (swallowed
+      // best-effort) so the stop ACKs fed below can't cross-resolve them.
+      await vi.advanceTimersByTimeAsync(1200)
       transport.sent.length = 0
 
       trigger(store.getState() as MotorTestState & ReturnType<typeof store.getState>)
@@ -176,11 +191,11 @@ describe('motorTestStore', () => {
     expect(store.getState().state).toBe('locked')
   })
 
-  it('setMotorPercent moves ready -> testing, and the tick loop renews via runMotorTest with the capped percent', async () => {
+  it('setMotorPercent moves ready -> testing, and the tick loop renews via runMotorTest with the full-range percent (100% reaches the wire, >100 clamps)', async () => {
     arm()
-    store.getState().setMotorPercent(2, 45) // above MOTOR_TEST_MAX_PERCENT (30) -- must clamp
+    store.getState().setMotorPercent(2, 150) // above the 0-100 protocol ceiling -- must clamp to 100, nothing lower
     expect(store.getState().state).toBe('testing')
-    expect(store.getState().percents[2]).toBe(30)
+    expect(store.getState().percents[2]).toBe(100)
 
     // Nothing sent yet -- onRenew only fires from tick(), not from the slider move itself.
     await flush()
@@ -192,8 +207,103 @@ describe('motorTestStore', () => {
 
     const cmds = decodeMotorTestCmds(transport.sent)
     expect(cmds).toHaveLength(1)
-    expect(cmds[0]).toMatchObject({ command: MAV_CMD_DO_MOTOR_TEST, param1: 2, param3: 30 })
+    expect(cmds[0]).toMatchObject({ command: MAV_CMD_DO_MOTOR_TEST, param1: 2, param3: 100 })
     await settleAcks(transport, 1)
+  })
+
+  describe('spin duration (issue #59)', () => {
+    it('defaults to 5s (today\'s spin length) and clamps input to 1-30s, ignoring non-finite values', () => {
+      expect(store.getState().spinDurationS).toBe(5)
+
+      store.getState().setSpinDuration(0)
+      expect(store.getState().spinDurationS).toBe(1)
+
+      store.getState().setSpinDuration(31)
+      expect(store.getState().spinDurationS).toBe(30)
+
+      store.getState().setSpinDuration(Number.NaN)
+      expect(store.getState().spinDurationS).toBe(30) // unchanged -- garbage input is a no-op, never a surprise duration
+    })
+
+    it('a hands-off spin runs for the set duration, then auto-stops with real FC stop commands', async () => {
+      arm()
+      store.getState().setSpinDuration(8)
+      store.getState().setMotorPercent(1, 100)
+
+      for (let i = 0; i < 39; i++) {
+        advance(200)
+        store.getState().tick()
+      }
+      expect(store.getState().state).toBe('testing') // 7.8s in -- past the old 5s burst, still spinning
+
+      await vi.advanceTimersByTimeAsync(1200) // lapse pending renewal ACK waits before feeding stop ACKs
+      transport.sent.length = 0
+      advance(200)
+      store.getState().tick() // 8.0s -- the duration boundary
+      expect(store.getState().state).toBe('locked')
+      expect(store.getState().percents).toEqual({})
+
+      await settleAcks(transport, 4)
+      const cmds = decodeMotorTestCmds(transport.sent)
+      expect(cmds.map((c) => c.param1)).toEqual([1, 2, 3, 4])
+      expect(cmds.every((c) => c.param3 === 0 && c.param4 === 0)).toBe(true)
+    })
+
+    it('renewal commands during a long full-throttle spin still carry the short FC-side fail-safe timeout (param4 <= 1s), never the 30s duration', async () => {
+      arm()
+      store.getState().setSpinDuration(30)
+      store.getState().setMotorPercent(3, 100)
+
+      for (let i = 0; i < 6; i++) {
+        advance(200)
+        store.getState().tick()
+      }
+      await flush()
+
+      const cmds = decodeMotorTestCmds(transport.sent)
+      expect(cmds.length).toBeGreaterThanOrEqual(3) // one renew per 400ms across 1200ms
+      for (const c of cmds) {
+        expect(c).toMatchObject({ param1: 3, param3: 100 })
+        // The wire command's own timeout is the safety fail-safe: if the
+        // page dies mid-spin, the FC stops the motor within this window --
+        // a 30s duration must never widen it.
+        expect(Number(c.param4)).toBeLessThanOrEqual(1)
+        expect(Number(c.param4)).toBeGreaterThan(0)
+      }
+      await vi.advanceTimersByTimeAsync(1200) // let the best-effort renewal ACK waits lapse before teardown
+    })
+
+    it('stall detection keeps its authority inside a long spin: a stalled tick loop stops the spin, duration notwithstanding', async () => {
+      arm()
+      store.getState().setSpinDuration(30)
+      store.getState().setMotorPercent(1, 100)
+
+      for (let i = 0; i < 10; i++) {
+        advance(200)
+        store.getState().tick()
+      }
+      expect(store.getState().state).toBe('testing')
+      await vi.advanceTimersByTimeAsync(1200)
+      transport.sent.length = 0
+
+      advance(2000) // one big gap: > stallStopMs(1200), far under the 30s duration
+      store.getState().tick()
+      expect(store.getState().state).toBe('locked')
+
+      await settleAcks(transport, 4)
+      const cmds = decodeMotorTestCmds(transport.sent)
+      expect(cmds.map((c) => c.param1)).toEqual([1, 2, 3, 4])
+      expect(cmds.every((c) => c.param3 === 0 && c.param4 === 0)).toBe(true)
+    })
+
+    it('the duration setting survives a stop (it is bench configuration, not spin state)', () => {
+      arm()
+      store.getState().setSpinDuration(20)
+      store.getState().setMotorPercent(1, 50)
+      store.getState().stop('STOP pressed')
+      expect(store.getState().percents).toEqual({}) // sliders release to zero...
+      expect(store.getState().spinDurationS).toBe(20) // ...but the configured duration stays
+    })
   })
 
   it('slider disabled/no-op path: moving it back to 0 returns to ready without a stop', () => {

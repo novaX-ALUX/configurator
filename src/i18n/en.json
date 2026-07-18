@@ -643,7 +643,7 @@
     "notConnectedBody": "Connect the flight controller first. And while you're waiting — this is a good moment to take the props off.",
     "connectCta": "Connect flight controller",
     "title": "Motor Test",
-    "titleNote": "Props off · bench only · outputs capped at 30%",
+    "titleNote": "Props off · bench only · full 0–100% throttle",
     "subtitle": "Verify motor order and spin direction against the diagram before first flight.",
     "frameUnknownNote": "Frame not loaded yet — showing Quad X as a placeholder, not your real motor count.",
     "steps": {
@@ -670,7 +670,9 @@
     "sliders": {
       "title": "PER-MOTOR TEST",
       "sequence": "Sequence {{labels}} @ {{pct}}%",
-      "footnote": "Sliders release to zero on any safety event. Output ceiling {{max}}% (MOT_TEST bench cap)."
+      "durationLabel": "Spin duration (s)",
+      "durationHint": "Hands-off auto-stop · {{min}}–{{max}} s",
+      "footnote": "Sliders release to zero on any safety event. Full 0–{{max}}% output range."
     },
     "guide": {
       "title": "Not sure of the wiring order?",

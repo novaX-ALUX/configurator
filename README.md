@@ -14,7 +14,7 @@ The tool talks **MAVLink** over the **Web Serial API** and flashes firmware over
 | **Dashboard** | Live 2D attitude, armed/mode, voltage/current, GPS, RC channels, motor outputs (read-only telemetry) |
 | **Setup** | Frame class/type, ESC protocol, battery monitor, failsafes — staged, reviewed, then written with read-back confirmation |
 | **Calibration** | Accelerometer 6-face + compass, with a **before/after review gate** — no compass parameter is written until you see the diff and confirm |
-| **Motor Test** | Per-motor test + sequence, behind a prop-removal gate, 30% output cap, and six independent kill-switches that each send a real stop to the flight controller |
+| **Motor Test** | Per-motor test + sequence, full 0–100% range with a settable 1–30 s spin, behind a prop-removal gate and six independent kill-switches that each send a real stop to the flight controller |
 | **Parameters** | Full parameter table: search, group, stage edits, diff drawer, batch write with per-row verification |
 | **Firmware** | Online (novaX boards) or local-file flashing; normal driverless serial update + DFU recovery; board-ID and SHA-256 hard gates before any erase |
 | **Console** | STATUSTEXT stream + link stats (debug panel) |

@@ -643,7 +643,7 @@
     "notConnectedBody": "请先连接飞控。等待期间——现在正是把桨叶拆下来的好时机。",
     "connectCta": "连接飞控",
     "title": "电机测试",
-    "titleNote": "拆桨 · 仅限台架 · 输出上限 30%",
+    "titleNote": "拆桨 · 仅限台架 · 输出 0–100% 全量程",
     "subtitle": "首次飞行前,请对照布局图核实电机顺序和转向。",
     "frameUnknownNote": "机架尚未加载 — 当前显示的 Quad X 仅为占位,并非你的真实电机数量。",
     "steps": {
@@ -670,7 +670,9 @@
     "sliders": {
       "title": "逐电机测试",
       "sequence": "顺序测试 {{labels}} @ {{pct}}%",
-      "footnote": "任何安全事件都会使滑块归零。输出上限 {{max}}%(MOT_TEST 台架上限)。"
+      "durationLabel": "旋转持续时间(秒)",
+      "durationHint": "无操作自动停止 · {{min}}–{{max}} 秒",
+      "footnote": "任何安全事件都会使滑块归零。输出范围 0–{{max}}%。"
     },
     "guide": {
       "title": "不确定接线顺序?",

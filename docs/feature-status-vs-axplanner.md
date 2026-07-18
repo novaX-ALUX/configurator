@@ -55,7 +55,7 @@ Do **not** count these as gaps. They are competitive intelligence: the direction
 ## III. Our Advantages (confirmed in both codebases)
 
 - **Write safety**: every param write is read-back verified with float32 precision-loss guard; mag cal uses `autosave=0` + pre-write diff review. axPlanner writes without review and has real bugs: **`FS_THR_ENABLE` enum mismatch** (selecting "RTL" writes 2 = Continue-in-Auto), the `BATT_MONITOR` dropdown is never written, and its embedded setup panels show hardcoded defaults instead of pre-reading current FC values.
-- **Motor test safety**: our 6 kill switches + idle timeouts + stalled-tick detection + 30% hard cap vs. their single "props removed" checkbox with a 50 ms command resend loop while ticked.
+- **Motor test safety**: our prop-removal gate + 6 kill switches + idle timeouts + stalled-tick detection vs. their single "props removed" checkbox with a 50 ms command resend loop while ticked.
 - **Flashing reliability**: both sides have a real bootloader protocol, but we add SHA-256 image verification + board_id hard gate + WebUSB DFU brick recovery — driver-free and install-free.
 - **Code honesty & tests**: no mock data or TODO debt in our source; unit tests + SITL integration tests. Their test suite is 5 files with stale imports, alongside the large placeholder surface documented in §II.
 

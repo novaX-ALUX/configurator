@@ -40,7 +40,7 @@ Benchmark: MicoConfigurator's 11 sidebar pages = Dashboard / Settings / Sensors 
 - Honest messaging + undo when interrupted by a disconnect
 
 ### Motor Test
-- Per-motor test + sequence test (`DO_MOTOR_TEST`, throttle_type=percent, 30% hard cap)
+- Per-motor test + sequence test (`DO_MOTOR_TEST`, throttle_type=percent, full 0–100% range, hands-off spin duration settable 1–30 s)
 - Propeller-removal confirmation gate + arming countdown + **six-layer emergency stop** (window blur / tab hidden / Esc key / leaving the page / revoking prop-removal confirmation / STOP button — each one actually sends a stop command to the flight controller) + two idle timeouts + stall detection
 - Global red/amber safety banner
 - Frame layout diagram (synced with the Setup frame selection) + **manual identification workflow** (test each motor + confirm, without auto-modifying `SERVOx_FUNCTION`)

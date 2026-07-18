@@ -34,10 +34,11 @@
  * >= boundary deterministic regardless of how often the page happens to call
  * `tick()`:
  *  - 'testing' (a motor actually spinning) idle for `spinIdleMs` (default
- *    5s) -> `stop('auto-stop')`. Renewal (`onRenew`) alone does NOT count as
- *    activity — only `noteActivity()`/`setSpinning()` do — so a slider held
- *    with no further input genuinely stops after 5s even though its command
- *    keeps getting renewed underneath.
+ *    5s; settable 1-30s at runtime via `setSpinIdleMs` — issue #59's spin
+ *    duration) -> `stop('auto-stop')`. Renewal (`onRenew`) alone does NOT
+ *    count as activity — only `noteActivity()`/`setSpinning()` do — so a
+ *    slider held with no further input genuinely stops once the window
+ *    elapses even though its command keeps getting renewed underneath.
  *  - 'ready' (armed, outputs enabled, nothing spinning) idle for
  *    `idleLockMs` (default 30s) -> `stop('auto-lock')`.
  *
@@ -54,7 +55,7 @@
  * timeout (0.5-1s, motorTest.ts's `runMotorTest`) is a *safe-fail* — the
  * motor physically stops if it isn't renewed in time. But if the JS thread
  * itself stalls (GC pause, tab backgrounding, debugger breakpoint, ...) for
- * longer than that FC timeout yet still under `spinIdleMs` (5s), a naive
+ * longer than that FC timeout yet still under `spinIdleMs`, a naive
  * `tick()` would see `idle = now - lastAct` still short (the user's last
  * real input may well be recent) and blindly fire `onRenew` again on the
  * next call — silently re-arming a motor that already physically stopped,
@@ -111,7 +112,7 @@ export class MotorSafety {
   private readonly onRenewCb: (activeMotors: readonly number[]) => void
   private readonly countdownMs: number
   private readonly idleLockMs: number
-  private readonly spinIdleMs: number
+  private spinIdleMs: number
   private readonly renewMs: number
   private readonly stallStopMs: number
 
@@ -158,6 +159,20 @@ export class MotorSafety {
 
   get propsConfirmed(): boolean {
     return this._propsConfirmed
+  }
+
+  /**
+   * Sets the 'testing' auto-stop window (issue #59's settable spin duration
+   * — how long a hands-off spin runs before `stop('auto-stop')`). Takes
+   * effect immediately: the next `tick()` measures the same `lastAct`-based
+   * idle against the new window, so shrinking it below the already-elapsed
+   * idle stops on that tick. Only this one window changes — the countdown,
+   * ready-idle auto-lock, renewal cadence, and stall detection all keep
+   * their own authority (a longer spin never extends any of them). Callers
+   * own range/validity clamping (`motorTestStore.ts` clamps to 1-30s).
+   */
+  setSpinIdleMs(ms: number): void {
+    this.spinIdleMs = ms
   }
 
   /** Sets the "props removed" checkbox. Unchecking it (`v === false`) while anything is armed/spinning is one of the six hard kill switches. */

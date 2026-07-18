@@ -110,12 +110,23 @@ describe('motorTest', () => {
       await promise
     })
 
-    it('hard-clamps throttlePercent above MOTOR_TEST_MAX_PERCENT (30) down to 30', async () => {
-      const promise = runMotorTest(session, { motorSeq: 1, throttlePercent: 50, timeoutS: 1 })
+    it('passes full-range throttle through unclamped — 100% reaches the wire (issue #59: no hidden cap in the command path)', async () => {
+      const promise = runMotorTest(session, { motorSeq: 1, throttlePercent: 100, timeoutS: 1 })
+      await flush()
+      const cmds = decodeCommandLongs(transport.sent)
+      expect(cmds[0].param3).toBe(100)
+      expect(MOTOR_TEST_MAX_PERCENT).toBe(100)
+
+      transport.feed(ackFrame({ command: MAV_CMD_DO_MOTOR_TEST, result: MAV_RESULT_ACCEPTED }))
+      await flush()
+      await promise
+    })
+
+    it('hard-clamps throttlePercent above MOTOR_TEST_MAX_PERCENT (100, the protocol ceiling) down to it', async () => {
+      const promise = runMotorTest(session, { motorSeq: 1, throttlePercent: 150, timeoutS: 1 })
       await flush()
       const cmds = decodeCommandLongs(transport.sent)
       expect(cmds[0].param3).toBe(MOTOR_TEST_MAX_PERCENT)
-      expect(MOTOR_TEST_MAX_PERCENT).toBe(30)
 
       transport.feed(ackFrame({ command: MAV_CMD_DO_MOTOR_TEST, result: MAV_RESULT_ACCEPTED }))
       await flush()

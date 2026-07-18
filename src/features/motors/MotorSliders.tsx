@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import type { SafetyState } from './motorSafety'
 import { MOTOR_TEST_MAX_PERCENT } from './motorTest'
+import { SPIN_DURATION_MAX_S, SPIN_DURATION_MIN_S } from './motorTestStore'
 
 /** Sequence test throttle -- design mock's own "Sequence M1→M4 @ 12%", purely for the button's own label copy (the actual value lives in `motorTestStore.ts`, which owns the sequence timer -- see that module's doc for why). */
 const SEQUENCE_PERCENT = 12
@@ -16,10 +17,14 @@ interface MotorSlidersProps {
   onSetPercent: (motorSeq: number, percent: number) => void
   sequenceRunning: boolean
   onRunSequence: () => void
+  /** Hands-off spin duration in seconds (issue #59) -- `motorTestStore.ts`'s `spinDurationS`. */
+  spinDurationS: number
+  /** The store's `setSpinDuration` (clamps to 1-30s itself; this component sends the raw input value). */
+  onSetSpinDuration: (seconds: number) => void
 }
 
 /**
- * Per-motor 0-30% sliders plus the "Sequence M1→Mn @ 12%" button -- both
+ * Per-motor 0-100% sliders plus the "Sequence M1→Mn @ 12%" button -- both
  * disabled unless `state` is 'ready' or 'testing' (the safety gate must be
  * armed first). Every slider move goes through `onSetPercent` --
  * `useMotorTestStore`'s own `setMotorPercent`, which is what actually drives
@@ -38,7 +43,7 @@ interface MotorSlidersProps {
  * atomic step that clears `percents` -- see that module's doc for the full
  * writeup.
  */
-export function MotorSliders({ motorCount, percents, state, onSetPercent, sequenceRunning, onRunSequence }: MotorSlidersProps) {
+export function MotorSliders({ motorCount, percents, state, onSetPercent, sequenceRunning, onRunSequence, spinDurationS, onSetSpinDuration }: MotorSlidersProps) {
   const { t } = useTranslation()
   const disabled = state !== 'ready' && state !== 'testing'
 
@@ -83,7 +88,23 @@ export function MotorSliders({ motorCount, percents, state, onSetPercent, sequen
           )
         })}
       </div>
-      <div className="mt-3.5 flex items-center gap-1.5 text-[11.5px] text-nvx-faint">
+      <div className="mt-3.5 flex items-center gap-2 text-[11.5px]">
+        <label htmlFor="nvx-spin-duration" className="font-bold text-nvx-subtle">
+          {t('motors.sliders.durationLabel')}
+        </label>
+        <input
+          id="nvx-spin-duration"
+          type="number"
+          min={SPIN_DURATION_MIN_S}
+          max={SPIN_DURATION_MAX_S}
+          step={1}
+          value={spinDurationS}
+          onChange={(e) => onSetSpinDuration(Number(e.target.value))}
+          className="w-[60px] rounded-lg border border-nvx-borderStrong bg-white px-2 py-1 text-right font-mono text-[11.5px] font-semibold text-nvx-text"
+        />
+        <span className="text-nvx-faint">{t('motors.sliders.durationHint', { min: SPIN_DURATION_MIN_S, max: SPIN_DURATION_MAX_S })}</span>
+      </div>
+      <div className="mt-2.5 flex items-center gap-1.5 text-[11.5px] text-nvx-faint">
         {t('motors.sliders.footnote', { max: MOTOR_TEST_MAX_PERCENT })}
       </div>
     </section>
