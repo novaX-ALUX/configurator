@@ -5,11 +5,13 @@
  * with readback, per-param `DiffRowStatus`, disconnect invalidation — is
  * `features/staged`'s `createStagedSlice` (issue #33 extracted it from this
  * file so the Tuning page and RC calibration can reuse it); this store
- * composes that slice with the two Setup-specific pieces below.
+ * composes that slice with the Setup-specific pieces below.
  *
  * `stageFrame` stages BOTH `FRAME_CLASS` and `FRAME_TYPE` from a single
  * frame tile pick — never `stage()` for either individually, that's the
- * exact bug the design mock had.
+ * exact bug the design mock had. `stageDroneCanEnable` (issue #55) is the
+ * same idea for the DroneCAN ESC enable chain: one chip pick stages all
+ * three CAN params, atomically.
  *
  * `fsTouched`/`frameEscTouched` are for Task 10's Setup Guide: it needs to
  * detect "did the user actually look at and decide frame/ESC/failsafes"
@@ -24,10 +26,10 @@
  */
 import { create } from 'zustand'
 import { createStagedSlice, stagePatch, type StagedState } from '../staged/stagedStore'
-import { BATT_FS_LOW_FIELD, ESC_PROTOCOL_FIELD, FRAME_FIELD, FS_GCS_FIELD, FS_THROTTLE_FIELD } from './paramEnums'
+import { BATT_FS_LOW_FIELD, DRONECAN_ESC_FIELD, droneCanEscBitmask, ESC_PROTOCOL_FIELD, FRAME_FIELD, FS_GCS_FIELD, FS_THROTTLE_FIELD } from './paramEnums'
 
-/** Frame/ESC params (Task 10 guide step 2) — sourced from `paramEnums.ts` rather than re-listing the literal strings, so this stays in sync if that table ever changes. */
-const FRAME_ESC_PARAMS = new Set<string>([...FRAME_FIELD.params, ESC_PROTOCOL_FIELD.param])
+/** Frame/ESC params (Task 10 guide step 2; issue #55 added the CAN enable chain — staging any CAN enable value counts as deciding the ESC step) — sourced from `paramEnums.ts` rather than re-listing the literal strings, so this stays in sync if that table ever changes. */
+const FRAME_ESC_PARAMS = new Set<string>([...FRAME_FIELD.params, ESC_PROTOCOL_FIELD.param, ...DRONECAN_ESC_FIELD.params])
 /** Failsafe params (Task 10 guide step 5). */
 const FS_PARAMS = new Set<string>([FS_THROTTLE_FIELD.param, BATT_FS_LOW_FIELD.param, FS_GCS_FIELD.param])
 
@@ -43,6 +45,8 @@ export interface SetupState extends StagedState {
   frameEscTouched: boolean
   /** Stages BOTH `FRAME_CLASS` and `FRAME_TYPE` from a single frame tile pick. */
   stageFrame: (frameClass: number, frameType: number, label: string) => void
+  /** Stages the full DroneCAN ESC enable chain — all three `DRONECAN_ESC_FIELD.params`, bitmask derived from the effective frame's `motorCount` — from a single chip pick (issue #55). Never touches `MOT_PWM_TYPE`. */
+  stageDroneCanEnable: (motorCount: number, label: string) => void
 }
 
 export const useSetupStore = create<SetupState>((set, get) => ({
@@ -62,6 +66,18 @@ export const useSetupStore = create<SetupState>((set, get) => ({
       ...stagePatch(s, [
         { param: 'FRAME_CLASS', value: frameClass, label },
         { param: 'FRAME_TYPE', value: frameType, label },
+      ]),
+      frameEscTouched: true,
+    }))
+  },
+
+  stageDroneCanEnable(motorCount, label) {
+    const [driverParam, protocolParam, bitmaskParam] = DRONECAN_ESC_FIELD.params
+    set((s) => ({
+      ...stagePatch(s, [
+        { param: driverParam, value: DRONECAN_ESC_FIELD.driverValue, label },
+        { param: protocolParam, value: DRONECAN_ESC_FIELD.protocolValue, label },
+        { param: bitmaskParam, value: droneCanEscBitmask(motorCount), label },
       ]),
       frameEscTouched: true,
     }))

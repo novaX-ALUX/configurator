@@ -104,6 +104,83 @@ describe('useSetupStore', () => {
     })
   })
 
+  describe('stageDroneCanEnable (issue #55)', () => {
+    it('stages exactly the three CAN enable params with the frame-derived bitmask — MOT_PWM_TYPE untouched', () => {
+      useSetupStore.getState().stageDroneCanEnable(4, 'DroneCAN')
+      const pending = useSetupStore.getState().pending
+      expect(pending.size).toBe(3)
+      expect(pending.get('CAN_P1_DRIVER')).toEqual({ value: 1, label: 'DroneCAN' })
+      expect(pending.get('CAN_D1_PROTOCOL')).toEqual({ value: 1, label: 'DroneCAN' })
+      expect(pending.get('CAN_D1_UC_ESC_BM')).toEqual({ value: 15, label: 'DroneCAN' })
+      expect(pending.has('MOT_PWM_TYPE')).toBe(false)
+    })
+
+    it('re-selecting after a frame change replaces the chain (dedupe: still 3 entries, Hexa bitmask)', () => {
+      useSetupStore.getState().stageDroneCanEnable(4, 'DroneCAN')
+      useSetupStore.getState().stageDroneCanEnable(6, 'DroneCAN')
+      const pending = useSetupStore.getState().pending
+      expect(pending.size).toBe(3)
+      expect(pending.get('CAN_D1_UC_ESC_BM')).toEqual({ value: 63, label: 'DroneCAN' })
+    })
+
+    it('sets frameEscTouched (the guide\'s frame/ESC step), not fsTouched', () => {
+      useSetupStore.getState().stageDroneCanEnable(4, 'DroneCAN')
+      expect(useSetupStore.getState().frameEscTouched).toBe(true)
+      expect(useSetupStore.getState().fsTouched).toBe(false)
+    })
+
+    it('staging a single CAN enable param through generic stage() also sets frameEscTouched', () => {
+      useSetupStore.getState().stage('CAN_D1_UC_ESC_BM', 0, 'CAN ESC output off')
+      expect(useSetupStore.getState().frameEscTouched).toBe(true)
+    })
+
+    it('updates all three params and the touched flag in ONE state update (issue #33 atomicity rule)', () => {
+      const snapshots: Array<{ pendingSize: number; frameEscTouched: boolean }> = []
+      const unsub = useSetupStore.subscribe((s) => snapshots.push({ pendingSize: s.pending.size, frameEscTouched: s.frameEscTouched }))
+      useSetupStore.getState().stageDroneCanEnable(4, 'DroneCAN')
+      unsub()
+      expect(snapshots).toEqual([{ pendingSize: 3, frameEscTouched: true }])
+    })
+
+    it('revertAll discards the staged chain like any other Staged Change', () => {
+      useSetupStore.getState().stageDroneCanEnable(4, 'DroneCAN')
+      useSetupStore.getState().revertAll()
+      expect(useSetupStore.getState().pending.size).toBe(0)
+    })
+
+    it('Apply writes the three params one at a time, each PARAM_SET only after the previous readback verified', async () => {
+      const { transport, paramStore } = await makeConnectedParamStore()
+      await feedAll(transport, [
+        { name: 'CAN_P1_DRIVER', value: 0 },
+        { name: 'CAN_D1_PROTOCOL', value: 1 },
+        { name: 'CAN_D1_UC_ESC_BM', value: 0 },
+      ])
+      useSetupStore.getState().stageDroneCanEnable(4, 'DroneCAN')
+      void useSetupStore.getState().writeAll(paramStore)
+
+      await tick() // CAN_P1_DRIVER's PARAM_SET goes out; the next two wait on its readback
+      expect(transport.sent).toHaveLength(1)
+      expect(useSetupStore.getState().writeStatus.get('CAN_P1_DRIVER')?.kind).toBe('writing')
+
+      transport.feed(paramValueFrame({ name: 'CAN_P1_DRIVER', value: 1, count: 3, index: 0 }))
+      await tick()
+      expect(transport.sent).toHaveLength(2)
+      expect(useSetupStore.getState().writeStatus.get('CAN_P1_DRIVER')?.kind).toBe('ok')
+
+      transport.feed(paramValueFrame({ name: 'CAN_D1_PROTOCOL', value: 1, count: 3, index: 1 }))
+      await tick()
+      expect(transport.sent).toHaveLength(3)
+
+      transport.feed(paramValueFrame({ name: 'CAN_D1_UC_ESC_BM', value: 15, count: 3, index: 2 }))
+      await tick()
+      expect(useSetupStore.getState().writeStatus.get('CAN_D1_UC_ESC_BM')?.kind).toBe('ok')
+
+      await tick(2000) // transient 'ok' display window elapses
+      expect(useSetupStore.getState().pending.size).toBe(0)
+      expect(useSetupStore.getState().writing).toBe(false)
+    })
+  })
+
   describe('touched flags', () => {
     it('staging a frame/ESC param sets frameEscTouched, not fsTouched', () => {
       useSetupStore.getState().stage('MOT_PWM_TYPE', 4, 'DShot150')

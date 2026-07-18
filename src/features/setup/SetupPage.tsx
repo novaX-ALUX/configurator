@@ -4,10 +4,11 @@ import { useConnectionStore } from '../../store/connection'
 import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata, type ParamMetaEntry } from '../../core/paramMetadata'
 import { fetchErrorMessage } from '../params/paramUtils'
 import { useTelemetry } from '../dashboard/useTelemetry'
-import { BATT_CAPACITY_FIELD, BATT_FS_LOW_FIELD, BATT_LOW_VOLT_FIELD, BATT_MONITOR_FIELD, ESC_PROTOCOL_FIELD, FRAME_FIELD, FS_GCS_FIELD, FS_THROTTLE_FIELD } from './paramEnums'
+import { BATT_CAPACITY_FIELD, BATT_FS_LOW_FIELD, BATT_LOW_VOLT_FIELD, BATT_MONITOR_FIELD, DRONECAN_ESC_FIELD, ESC_PROTOCOL_FIELD, FRAME_FIELD, FS_GCS_FIELD, FS_THROTTLE_FIELD, isDroneCanEscActive } from './paramEnums'
 import { activeFlightModeSlot, FLTMODE_CH_PARAM } from './flightModes'
 import { FrameSelector } from './FrameSelector'
 import { EscProtocol } from './EscProtocol'
+import { CanConfig } from './CanConfig'
 import { BatteryMonitor } from './BatteryMonitor'
 import { Failsafes } from './Failsafes'
 import { FlightModes } from './FlightModes'
@@ -40,6 +41,7 @@ export function SetupPage() {
   const writing = useSetupStore((s) => s.writing)
   const stage = useSetupStore((s) => s.stage)
   const stageFrame = useSetupStore((s) => s.stageFrame)
+  const stageDroneCanEnable = useSetupStore((s) => s.stageDroneCanEnable)
   const revertAll = useSetupStore((s) => s.revertAll)
   const writeAll = useSetupStore((s) => s.writeAll)
   const clearForDisconnect = useSetupStore((s) => s.clearForDisconnect)
@@ -55,6 +57,11 @@ export function SetupPage() {
   const [version, setVersion] = useState(0) // bumped on ParamStore.onChange to re-derive effective values from the live cache
   const [discardedNotice, setDiscardedNotice] = useState<number | null>(null)
   const [meta, setMeta] = useState<LoadedParamMetadata | null>(null)
+  // True after a DroneCAN chip click that couldn't stage (no usable frame to
+  // derive the bitmask from) — keeps the CAN card open on its frame-first
+  // prompt. Cleared the moment the DroneCAN path is either satisfied (a
+  // successful stage) or abandoned (a PWM-family pick, a new session).
+  const [canFramePrompt, setCanFramePrompt] = useState(false)
 
   const telemetry = useTelemetry(session)
   const prevParamStoreRef = useRef(paramStore)
@@ -69,6 +76,7 @@ export function SetupPage() {
     setDiscardedNotice(paramStore ? null : discardedCount)
     setLoad(paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' })
     setMeta(null)
+    setCanFramePrompt(false)
     clearForDisconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramStore])
@@ -110,6 +118,25 @@ export function SetupPage() {
   // what's written, and a pending-but-unapplied channel change must not move
   // the highlight before Apply.
   const activeSlot = activeFlightModeSlot(paramStore?.get(FLTMODE_CH_PARAM)?.value, telemetry?.rc?.channels)
+
+  // DroneCAN chip state is derived, not stored (issue #55): effective values
+  // of the three enable-chain params, pending overlay included — a staged
+  // chain flips the chip before anything is written, and Revert flips it back.
+  const [canDriverParam, canProtocolParam, canBitmaskParam] = DRONECAN_ESC_FIELD.params
+  const droneCanActive = isDroneCanEscActive(valueOf(canDriverParam), valueOf(canProtocolParam), valueOf(canBitmaskParam))
+  // Effective frame tile — the Motor Test page's lookup, but with no Quad-X
+  // fallback: staging a bitmask from a guessed frame is exactly the garbage
+  // write the frame-first prompt exists to prevent.
+  const effectiveFrame = FRAME_FIELD.options.find((o) => o.frameClass === valueOf(FRAME_FIELD.params[0]) && o.frameType === valueOf(FRAME_FIELD.params[1]))
+
+  function handleSelectDroneCan(label: string): void {
+    if (effectiveFrame) {
+      stageDroneCanEnable(effectiveFrame.motors.length, label)
+      setCanFramePrompt(false)
+    } else {
+      setCanFramePrompt(true)
+    }
+  }
 
   async function handleLoad(): Promise<void> {
     if (!paramStore) return
@@ -217,7 +244,18 @@ export function SetupPage() {
           frameTypeValue={valueOf(FRAME_FIELD.params[1])}
           onSelect={(opt) => stageFrame(opt.frameClass, opt.frameType, t(opt.labelKey))}
         />
-        <EscProtocol value={valueOf(ESC_PROTOCOL_FIELD.param)} onSelect={(v, label) => stage(ESC_PROTOCOL_FIELD.param, v, label)} />
+        <EscProtocol
+          value={valueOf(ESC_PROTOCOL_FIELD.param)}
+          droneCanActive={droneCanActive}
+          onSelect={(v, label) => {
+            setCanFramePrompt(false) // a PWM-family pick abandons the DroneCAN path — drop the stale prompt
+            stage(ESC_PROTOCOL_FIELD.param, v, label)
+          }}
+          onSelectDroneCan={handleSelectDroneCan}
+        />
+        {(droneCanActive || (canFramePrompt && !effectiveFrame)) && (
+          <CanConfig driver={valueOf(canDriverParam)} protocol={valueOf(canProtocolParam)} bitmask={valueOf(canBitmaskParam)} />
+        )}
         <BatteryMonitor
           monitorValue={valueOf(BATT_MONITOR_FIELD.param)}
           onMonitorChange={(v, label) => stage(BATT_MONITOR_FIELD.param, v, label)}

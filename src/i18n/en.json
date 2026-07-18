@@ -266,7 +266,18 @@
         "oneShot125": "OneShot125",
         "dshot150": "DShot150",
         "dshot300": "DShot300",
-        "dshot600": "DShot600"
+        "dshot600": "DShot600",
+        "droneCan": "DroneCAN"
+      },
+      "can": {
+        "title": "CAN CONFIGURATION",
+        "pickFrameFirst": "Select a frame first — the ESC output bitmask is derived from the frame's motor count. Nothing has been staged.",
+        "driver": "CAN interface",
+        "driverFirst": "First driver",
+        "protocol": "Protocol",
+        "protocolDroneCan": "DroneCAN",
+        "outputs": "ESC outputs",
+        "motorsRange": "Motors 1–{{count}}"
       }
     },
     "battery": {

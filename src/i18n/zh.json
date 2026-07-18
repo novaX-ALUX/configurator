@@ -266,7 +266,18 @@
         "oneShot125": "OneShot125",
         "dshot150": "DShot150",
         "dshot300": "DShot300",
-        "dshot600": "DShot600"
+        "dshot600": "DShot600",
+        "droneCan": "DroneCAN"
+      },
+      "can": {
+        "title": "CAN 配置",
+        "pickFrameFirst": "请先选择机架 — 电调输出位掩码由机架的电机数量推导。尚未暂存任何修改。",
+        "driver": "CAN 接口",
+        "driverFirst": "第一驱动",
+        "protocol": "协议",
+        "protocolDroneCan": "DroneCAN",
+        "outputs": "电调输出",
+        "motorsRange": "电机 1–{{count}}"
       }
     },
     "battery": {

@@ -266,7 +266,18 @@
         "oneShot125": "OneShot125",
         "dshot150": "DShot150",
         "dshot300": "DShot300",
-        "dshot600": "DShot600"
+        "dshot600": "DShot600",
+        "droneCan": "DroneCAN"
+      },
+      "can": {
+        "title": "CAN設定",
+        "pickFrameFirst": "先に機体を選択してください — ESC出力ビットマスクは機体のモーター数から導出されます。まだ何もステージされていません。",
+        "driver": "CANインターフェース",
+        "driverFirst": "第1ドライバ",
+        "protocol": "プロトコル",
+        "protocolDroneCan": "DroneCAN",
+        "outputs": "ESC出力",
+        "motorsRange": "モーター1–{{count}}"
       }
     },
     "battery": {

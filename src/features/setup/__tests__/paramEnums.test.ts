@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   BATT_FS_LOW_FIELD,
   BATT_MONITOR_FIELD,
+  DRONECAN_ESC_FIELD,
+  droneCanEscBitmask,
   ESC_PROTOCOL_FIELD,
   FRAME_FIELD,
   FS_GCS_FIELD,
   FS_THROTTLE_FIELD,
+  isDroneCanEscActive,
   SETUP_FIELDS,
   type EnumFieldMeta,
 } from '../paramEnums'
@@ -140,6 +143,60 @@ describe('FS_GCS_FIELD (FS_GCS_ENABLE)', () => {
   })
 })
 
+describe('DRONECAN_ESC_FIELD (CAN enable chain, issue #55)', () => {
+  it('stages exactly the three on-the-wire CAN enable params, in write order', () => {
+    expect(DRONECAN_ESC_FIELD.params).toEqual(['CAN_P1_DRIVER', 'CAN_D1_PROTOCOL', 'CAN_D1_UC_ESC_BM'])
+  })
+
+  it('uses the firmware-source-verified enable values: driver 1 = First driver, protocol 1 = DroneCAN', () => {
+    // libraries/AP_CANManager/AP_CANIfaceParams.cpp @Values:
+    // 0:Disabled,1:First driver,2:Second driver,3:Third driver — and
+    // AP_CANManager_CANDriver_Params.cpp @Values: 0:Disabled,1:DroneCAN,
+    // 4:PiccoloCAN,... (docs/notes/dronecan-gcs-research-2026-07.md §1,
+    // pinned at ArduPilot 92b0cd7 / Copter 4.6.3-dev).
+    expect(DRONECAN_ESC_FIELD.driverValue).toBe(1)
+    expect(DRONECAN_ESC_FIELD.protocolValue).toBe(1)
+  })
+
+  it('never includes MOT_PWM_TYPE — the DroneCAN chip is not a MOT_PWM_TYPE value (issue #54 decision)', () => {
+    expect(DRONECAN_ESC_FIELD.params).not.toContain('MOT_PWM_TYPE')
+    expect(values(ESC_PROTOCOL_FIELD).length).toBe(5) // the PWM-family chip list itself is untouched
+  })
+})
+
+describe('droneCanEscBitmask', () => {
+  it('sets bits 0..N-1 for an N-motor frame: Quad → 15, Hexa → 63, Octo → 255', () => {
+    expect(droneCanEscBitmask(4)).toBe(0b1111)
+    expect(droneCanEscBitmask(6)).toBe(0b111111)
+    expect(droneCanEscBitmask(8)).toBe(0b11111111)
+  })
+
+  it('derives the correct mask from every frame tile\'s own motor count', () => {
+    const byLabel = Object.fromEntries(FRAME_FIELD.options.map((o) => [o.labelKey, droneCanEscBitmask(o.motors.length)]))
+    expect(byLabel['setup.frame.options.quadX']).toBe(15)
+    expect(byLabel['setup.frame.options.quadPlus']).toBe(15)
+    expect(byLabel['setup.frame.options.hexX']).toBe(63)
+    expect(byLabel['setup.frame.options.octoX']).toBe(255)
+  })
+})
+
+describe('isDroneCanEscActive (derived chip state, issue #55)', () => {
+  it('is active only when driver >= 1 AND protocol == 1 (DroneCAN) AND bitmask != 0', () => {
+    expect(isDroneCanEscActive(1, 1, 15)).toBe(true)
+    expect(isDroneCanEscActive(3, 1, 255)).toBe(true) // any bound driver slot counts, not only "First driver"
+    expect(isDroneCanEscActive(0, 1, 15)).toBe(false) // interface not bound to a driver
+    expect(isDroneCanEscActive(1, 0, 15)).toBe(false) // protocol disabled
+    expect(isDroneCanEscActive(1, 4, 15)).toBe(false) // PiccoloCAN, not DroneCAN
+    expect(isDroneCanEscActive(1, 1, 0)).toBe(false) // no output rides CAN
+  })
+
+  it('treats a param missing from the board (undefined) as not active, never as enabled', () => {
+    expect(isDroneCanEscActive(undefined, 1, 15)).toBe(false)
+    expect(isDroneCanEscActive(1, undefined, 15)).toBe(false)
+    expect(isDroneCanEscActive(1, 1, undefined)).toBe(false)
+  })
+})
+
 describe('data integrity across every enum field', () => {
   const enumFields = SETUP_FIELDS.filter(
     (f): f is EnumFieldMeta => f.controlType === 'enum-dropdown' || f.controlType === 'enum-chips'
@@ -168,12 +225,14 @@ describe('data integrity across every enum field', () => {
     for (const tile of FRAME_FIELD.options) {
       expect(tile.labelKey).toMatch(LABEL_KEY_RE)
     }
+    expect(DRONECAN_ESC_FIELD.chipLabelKey).toMatch(LABEL_KEY_RE)
   })
 
   it('never reuses a labelKey across two different fields', () => {
     const allKeys = [
       ...FRAME_FIELD.options.map((o) => o.labelKey),
       ...enumFields.flatMap((f) => labelKeys(f)),
+      DRONECAN_ESC_FIELD.chipLabelKey,
     ]
     expect(new Set(allKeys).size).toBe(allKeys.length)
   })

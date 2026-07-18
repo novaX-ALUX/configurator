@@ -266,7 +266,18 @@
         "oneShot125": "OneShot125",
         "dshot150": "DShot150",
         "dshot300": "DShot300",
-        "dshot600": "DShot600"
+        "dshot600": "DShot600",
+        "droneCan": "DroneCAN"
+      },
+      "can": {
+        "title": "CAN 구성",
+        "pickFrameFirst": "먼저 기체를 선택하세요 — ESC 출력 비트마스크는 기체의 모터 수에서 도출됩니다. 아직 아무것도 스테이징되지 않았습니다.",
+        "driver": "CAN 인터페이스",
+        "driverFirst": "첫 번째 드라이버",
+        "protocol": "프로토콜",
+        "protocolDroneCan": "DroneCAN",
+        "outputs": "ESC 출력",
+        "motorsRange": "모터 1–{{count}}"
       }
     },
     "battery": {

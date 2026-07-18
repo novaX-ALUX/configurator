@@ -42,6 +42,12 @@ const DEFAULT_SETUP_PARAMS = [
   { name: 'FS_THR_ENABLE', value: 1, type: MAV_PARAM_TYPE_INT32 },
   { name: 'BATT_FS_LOW_ACT', value: 2, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FS_GCS_ENABLE', value: 1, type: MAV_PARAM_TYPE_INT32 },
+  // CAN-capable board at ArduPilot defaults: interface unbound (P1_DRIVER 0),
+  // protocol already DroneCAN (the firmware default), no output rides CAN —
+  // i.e. the DroneCAN chip must read as NOT active (research note §1).
+  { name: 'CAN_P1_DRIVER', value: 0, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'CAN_D1_PROTOCOL', value: 1, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'CAN_D1_UC_ESC_BM', value: 0, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FLTMODE1', value: 0, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FLTMODE2', value: 2, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FLTMODE3', value: 5, type: MAV_PARAM_TYPE_INT32 },
@@ -322,6 +328,130 @@ describe('SetupPage', () => {
       expect(screen.queryByText(/pending — nothing written yet/)).not.toBeInTheDocument()
       // Frame tile falls back to displaying the board's real cached value (Quad X), not a hardcoded default.
       expect(screen.getByRole('button', { name: /Quad X/ })).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
+
+  describe('DroneCAN ESC (issue #55)', () => {
+    /** Board with the full enable chain already active: driver bound, DroneCAN protocol, Quad bitmask. */
+    const CAN_ENABLED_PARAMS = DEFAULT_SETUP_PARAMS.map((p) =>
+      p.name === 'CAN_P1_DRIVER' ? { ...p, value: 1 } : p.name === 'CAN_D1_UC_ESC_BM' ? { ...p, value: 15 } : p,
+    )
+
+    it('renders a DroneCAN chip alongside the PWM-family chips without disturbing their highlight; card stays hidden', async () => {
+      await renderLoaded()
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByRole('button', { name: 'PWM' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.queryByText('CAN CONFIGURATION')).not.toBeInTheDocument()
+    })
+
+    it('a board whose CAN chain is already enabled shows DroneCAN active on connect, with the CAN card revealed', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS)
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByText('CAN CONFIGURATION')).toBeInTheDocument()
+      expect(screen.getByText('First driver')).toBeInTheDocument()
+      expect(screen.getByText('Motors 1–4')).toBeInTheDocument() // bitmask 15 rendered as a motor range, not a raw mask
+    })
+
+    it('a hand-edited non-contiguous bitmask (escape hatch) renders as its raw value, not a motor range', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS.map((p) => (p.name === 'CAN_D1_UC_ESC_BM' ? { ...p, value: 5 } : p))) // 0b101 — outputs 1 and 3
+      expect(screen.getByText('CAN CONFIGURATION')).toBeInTheDocument()
+      expect(screen.queryByText(/Motors 1–/)).not.toBeInTheDocument()
+      expect(screen.getByText('CAN_D1_UC_ESC_BM = 5')).toBeInTheDocument()
+    })
+
+    it('DroneCAN wins the highlight when both the CAN chain and a PWM-family value are configured', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS.map((p) => (p.name === 'MOT_PWM_TYPE' ? { ...p, value: 5 } : p)))
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: 'DShot300' })).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('selecting DroneCAN stages exactly the three enable params, reveals the card, writes nothing (Review Gate)', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+
+      expect(screen.getByText('3 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('CAN_P1_DRIVER → 1')).toBeInTheDocument()
+      expect(screen.getByText('CAN_D1_PROTOCOL → 1')).toBeInTheDocument()
+      expect(screen.getByText('CAN_D1_UC_ESC_BM → 15')).toBeInTheDocument() // board frame is Quad X → bits 0–3
+      expect(screen.queryByText(/MOT_PWM_TYPE →/)).not.toBeInTheDocument() // never touched
+      expect(screen.getByText('CAN CONFIGURATION')).toBeInTheDocument()
+      // Pending values drive the derived state: chip flips active, PWM un-highlights before any write.
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: 'PWM' })).toHaveAttribute('aria-pressed', 'false')
+      expect(useSetupStore.getState().frameEscTouched).toBe(true)
+      expect(transport.sent.map(decodeSent).filter((f) => f.msgid === PARAM_SET_MSGID)).toHaveLength(0)
+    })
+
+    it('derives the bitmask from a staged-but-unapplied frame pick (effective = pending ?? board)', async () => {
+      await renderLoaded()
+      fireEvent.click(screen.getByRole('button', { name: /Octo X/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      expect(screen.getByText('CAN_D1_UC_ESC_BM → 255')).toBeInTheDocument()
+    })
+
+    it('frame-first fallback: with no usable frame, selecting DroneCAN shows the prompt and stages nothing', async () => {
+      // FRAME_CLASS 0 = Undefined — matches no tile, so no motor count to derive a bitmask from.
+      await renderLoaded(DEFAULT_SETUP_PARAMS.map((p) => (p.name === 'FRAME_CLASS' ? { ...p, value: 0 } : p)))
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+
+      expect(screen.getByText(/Select a frame first/)).toBeInTheDocument()
+      expect(screen.queryByText(/pending — nothing written yet/)).not.toBeInTheDocument()
+      expect(useSetupStore.getState().pending.size).toBe(0)
+      expect(useSetupStore.getState().frameEscTouched).toBe(false)
+    })
+
+    it('after picking a frame the prompt clears, and re-selecting DroneCAN stages that frame\'s bitmask', async () => {
+      await renderLoaded(DEFAULT_SETUP_PARAMS.map((p) => (p.name === 'FRAME_CLASS' ? { ...p, value: 0 } : p)))
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      fireEvent.click(screen.getByRole('button', { name: /Hex X/ }))
+      expect(screen.queryByText(/Select a frame first/)).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      expect(screen.getByText('CAN_D1_UC_ESC_BM → 63')).toBeInTheDocument()
+    })
+
+    it('Revert discards the staged chain — chip and card fall back to the board\'s real state', async () => {
+      await renderLoaded()
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
+
+      expect(screen.queryByText(/pending — nothing written yet/)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.queryByText('CAN CONFIGURATION')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'PWM' })).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('Apply writes the three CAN params sequentially with readback, in enable-chain order', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_P1_DRIVER', value: 1, count: 1, index: 0 }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_PROTOCOL', value: 1, count: 1, index: 0 }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_UC_ESC_BM', value: 15, count: 1, index: 0 }))
+      await tick()
+
+      const sets = transport.sent
+        .map(decodeSent)
+        .filter((f) => f.msgid === PARAM_SET_MSGID)
+        .map((f) => f.fields)
+      expect(sets.map((s) => s.param_id)).toEqual(['CAN_P1_DRIVER', 'CAN_D1_PROTOCOL', 'CAN_D1_UC_ESC_BM'])
+      expect(sets.map((s) => s.param_value)).toEqual([1, 1, 15])
+
+      await tick(2000) // transient 'ok' window elapses — all three verified and cleared
+      expect(screen.queryByText(/pending — nothing written yet/)).not.toBeInTheDocument()
+    })
+
+    it('disconnect invalidates the staged CAN chain like any Staged Change', async () => {
+      await renderLoaded()
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      await act(async () => {
+        useConnectionStore.setState({ phase: 'disconnected', paramStore: null })
+      })
+      expect(screen.getByText(/3 unsaved setup change\(s\) were discarded/)).toBeInTheDocument()
+      expect(useSetupStore.getState().pending.size).toBe(0)
     })
   })
 

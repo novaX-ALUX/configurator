@@ -169,6 +169,72 @@ export const ESC_PROTOCOL_FIELD: EnumFieldMeta = {
   ],
 }
 
+/**
+ * The DroneCAN ESC enable chain (issue #55, ADR-0005 P1). Deliberately NOT
+ * an `EnumOption` of `ESC_PROTOCOL_FIELD`: the DroneCAN chip is not a
+ * `MOT_PWM_TYPE` value — its active state is *derived* from the effective
+ * values of these three params (`isDroneCanEscActive`), and selecting it
+ * stages all three (`setupStore.stageDroneCanEnable`). `MOT_PWM_TYPE` is
+ * never touched: CAN ESC output is driven by `SERVOx_FUNCTION` + this
+ * bitmask, independent of the physical pins (wiki-confirmed, research note
+ * §1). Also deliberately not in `SETUP_FIELDS`: that array is the
+ * display-ordered list of standalone cards, while this chip renders inside
+ * `ESC_PROTOCOL_FIELD`'s card and its `CanConfig` card is only
+ * conditionally revealed.
+ *
+ * Values verified against ArduPilot source, same rigor as the fields above
+ * (`docs/notes/dronecan-gcs-research-2026-07.md` §1, pinned at commit
+ * 92b0cd7 / Copter 4.6.3-dev):
+ *
+ * - `CAN_P1_DRIVER` (`libraries/AP_CANManager/AP_CANIfaceParams.cpp`,
+ *   `@Values: 0:Disabled,1:First driver,2:Second driver,3:Third driver`) —
+ *   staged as `driverValue` 1, "First driver".
+ * - `CAN_D1_PROTOCOL`
+ *   (`libraries/AP_CANManager/AP_CANManager_CANDriver_Params.cpp`,
+ *   `@Values: 0:Disabled,1:DroneCAN,4:PiccoloCAN,6:EFI_NWPMU,7:USD1,
+ *   8:KDECAN,...`) — staged as `protocolValue` 1, "DroneCAN".
+ * - `CAN_D1_UC_ESC_BM` (`libraries/AP_DroneCAN/AP_DroneCAN.cpp`) — bitmask,
+ *   bit 0 = output 1 … bit 31 = output 32, selecting which outputs are sent
+ *   as DroneCAN `esc.RawCommand`; staged as `droneCanEscBitmask()` of the
+ *   selected frame's motor count.
+ */
+export interface DroneCanEscFieldMeta {
+  /** CAN configuration card title — the card `SetupPage` reveals when the chain is active or the chip was selected without a frame. */
+  titleKey: string
+  /** The DroneCAN chip's label in the ESC PROTOCOL card's chip row. */
+  chipLabelKey: string
+  /** The three enable-chain params, in the exact order they are staged (and therefore written by `writeAll`). */
+  params: readonly ['CAN_P1_DRIVER', 'CAN_D1_PROTOCOL', 'CAN_D1_UC_ESC_BM']
+  /** Staged into `CAN_P1_DRIVER`: 1 = First driver. */
+  driverValue: number
+  /** Staged into `CAN_D1_PROTOCOL`: 1 = DroneCAN. */
+  protocolValue: number
+}
+
+export const DRONECAN_ESC_FIELD: DroneCanEscFieldMeta = {
+  titleKey: 'setup.esc.can.title',
+  chipLabelKey: 'setup.esc.options.droneCan',
+  params: ['CAN_P1_DRIVER', 'CAN_D1_PROTOCOL', 'CAN_D1_UC_ESC_BM'],
+  driverValue: 1,
+  protocolValue: 1,
+}
+
+/** `CAN_D1_UC_ESC_BM` for an N-motor frame: bits 0..N−1 set (bit 0 = output 1), i.e. Quad → 15, Hexa → 63, Octo → 255. Assumes Motor1..N on outputs 1..N, the same layout `FRAME_FIELD` and the Motor Test page assume. */
+export function droneCanEscBitmask(motorCount: number): number {
+  return (1 << motorCount) - 1
+}
+
+/**
+ * Issue #55's derived-active rule for the DroneCAN chip: effective
+ * `CAN_P1_DRIVER >= 1` (interface bound to any driver slot, not only First)
+ * AND `CAN_D1_PROTOCOL == 1` (DroneCAN) AND `CAN_D1_UC_ESC_BM != 0` (at
+ * least one output rides CAN). `undefined` (param not on the board, or not
+ * read yet) is never active.
+ */
+export function isDroneCanEscActive(driver: number | undefined, protocol: number | undefined, bitmask: number | undefined): boolean {
+  return driver !== undefined && driver >= 1 && protocol === DRONECAN_ESC_FIELD.protocolValue && bitmask !== undefined && bitmask !== 0
+}
+
 export const BATT_MONITOR_FIELD: EnumFieldMeta = {
   id: 'battMonitor',
   controlType: 'enum-dropdown',
