@@ -277,7 +277,12 @@
         "protocol": "协议",
         "protocolDroneCan": "DroneCAN",
         "outputs": "电调输出",
-        "motorsRange": "电机 1–{{count}}"
+        "motorsRange": "电机 1–{{count}}",
+        "stillEnabled": "切换到 {{label}} 仅暂存 MOT_PWM_TYPE — CAN 电调输出仍处于启用状态，直到在此处将其关闭。",
+        "leftoverPwm": "MOT_PWM_TYPE 仍保留着 {{display}} — CAN 链路启用期间，高亮由 DroneCAN 占据。",
+        "servoWarning": "电机输出映射与预期不符：{{params}}。对应的 DroneCAN 通道将保持空白 — 请在完整参数页检查 SERVOx_FUNCTION。不会自动修改任何参数。",
+        "disable": "关闭 CAN 电调输出",
+        "disableHint": "仅暂存 CAN_D1_UC_ESC_BM = 0 — CAN 接口保持启用，供总线上的其他节点使用。"
       }
     },
     "battery": {

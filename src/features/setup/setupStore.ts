@@ -47,6 +47,8 @@ export interface SetupState extends StagedState {
   stageFrame: (frameClass: number, frameType: number, label: string) => void
   /** Stages the full DroneCAN ESC enable chain — all three `DRONECAN_ESC_FIELD.params`, bitmask derived from the effective frame's `motorCount` — from a single chip pick (issue #55). Never touches `MOT_PWM_TYPE`. */
   stageDroneCanEnable: (motorCount: number, label: string) => void
+  /** Stages `CAN_D1_UC_ESC_BM = 0` and nothing else (issue #57): disabling ESC output must leave `CAN_P1_DRIVER`/`CAN_D1_PROTOCOL` alone — the CAN interface may serve other Nodes (P2 discovery, future CAN peripherals). Turning the interface itself off is escape-hatch-only, by design. */
+  stageDroneCanDisable: (label: string) => void
 }
 
 export const useSetupStore = create<SetupState>((set, get) => ({
@@ -81,5 +83,11 @@ export const useSetupStore = create<SetupState>((set, get) => ({
       ]),
       frameEscTouched: true,
     }))
+  },
+
+  stageDroneCanDisable(label) {
+    // Exactly one Staged Change — the bitmask param is in FRAME_ESC_PARAMS,
+    // so the generic stage() also carries the frameEscTouched flag, atomically.
+    get().stage(DRONECAN_ESC_FIELD.params[2], 0, label)
   },
 }))

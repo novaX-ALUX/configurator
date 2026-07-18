@@ -181,6 +181,36 @@ describe('useSetupStore', () => {
     })
   })
 
+  describe('stageDroneCanDisable (issue #57)', () => {
+    it('stages exactly CAN_D1_UC_ESC_BM = 0 — CAN_P1_DRIVER and CAN_D1_PROTOCOL untouched (the interface may serve other Nodes)', () => {
+      useSetupStore.getState().stageDroneCanDisable('Disable CAN ESC output')
+      const pending = useSetupStore.getState().pending
+      expect(pending.size).toBe(1)
+      expect(pending.get('CAN_D1_UC_ESC_BM')).toEqual({ value: 0, label: 'Disable CAN ESC output' })
+      expect(pending.has('CAN_P1_DRIVER')).toBe(false)
+      expect(pending.has('CAN_D1_PROTOCOL')).toBe(false)
+      expect(pending.has('MOT_PWM_TYPE')).toBe(false)
+    })
+
+    it('after a staged enable, disable replaces only the bitmask entry (driver/protocol pendings stay as staged)', () => {
+      useSetupStore.getState().stageDroneCanEnable(4, 'DroneCAN')
+      useSetupStore.getState().stageDroneCanDisable('Disable CAN ESC output')
+      const pending = useSetupStore.getState().pending
+      expect(pending.size).toBe(3)
+      expect(pending.get('CAN_P1_DRIVER')).toEqual({ value: 1, label: 'DroneCAN' })
+      expect(pending.get('CAN_D1_PROTOCOL')).toEqual({ value: 1, label: 'DroneCAN' })
+      expect(pending.get('CAN_D1_UC_ESC_BM')).toEqual({ value: 0, label: 'Disable CAN ESC output' })
+    })
+
+    it('sets frameEscTouched (a CAN enable param is a frame/ESC decision) in the same single state update', () => {
+      const snapshots: Array<{ pendingSize: number; frameEscTouched: boolean }> = []
+      const unsub = useSetupStore.subscribe((s) => snapshots.push({ pendingSize: s.pending.size, frameEscTouched: s.frameEscTouched }))
+      useSetupStore.getState().stageDroneCanDisable('Disable CAN ESC output')
+      unsub()
+      expect(snapshots).toEqual([{ pendingSize: 1, frameEscTouched: true }])
+    })
+  })
+
   describe('touched flags', () => {
     it('staging a frame/ESC param sets frameEscTouched, not fsTouched', () => {
       useSetupStore.getState().stage('MOT_PWM_TYPE', 4, 'DShot150')

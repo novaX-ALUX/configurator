@@ -277,7 +277,12 @@
         "protocol": "Protocol",
         "protocolDroneCan": "DroneCAN",
         "outputs": "ESC outputs",
-        "motorsRange": "Motors 1–{{count}}"
+        "motorsRange": "Motors 1–{{count}}",
+        "stillEnabled": "Switching to {{label}} stages MOT_PWM_TYPE only — CAN ESC output stays enabled until you disable it here.",
+        "leftoverPwm": "MOT_PWM_TYPE still holds {{display}} — DroneCAN wins the highlight while the CAN chain is active.",
+        "servoWarning": "Motor outputs are not mapped as expected: {{params}}. Those DroneCAN slots would stay empty — review SERVOx_FUNCTION in Full Parameters. Nothing is changed automatically.",
+        "disable": "Disable CAN ESC output",
+        "disableHint": "Stages CAN_D1_UC_ESC_BM = 0 only — the CAN interface stays enabled for other Nodes on the bus."
       }
     },
     "battery": {

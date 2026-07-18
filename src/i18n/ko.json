@@ -277,7 +277,12 @@
         "protocol": "프로토콜",
         "protocolDroneCan": "DroneCAN",
         "outputs": "ESC 출력",
-        "motorsRange": "모터 1–{{count}}"
+        "motorsRange": "모터 1–{{count}}",
+        "stillEnabled": "{{label}}(으)로 전환하면 MOT_PWM_TYPE 만 스테이징됩니다 — CAN ESC 출력은 여기서 비활성화할 때까지 계속 활성 상태입니다.",
+        "leftoverPwm": "MOT_PWM_TYPE 에 {{display}} 값이 남아 있습니다 — CAN 체인이 활성화된 동안에는 DroneCAN 이 하이라이트를 가집니다.",
+        "servoWarning": "모터 출력 매핑이 예상과 다릅니다: {{params}}. 해당 DroneCAN 슬롯은 비어 있게 됩니다 — 전체 파라미터 페이지에서 SERVOx_FUNCTION 을 확인하세요. 자동으로 변경되는 것은 없습니다.",
+        "disable": "CAN ESC 출력 비활성화",
+        "disableHint": "CAN_D1_UC_ESC_BM = 0 만 스테이징합니다 — CAN 인터페이스는 버스의 다른 노드를 위해 계속 활성 상태로 유지됩니다."
       }
     },
     "battery": {

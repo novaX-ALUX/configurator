@@ -9,6 +9,8 @@ import {
   FS_GCS_FIELD,
   FS_THROTTLE_FIELD,
   isDroneCanEscActive,
+  motorServoFunction,
+  servoFunctionMismatches,
   SETUP_FIELDS,
   type EnumFieldMeta,
 } from '../paramEnums'
@@ -194,6 +196,56 @@ describe('isDroneCanEscActive (derived chip state, issue #55)', () => {
     expect(isDroneCanEscActive(undefined, 1, 15)).toBe(false)
     expect(isDroneCanEscActive(1, undefined, 15)).toBe(false)
     expect(isDroneCanEscActive(1, 1, undefined)).toBe(false)
+  })
+})
+
+describe('motorServoFunction (issue #57)', () => {
+  it('maps motors 1..8 to k_motor1..k_motor8 = 33..40', () => {
+    // libraries/SRV_Channel/SRV_Channel.h (vendored ArduPilot 92b0cd7 /
+    // Copter 4.6.3): k_motor1=33 … k_motor8=40.
+    expect(motorServoFunction(1)).toBe(33)
+    expect(motorServoFunction(4)).toBe(36)
+    expect(motorServoFunction(8)).toBe(40)
+  })
+
+  it('maps motors 9..12 to k_motor9..k_motor12 = 82..85 — NOT 41..44 (41 is k_motor_tilt)', () => {
+    // The enum jumps: 41 is k_motor_tilt, and k_motor9..12 live at 82..85.
+    // Mirrors SRV_Channels::get_motor_function() (SRV_Channel.h:538-543).
+    expect(motorServoFunction(9)).toBe(82)
+    expect(motorServoFunction(10)).toBe(83)
+    expect(motorServoFunction(11)).toBe(84)
+    expect(motorServoFunction(12)).toBe(85)
+  })
+})
+
+describe('servoFunctionMismatches (issue #57)', () => {
+  /** Effective-value reader over a plain output → function map; unlisted outputs read `undefined`, like a param missing from the board. */
+  function readerOf(map: Record<number, number>): (output: number) => number | undefined {
+    return (output) => map[output]
+  }
+
+  it('returns [] when Motor1..N sit on outputs 1..N (the layout the staged bitmask assumes)', () => {
+    expect(servoFunctionMismatches(4, readerOf({ 1: 33, 2: 34, 3: 35, 4: 36 }))).toEqual([])
+  })
+
+  it('lists the offending SERVOx_FUNCTION params, in output order', () => {
+    // Output 2 carries Disabled (0) and output 4 carries Motor1 — both wrong.
+    expect(servoFunctionMismatches(4, readerOf({ 1: 33, 2: 0, 3: 35, 4: 33 }))).toEqual(['SERVO2_FUNCTION', 'SERVO4_FUNCTION'])
+  })
+
+  it('counts a param the board does not have (undefined) as a mismatch — an unconfirmable mapping is warned about, never assumed fine', () => {
+    expect(servoFunctionMismatches(4, readerOf({ 1: 33, 2: 34, 3: 35 }))).toEqual(['SERVO4_FUNCTION'])
+  })
+
+  it('validates motors 9..12 against 82..85, not a naive 32+N', () => {
+    const twelve: Record<number, number> = {}
+    for (let m = 1; m <= 12; m++) twelve[m] = motorServoFunction(m)
+    expect(servoFunctionMismatches(12, readerOf(twelve))).toEqual([])
+    expect(servoFunctionMismatches(12, readerOf({ ...twelve, 9: 41 }))).toEqual(['SERVO9_FUNCTION']) // 41 = k_motor_tilt, not Motor9
+  })
+
+  it('opts out (returns []) beyond 12 motors — no k_motor function exists past k_motor12 to compare against', () => {
+    expect(servoFunctionMismatches(13, readerOf({}))).toEqual([])
   })
 })
 

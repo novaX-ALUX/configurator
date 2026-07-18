@@ -50,6 +50,16 @@ const DEFAULT_SETUP_PARAMS = [
   { name: 'CAN_P1_DRIVER', value: 0, type: MAV_PARAM_TYPE_INT32 },
   { name: 'CAN_D1_PROTOCOL', value: 1, type: MAV_PARAM_TYPE_INT32 },
   { name: 'CAN_D1_UC_ESC_BM', value: 0, type: MAV_PARAM_TYPE_INT32 },
+  // Quad output mapping (issue #57's servo check): Motor1..4 on outputs 1..4
+  // (k_motor1..4 = 33..36), outputs 5–8 unassigned — a stock quad board.
+  { name: 'SERVO1_FUNCTION', value: 33, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SERVO2_FUNCTION', value: 34, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SERVO3_FUNCTION', value: 35, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SERVO4_FUNCTION', value: 36, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SERVO5_FUNCTION', value: 0, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SERVO6_FUNCTION', value: 0, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SERVO7_FUNCTION', value: 0, type: MAV_PARAM_TYPE_INT32 },
+  { name: 'SERVO8_FUNCTION', value: 0, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FLTMODE1', value: 0, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FLTMODE2', value: 2, type: MAV_PARAM_TYPE_INT32 },
   { name: 'FLTMODE3', value: 5, type: MAV_PARAM_TYPE_INT32 },
@@ -60,6 +70,11 @@ const DEFAULT_SETUP_PARAMS = [
   { name: 'SIMPLE', value: 0, type: MAV_PARAM_TYPE_INT32 },
   { name: 'SUPER_SIMPLE', value: 0, type: MAV_PARAM_TYPE_INT32 },
 ]
+
+/** Board with the full enable chain already active: driver bound, DroneCAN protocol, Quad bitmask (the #55 and #57 describes). */
+const CAN_ENABLED_PARAMS = DEFAULT_SETUP_PARAMS.map((p) =>
+  p.name === 'CAN_P1_DRIVER' ? { ...p, value: 1 } : p.name === 'CAN_D1_UC_ESC_BM' ? { ...p, value: 15 } : p,
+)
 
 /** Mode-name enum shared by all six slots — every name the UI shows must come from here (issue #37: no hardcoded mode names). AutoTune included on purpose: assigning it to a slot is allowed bench-side config (ADR-0002). */
 const FLTMODE_VALUES = [
@@ -340,11 +355,6 @@ describe('SetupPage', () => {
   })
 
   describe('DroneCAN ESC (issue #55)', () => {
-    /** Board with the full enable chain already active: driver bound, DroneCAN protocol, Quad bitmask. */
-    const CAN_ENABLED_PARAMS = DEFAULT_SETUP_PARAMS.map((p) =>
-      p.name === 'CAN_P1_DRIVER' ? { ...p, value: 1 } : p.name === 'CAN_D1_UC_ESC_BM' ? { ...p, value: 15 } : p,
-    )
-
     it('renders a DroneCAN chip alongside the PWM-family chips without disturbing their highlight; card stays hidden', async () => {
       await renderLoaded()
       expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'false')
@@ -460,6 +470,139 @@ describe('SetupPage', () => {
       })
       expect(screen.getByText(/3 unsaved setup change\(s\) were discarded/)).toBeInTheDocument()
       expect(useSetupStore.getState().pending.size).toBe(0)
+    })
+  })
+
+  describe('CAN card disable action and warnings (issue #57)', () => {
+    const STILL_ENABLED_NOTICE = 'Switching to DShot300 stages MOT_PWM_TYPE only — CAN ESC output stays enabled until you disable it here.'
+
+    it('the disable action stages exactly CAN_D1_UC_ESC_BM = 0 — CAN_P1_DRIVER untouched, nothing written (Review Gate)', async () => {
+      const { transport } = await renderLoaded(CAN_ENABLED_PARAMS)
+      fireEvent.click(screen.getByRole('button', { name: 'Disable CAN ESC output' }))
+
+      expect(screen.getByText('1 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('CAN_D1_UC_ESC_BM → 0')).toBeInTheDocument()
+      expect(screen.queryByText(/CAN_P1_DRIVER →/)).not.toBeInTheDocument()
+      expect(transport.sent.map(decodeSent).filter((f) => f.msgid === PARAM_SET_MSGID)).toHaveLength(0)
+      // Pending values drive the derived state: the chip un-highlights and the
+      // card hides before any write; the board's MOT_PWM_TYPE (0) takes the
+      // highlight back. The staged disable stays visible in the review bar.
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.queryByText('CAN CONFIGURATION')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'PWM' })).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('applying a staged disable writes only the bitmask, and never demands a reboot (CAN_D1_UC_ESC_BM is not reboot-required)', async () => {
+      const { transport } = await renderLoaded(CAN_ENABLED_PARAMS)
+      fireEvent.click(screen.getByRole('button', { name: 'Disable CAN ESC output' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_UC_ESC_BM', value: 0, count: 1, index: 0 }))
+      await tick()
+      await tick(2000) // transient 'ok' window elapses
+
+      const sets = transport.sent
+        .map(decodeSent)
+        .filter((f) => f.msgid === PARAM_SET_MSGID)
+        .map((f) => f.fields)
+      expect(sets).toHaveLength(1)
+      expect(sets[0].param_id).toBe('CAN_D1_UC_ESC_BM')
+      expect(sets[0].param_value).toBeCloseTo(0, 5)
+      expect(screen.queryByText(/pending — nothing written yet/)).not.toBeInTheDocument()
+      expect(screen.queryByText('Reboot required for changes to take effect')).not.toBeInTheDocument()
+    })
+
+    it('picking a PWM-family chip while the CAN chain is active stages only MOT_PWM_TYPE and surfaces the still-enabled notice', async () => {
+      const { transport } = await renderLoaded(CAN_ENABLED_PARAMS)
+      fireEvent.click(screen.getByRole('button', { name: 'DShot300' }))
+
+      expect(screen.getByText('1 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('MOT_PWM_TYPE → 5')).toBeInTheDocument()
+      expect(screen.getByText(STILL_ENABLED_NOTICE)).toBeInTheDocument()
+      // The CAN chain is untouched, so DroneCAN still wins the highlight.
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: 'DShot300' })).toHaveAttribute('aria-pressed', 'false')
+      expect(transport.sent.map(decodeSent).filter((f) => f.msgid === PARAM_SET_MSGID)).toHaveLength(0)
+    })
+
+    it('the still-enabled notice is state-derived: Revert clears it along with the staged MOT_PWM_TYPE', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS)
+      fireEvent.click(screen.getByRole('button', { name: 'DShot300' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
+
+      expect(screen.queryByText(STILL_ENABLED_NOTICE)).not.toBeInTheDocument()
+      expect(screen.getByText('CAN CONFIGURATION')).toBeInTheDocument() // board chain still active — card stays
+      expect(screen.queryByText(/MOT_PWM_TYPE still holds/)).not.toBeInTheDocument() // board value is 0 — nothing left over
+    })
+
+    it('the migration flow: disabling after a PWM pick hides the card and hands the highlight to the PWM chip', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS)
+      fireEvent.click(screen.getByRole('button', { name: 'DShot300' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Disable CAN ESC output' }))
+
+      expect(screen.getByText('2 pending — nothing written yet')).toBeInTheDocument()
+      expect(screen.getByText('MOT_PWM_TYPE → 5')).toBeInTheDocument()
+      expect(screen.getByText('CAN_D1_UC_ESC_BM → 0')).toBeInTheDocument()
+      expect(screen.queryByText('CAN CONFIGURATION')).not.toBeInTheDocument()
+      expect(screen.queryByText(STILL_ENABLED_NOTICE)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'DShot300' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: 'DroneCAN' })).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('notes a leftover MOT_PWM_TYPE value when DroneCAN holds the highlight', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS.map((p) => (p.name === 'MOT_PWM_TYPE' ? { ...p, value: 5 } : p)))
+
+      expect(screen.getByText('MOT_PWM_TYPE still holds DShot300 (5) — DroneCAN wins the highlight while the CAN chain is active.')).toBeInTheDocument()
+      expect(screen.queryByText(/stages MOT_PWM_TYPE only/)).not.toBeInTheDocument() // nothing staged — the leftover note, not the notice
+    })
+
+    it('a leftover value outside the chip list is noted by its raw value', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS.map((p) => (p.name === 'MOT_PWM_TYPE' ? { ...p, value: 3 } : p))) // 3 = Brushed, not offered as a chip
+      expect(screen.getByText(/MOT_PWM_TYPE still holds 3 —/)).toBeInTheDocument()
+    })
+
+    it('no leftover note when MOT_PWM_TYPE sits at its firmware default (0) — nothing is left over', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS)
+      expect(screen.getByText('CAN CONFIGURATION')).toBeInTheDocument()
+      expect(screen.queryByText(/MOT_PWM_TYPE still holds/)).not.toBeInTheDocument()
+    })
+
+    it('no servo warning when Motor1..N functions sit on outputs 1..N (the stock quad mapping)', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS)
+      expect(screen.queryByText(/not mapped as expected/)).not.toBeInTheDocument()
+    })
+
+    it('warns when a SERVOx_FUNCTION does not carry its motor, listing the offending params — and writes nothing', async () => {
+      const { transport } = await renderLoaded(CAN_ENABLED_PARAMS.map((p) => (p.name === 'SERVO3_FUNCTION' ? { ...p, value: 0 } : p)))
+
+      expect(
+        screen.getByText('Motor outputs are not mapped as expected: SERVO3_FUNCTION. Those DroneCAN slots would stay empty — review SERVOx_FUNCTION in Full Parameters. Nothing is changed automatically.'),
+      ).toBeInTheDocument()
+      expect(useSetupStore.getState().pending.size).toBe(0) // read-only: the warning stages nothing
+      expect(transport.sent.map(decodeSent).filter((f) => f.msgid === PARAM_SET_MSGID)).toHaveLength(0)
+    })
+
+    it('a SERVOx_FUNCTION the board does not carry counts as a mismatch (the mapping cannot be confirmed)', async () => {
+      await renderLoaded(CAN_ENABLED_PARAMS.filter((p) => p.name !== 'SERVO4_FUNCTION'))
+      expect(screen.getByText(/not mapped as expected: SERVO4_FUNCTION\./)).toBeInTheDocument()
+    })
+
+    it('the servo check follows the staged (effective) chain: enabling DroneCAN on a Hexa flags the unassigned outputs 5–6', async () => {
+      await renderLoaded() // CAN off, quad mapping on outputs 1–4, SERVO5/6 unassigned
+      fireEvent.click(screen.getByRole('button', { name: /Hex X/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+
+      expect(screen.getByText(/not mapped as expected: SERVO5_FUNCTION, SERVO6_FUNCTION\./)).toBeInTheDocument()
+    })
+
+    it('skips the servo check for a non-contiguous escape-hatch mask — no expected layout exists to compare against', async () => {
+      await renderLoaded(
+        CAN_ENABLED_PARAMS.map((p) =>
+          p.name === 'CAN_D1_UC_ESC_BM' ? { ...p, value: 5 } : p.name === 'SERVO3_FUNCTION' ? { ...p, value: 0 } : p,
+        ),
+      )
+      expect(screen.getByText('CAN_D1_UC_ESC_BM = 5')).toBeInTheDocument() // raw-mask readout (issue #55)
+      expect(screen.queryByText(/not mapped as expected/)).not.toBeInTheDocument()
     })
   })
 

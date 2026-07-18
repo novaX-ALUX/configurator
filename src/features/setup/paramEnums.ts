@@ -235,6 +235,42 @@ export function isDroneCanEscActive(driver: number | undefined, protocol: number
   return driver !== undefined && driver >= 1 && protocol === DRONECAN_ESC_FIELD.protocolValue && bitmask !== undefined && bitmask !== 0
 }
 
+/**
+ * `SERVOx_FUNCTION` value that assigns Motor{motorNumber} to output x —
+ * mirrors `SRV_Channels::get_motor_function()` (vendored ArduPilot 92b0cd7 /
+ * Copter 4.6.3, `libraries/SRV_Channel/SRV_Channel.h:538-543`, same pin as
+ * the research note §1): `k_motor1`..`k_motor8` = 33..40, then the enum
+ * jumps — 41 is `k_motor_tilt` — and `k_motor9`..`k_motor12` = 82..85.
+ * Defined for motors 1..12 only; there is no `k_motor13`.
+ */
+export function motorServoFunction(motorNumber: number): number {
+  return motorNumber <= 8 ? 32 + motorNumber : 82 + (motorNumber - 9)
+}
+
+/**
+ * Issue #57's read-only `SERVOx_FUNCTION` check: the staged bitmask assumes
+ * Motor1..N ride outputs 1..N (`droneCanEscBitmask`'s layout), which only
+ * holds when effective `SERVO{x}_FUNCTION == Motor{x}` for each of those
+ * outputs — a channel whose function is wrong fills its DroneCAN RawCommand
+ * slot with the wrong motor (or, unassigned, leaves it empty:
+ * `AP_DroneCAN::SRV_push_servos()` skips function-less channels, research
+ * note §4). Returns the offending param names for the CAN card's warning;
+ * `undefined` (param not on the board) counts as a mismatch, because the
+ * Setup page only renders after a completed full fetch — a hole is a real
+ * absence, not "still loading". Opts out (no warning) beyond 12 motors:
+ * `k_motor12` is the last motor function, so an expected mapping doesn't
+ * exist there — unreachable from staged masks anyway (frames top out at
+ * Octo), only via an escape-hatch-edited contiguous mask.
+ */
+export function servoFunctionMismatches(motorCount: number, servoFunctionOf: (output: number) => number | undefined): string[] {
+  if (motorCount > 12) return []
+  const mismatched: string[] = []
+  for (let output = 1; output <= motorCount; output++) {
+    if (servoFunctionOf(output) !== motorServoFunction(output)) mismatched.push(`SERVO${output}_FUNCTION`)
+  }
+  return mismatched
+}
+
 export const BATT_MONITOR_FIELD: EnumFieldMeta = {
   id: 'battMonitor',
   controlType: 'enum-dropdown',

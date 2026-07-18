@@ -48,6 +48,7 @@ export function SetupPage() {
   const stage = useSetupStore((s) => s.stage)
   const stageFrame = useSetupStore((s) => s.stageFrame)
   const stageDroneCanEnable = useSetupStore((s) => s.stageDroneCanEnable)
+  const stageDroneCanDisable = useSetupStore((s) => s.stageDroneCanDisable)
   const revertAll = useSetupStore((s) => s.revertAll)
   const writeAll = useSetupStore((s) => s.writeAll)
   const clearForDisconnect = useSetupStore((s) => s.clearForDisconnect)
@@ -310,7 +311,15 @@ export function SetupPage() {
           onSelectDroneCan={handleSelectDroneCan}
         />
         {(droneCanActive || (canFramePrompt && !effectiveFrame)) && (
-          <CanConfig driver={valueOf(canDriverParam)} protocol={valueOf(canProtocolParam)} bitmask={valueOf(canBitmaskParam)} />
+          <CanConfig
+            driver={valueOf(canDriverParam)}
+            protocol={valueOf(canProtocolParam)}
+            bitmask={valueOf(canBitmaskParam)}
+            motPwmType={valueOf(ESC_PROTOCOL_FIELD.param)}
+            stagedPwmLabel={pending.get(ESC_PROTOCOL_FIELD.param)?.label}
+            servoFunctionOf={(output) => valueOf(`SERVO${output}_FUNCTION`)}
+            onDisable={stageDroneCanDisable}
+          />
         )}
         <BatteryMonitor
           monitorValue={valueOf(BATT_MONITOR_FIELD.param)}

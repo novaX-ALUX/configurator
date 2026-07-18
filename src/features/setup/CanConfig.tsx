@@ -1,11 +1,19 @@
 import { useTranslation } from 'react-i18next'
-import { DRONECAN_ESC_FIELD, isDroneCanEscActive } from './paramEnums'
+import { DRONECAN_ESC_FIELD, ESC_PROTOCOL_FIELD, isDroneCanEscActive, servoFunctionMismatches } from './paramEnums'
 
 interface CanConfigProps {
   /** Effective (pending ?? board) values of the three enable-chain params, in `DRONECAN_ESC_FIELD.params` order — `undefined` when the board doesn't have the param. */
   driver: number | undefined
   protocol: number | undefined
   bitmask: number | undefined
+  /** Effective `MOT_PWM_TYPE` — a non-default (≠ 0) value while the chain is active is a leftover worth noting (issue #57). */
+  motPwmType: number | undefined
+  /** Label of a staged-but-unapplied `MOT_PWM_TYPE` pick (the pending entry's own label), `undefined` when none — drives the still-enabled notice (issue #57). Takes precedence over the leftover note: both would describe the same value, and the notice is the one that answers the click the user just made. */
+  stagedPwmLabel: string | undefined
+  /** Effective `SERVO{output}_FUNCTION` reader for the read-only Motor1..N mapping check (issue #57). */
+  servoFunctionOf: (output: number) => number | undefined
+  /** Disable action (issue #57): the page stages `CAN_D1_UC_ESC_BM = 0` — never `CAN_P1_DRIVER`. `label` is the resolved button text, for the review bar's chip. */
+  onDisable: (label: string) => void
 }
 
 /** Motor count when the mask is the contiguous bits-0..N−1 shape this feature stages, else `null` (the raw mask is shown then — e.g. a hand-edited escape-hatch value). */
@@ -23,10 +31,26 @@ function contiguousMotorCount(bitmask: number): number | null {
  * way this card is open while the chain is inactive is a chip click that
  * had no frame to derive the bitmask from, so nothing was staged.
  *
- * Display only: staging happens on the chip (`SetupPage`), writes happen in
- * the sticky review bar. #57 adds the disable action and warnings here.
+ * Issue #57 adds the chain state's guard rails, all state-derived like the
+ * chip highlight (they appear/disappear with staging, Revert, Apply):
+ *
+ * - the still-enabled notice when a PWM-family pick is staged while the
+ *   chain is active — the pick stages `MOT_PWM_TYPE` only, never a CAN
+ *   param as a side effect;
+ * - the leftover note when the effective `MOT_PWM_TYPE` holds a non-default
+ *   value with nothing staged (0 is the firmware default — nothing left
+ *   over);
+ * - the read-only `SERVOx_FUNCTION` warning when Motor1..N aren't on
+ *   outputs 1..N — validated only for the contiguous masks this feature
+ *   stages (`servoFunctionMismatches` on `motorCount`); a raw escape-hatch
+ *   mask has no expected layout to compare against;
+ * - the disable action, staging `CAN_D1_UC_ESC_BM = 0` through `onDisable`
+ *   and nothing else — the CAN interface may serve other Nodes.
+ *
+ * Writes happen only in the sticky review bar; nothing here touches the
+ * board directly.
  */
-export function CanConfig({ driver, protocol, bitmask }: CanConfigProps) {
+export function CanConfig({ driver, protocol, bitmask, motPwmType, stagedPwmLabel, servoFunctionOf, onDisable }: CanConfigProps) {
   const { t } = useTranslation()
   const chain =
     driver !== undefined && protocol !== undefined && bitmask !== undefined && isDroneCanEscActive(driver, protocol, bitmask)
@@ -56,6 +80,14 @@ export function CanConfig({ driver, protocol, bitmask }: CanConfigProps) {
       ]
     : null
 
+  // Leftover MOT_PWM_TYPE, displayed with its chip label when it matches one
+  // ("DShot300 (5)"), else as the bare value — an escape-hatch value like
+  // Brushed (3) is still a leftover.
+  const leftoverOption = ESC_PROTOCOL_FIELD.options.find((o) => o.value === motPwmType)
+  const leftover = chain && stagedPwmLabel === undefined && motPwmType !== undefined && motPwmType !== 0
+  const servoMismatches = chain && chain.motorCount !== null ? servoFunctionMismatches(chain.motorCount, servoFunctionOf) : []
+  const disableLabel = t('setup.esc.can.disable')
+
   return (
     <section className="mb-3.5 rounded-xl border border-nvx-border bg-white p-[18px] shadow-card">
       <div className="mb-3.5 flex items-center">
@@ -75,6 +107,31 @@ export function CanConfig({ driver, protocol, bitmask }: CanConfigProps) {
               </span>
             </div>
           ))}
+          {stagedPwmLabel !== undefined && (
+            <div className="mt-1 rounded-lg border border-nvx-warningBorder bg-nvx-warningSoft px-3 py-2 text-[11.5px] leading-relaxed text-nvx-warningText">
+              {t('setup.esc.can.stillEnabled', { label: stagedPwmLabel })}
+            </div>
+          )}
+          {leftover && (
+            <div className="mt-1 text-[11.5px] leading-relaxed text-nvx-muted">
+              {t('setup.esc.can.leftoverPwm', { display: leftoverOption ? `${t(leftoverOption.labelKey)} (${motPwmType})` : `${motPwmType}` })}
+            </div>
+          )}
+          {servoMismatches.length > 0 && (
+            <div className="mt-1 rounded-lg border border-nvx-warningBorder bg-nvx-warningSoft px-3 py-2 text-[11.5px] leading-relaxed text-nvx-warningText">
+              {t('setup.esc.can.servoWarning', { params: servoMismatches.join(', ') })}
+            </div>
+          )}
+          <div className="mt-2 flex items-center gap-3 border-t border-nvx-border pt-3">
+            <span className="min-w-0 flex-1 text-[11px] leading-relaxed text-nvx-faint">{t('setup.esc.can.disableHint')}</span>
+            <button
+              type="button"
+              onClick={() => onDisable(disableLabel)}
+              className="flex-none rounded-[9px] border-[1.5px] border-nvx-dangerBorder bg-white px-3.5 py-2 text-[12px] font-bold text-nvx-danger hover:bg-nvx-dangerSoft"
+            >
+              {disableLabel}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="text-[12.5px] leading-relaxed text-nvx-muted">{t('setup.esc.can.pickFrameFirst')}</div>

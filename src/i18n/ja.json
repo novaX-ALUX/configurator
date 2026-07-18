@@ -277,7 +277,12 @@
         "protocol": "プロトコル",
         "protocolDroneCan": "DroneCAN",
         "outputs": "ESC出力",
-        "motorsRange": "モーター1–{{count}}"
+        "motorsRange": "モーター1–{{count}}",
+        "stillEnabled": "{{label}} への切り替えでステージされるのは MOT_PWM_TYPE のみです — CAN ESC出力は、ここで無効化するまで有効のままです。",
+        "leftoverPwm": "MOT_PWM_TYPE に {{display}} が残っています — CANチェーンが有効な間はDroneCANがハイライトを保持します。",
+        "servoWarning": "モーター出力のマッピングが想定と異なります：{{params}}。該当するDroneCANスロットは空のままになります — 全パラメータページで SERVOx_FUNCTION を確認してください。自動的に変更されることはありません。",
+        "disable": "CAN ESC出力を無効化",
+        "disableHint": "ステージされるのは CAN_D1_UC_ESC_BM = 0 のみです — CANインターフェースはバス上の他のノードのために有効のままです。"
       }
     },
     "battery": {
