@@ -17,6 +17,8 @@ import type { ParamMetaFile } from '../../../core/paramMetadata'
 
 const PARAM_SET_MSGID = 23
 const RC_CHANNELS_MSGID = 65
+const COMMAND_LONG_MSGID = 76
+const MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN = 246
 const MAV_PARAM_TYPE_REAL32 = 9
 const MAV_PARAM_TYPE_INT32 = 6
 
@@ -90,6 +92,12 @@ const META_FIXTURE: ParamMetaFile = {
   },
   SIMPLE: { displayName: 'Simple mode bitmask', description: 'x' },
   SUPER_SIMPLE: { displayName: 'Super Simple Mode', description: 'x' },
+  // CAN enable-chain metadata in the same `{idx}`-pattern form the real
+  // generated 4.6.json carries (issue #56): driver/protocol are
+  // `@RebootRequired: True` in the firmware source, the bitmask is not.
+  'CAN_P{idx}_DRIVER': { displayName: 'CAN driver index', description: 'x', rebootRequired: true },
+  'CAN_D{idx}_PROTOCOL': { displayName: 'CAN protocol', description: 'x', rebootRequired: true },
+  'CAN_D{idx}_UC_ESC_BM': { displayName: 'DroneCAN ESC bitmask', description: 'x' },
 }
 
 function mockMetaFetch(body: ParamMetaFile): void {
@@ -655,6 +663,111 @@ describe('SetupPage', () => {
 
       expect(screen.getByText(/2 unsaved setup change\(s\) were discarded/)).toBeInTheDocument()
       expect(useSetupStore.getState().pending.size).toBe(0)
+    })
+  })
+
+  describe('reboot-required notice on Apply (issue #56)', () => {
+    const NOTICE = 'Reboot required for changes to take effect'
+
+    /** Stages the DroneCAN enable chain, applies it, and echoes all three readbacks — the issue's motivating reboot-required batch. */
+    async function applyDroneCanChain(transport: MockTransport): Promise<void> {
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_P1_DRIVER', value: 1, count: 1, index: 0 }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_PROTOCOL', value: 1, count: 1, index: 0 }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_UC_ESC_BM', value: 15, count: 1, index: 0 }))
+      await tick()
+    }
+
+    it('appears after a successful Apply whose batch contains a reboot-required param (the CAN enable chain), and outlives the transient ok chips', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      expect(screen.queryByText(NOTICE)).not.toBeInTheDocument() // staging alone never shows it — only a successful Apply
+
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_P1_DRIVER', value: 1, count: 1, index: 0 }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_PROTOCOL', value: 1, count: 1, index: 0 }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_UC_ESC_BM', value: 15, count: 1, index: 0 }))
+      await tick()
+
+      expect(screen.getByText(NOTICE)).toBeInTheDocument()
+      await tick(2000) // the review bar's 'ok' chips clear; the notice must not clear with them
+      expect(screen.getByText(NOTICE)).toBeInTheDocument()
+    })
+
+    // The third no-false-positive case — metadata never loaded at all (`meta
+    // === null`) — is covered at the `batchNeedsReboot` unit seam
+    // (paramUtils.test.ts: "false when metadata never loaded"), not here:
+    // `core/paramMetadata` caches the fetched table per version for the
+    // module's lifetime, so once any test in this file has loaded the shared
+    // fixture, a metadata-fetch failure can no longer be simulated.
+    it('does not appear for a batch with no reboot-required param — one with metadata sans the flag (FLTMODE3), one with no metadata match at all (BATT_MONITOR)', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.change(screen.getByLabelText('FLTMODE3'), { target: { value: '15' } })
+      fireEvent.change(screen.getByLabelText('BATT_MONITOR'), { target: { value: '0' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'FLTMODE3', value: 15, count: 1, index: 0 }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'BATT_MONITOR', value: 0, count: 1, index: 0 }))
+      await tick()
+      await tick(2000)
+
+      expect(screen.queryByText(/pending — nothing written yet/)).not.toBeInTheDocument() // batch really was written
+      expect(screen.queryByText(NOTICE)).not.toBeInTheDocument()
+    })
+
+    it('does not appear when the only reboot-required params in the batch failed to write — a param that never took effect cannot demand a reboot', async () => {
+      const { transport } = await renderLoaded()
+      fireEvent.click(screen.getByRole('button', { name: 'DroneCAN' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Write to board' }))
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_P1_DRIVER', value: 0, count: 1, index: 0 })) // mismatch echo — write failed
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_PROTOCOL', value: 0, count: 1, index: 0 })) // mismatch echo — write failed
+      await tick()
+      transport.feed(paramValueFrame({ name: 'CAN_D1_UC_ESC_BM', value: 15, count: 1, index: 0 })) // written, but not reboot-required
+      await tick()
+
+      expect(screen.queryByText(NOTICE)).not.toBeInTheDocument()
+    })
+
+    it('the notice\'s Reboot action confirms, then sends MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN through the Session\'s router/target', async () => {
+      const { transport, session } = await renderLoaded()
+      await applyDroneCanChain(transport)
+
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      fireEvent.click(screen.getByRole('button', { name: 'Reboot' }))
+      await tick()
+
+      const cmds = transport.sent.map(decodeSent).filter((f) => f.msgid === COMMAND_LONG_MSGID)
+      expect(cmds).toHaveLength(1)
+      expect(cmds[0].fields).toMatchObject({
+        target_system: session.target.sysid,
+        target_component: session.target.compid,
+        command: MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN,
+        param1: 1,
+      })
+      await tick(1500) // the unanswered ACK wait elapses (a rebooting FC rarely replies) — the notice's job is done
+      expect(screen.queryByText(NOTICE)).not.toBeInTheDocument()
+    })
+
+    it('cancelling the confirm dialog sends nothing and keeps the notice up', async () => {
+      const { transport } = await renderLoaded()
+      await applyDroneCanChain(transport)
+
+      vi.spyOn(window, 'confirm').mockReturnValue(false)
+      fireEvent.click(screen.getByRole('button', { name: 'Reboot' }))
+      await tick()
+
+      expect(transport.sent.map(decodeSent).filter((f) => f.msgid === COMMAND_LONG_MSGID)).toHaveLength(0)
+      expect(screen.getByText(NOTICE)).toBeInTheDocument()
     })
   })
 })

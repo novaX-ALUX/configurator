@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useConnectionStore } from '../../store/connection'
 import { loadParamMetadata, lookupParamMeta, type LoadedParamMetadata, type ParamMetaEntry } from '../../core/paramMetadata'
-import { fetchErrorMessage } from '../params/paramUtils'
+import { rebootFlightController } from '../../core/mavlink/reboot'
+import { batchNeedsReboot, fetchErrorMessage } from '../params/paramUtils'
 import { useTelemetry } from '../dashboard/useTelemetry'
 import { BATT_CAPACITY_FIELD, BATT_FS_LOW_FIELD, BATT_LOW_VOLT_FIELD, BATT_MONITOR_FIELD, DRONECAN_ESC_FIELD, ESC_PROTOCOL_FIELD, FRAME_FIELD, FS_GCS_FIELD, FS_THROTTLE_FIELD, isDroneCanEscActive } from './paramEnums'
 import { activeFlightModeSlot, FLTMODE_CH_PARAM } from './flightModes'
@@ -26,6 +27,11 @@ type LoadState = { kind: 'idle' } | { kind: 'loading'; got: number; total: numbe
  * offers its own "Load parameters" affordance, the same fetch this page
  * needs regardless of which page triggers it (`ParamStore` has no
  * single-param fetch, only the full table).
+ *
+ * A successful Apply whose batch included a `rebootRequired` param (per the
+ * bundled metadata — the CAN enable chain is the motivating case, issue #56)
+ * surfaces the same post-Apply reboot notice as `TuningPage`/`ParamsPage`,
+ * offering the existing `rebootFlightController` Named Operation.
  */
 export function SetupPage() {
   const { t } = useTranslation()
@@ -57,6 +63,12 @@ export function SetupPage() {
   const [version, setVersion] = useState(0) // bumped on ParamStore.onChange to re-derive effective values from the live cache
   const [discardedNotice, setDiscardedNotice] = useState<number | null>(null)
   const [meta, setMeta] = useState<LoadedParamMetadata | null>(null)
+  // Post-Apply "Reboot required" notice (issue #56) — TuningPage's pattern:
+  // shown once an applied batch that succeeded included any `rebootRequired`
+  // param (the CAN enable chain is the motivating case), until dismissed by
+  // an actual reboot send or a session change.
+  const [rebootNotice, setRebootNotice] = useState(false)
+  const [rebooting, setRebooting] = useState(false)
   // True after a DroneCAN chip click that couldn't stage (no usable frame to
   // derive the bitmask from) — keeps the CAN card open on its frame-first
   // prompt. Cleared the moment the DroneCAN path is either satisfied (a
@@ -76,6 +88,8 @@ export function SetupPage() {
     setDiscardedNotice(paramStore ? null : discardedCount)
     setLoad(paramStore && paramStore.fetchProgress.completed ? { kind: 'loaded' } : { kind: 'idle' })
     setMeta(null)
+    setRebootNotice(false)
+    setRebooting(false)
     setCanFramePrompt(false)
     clearForDisconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,6 +160,34 @@ export function SetupPage() {
       setLoad({ kind: 'loaded' })
     } catch (err) {
       setLoad({ kind: 'error', message: fetchErrorMessage(err, t) })
+    }
+  }
+
+  async function handleWrite(): Promise<void> {
+    if (!paramStore) return
+    const names = [...pending.keys()]
+    await writeAll(paramStore)
+    // A name still carrying a non-'ok' status failed and stayed pending;
+    // everything else in the batch was written (its 'ok' chip may have
+    // already cleared). Only written params can demand the reboot notice —
+    // TuningPage's rule, same shared `batchNeedsReboot` check.
+    const statusAfter = useSetupStore.getState().writeStatus
+    const written = names.filter((name) => {
+      const status = statusAfter.get(name)
+      return !status || status.kind === 'ok'
+    })
+    if (batchNeedsReboot(written, meta ? (name) => lookupParamMeta(meta.table, name) : undefined)) setRebootNotice(true)
+  }
+
+  async function handleReboot(): Promise<void> {
+    if (!session) return
+    if (!window.confirm(t('params.rebootConfirm'))) return
+    setRebooting(true)
+    try {
+      await rebootFlightController(session)
+    } finally {
+      setRebooting(false)
+      setRebootNotice(false)
     }
   }
 
@@ -239,6 +281,20 @@ export function SetupPage() {
         </div>
         <div className="mb-4 text-[12.5px] text-nvx-subtle">{t('setup.subtitleBody')}</div>
 
+        {rebootNotice && (
+          <div className="mb-3 flex items-center gap-2.5 rounded-lg border border-nvx-warningBorder bg-nvx-warningSoft px-3.5 py-2.5 text-[12px] text-nvx-warningText opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none [@starting-style]:opacity-0">
+            <span className="flex-1 font-semibold">{t('params.rebootBannerText')}</span>
+            <button
+              type="button"
+              onClick={() => void handleReboot()}
+              disabled={!session || rebooting}
+              className="flex-none rounded-[9px] bg-nvx-primary px-3.5 py-1.5 text-[12px] font-bold text-white hover:bg-nvx-primaryHover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {rebooting ? t('params.rebooting') : t('params.rebootCta')}
+            </button>
+          </div>
+        )}
+
         <FrameSelector
           frameClassValue={valueOf(FRAME_FIELD.params[0])}
           frameTypeValue={valueOf(FRAME_FIELD.params[1])}
@@ -279,7 +335,7 @@ export function SetupPage() {
             pending={pending}
             writeStatus={writeStatus}
             writing={writing}
-            onWrite={() => paramStore && void writeAll(paramStore)}
+            onWrite={() => void handleWrite()}
             onRevert={revertAll}
           />
         )}
